@@ -1,4 +1,4 @@
-﻿import { Question } from '../types';
+import { Question } from '../types';
 
 export interface RowError {
   rowNumber: number;
@@ -138,20 +138,13 @@ export function validateQuestionRows(
     const question: Question = {
       id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       question_text: qText,
-      question_image_url: qImg || undefined,
       option_a_text: optA,
-      option_a_image_url: optAImg || undefined,
       option_b_text: optB,
-      option_b_image_url: optBImg || undefined,
       option_c_text: optC,
-      option_c_image_url: optCImg || undefined,
       option_d_text: optD,
-      option_d_image_url: optDImg || undefined,
       correct_answer: correctAnswer,
       explanation_text: (row['explanation_text'] || row['explanation'] || '').toString().trim(),
-      explanation_image_url: (row['explanation_image_url'] || row['explanation_image'] || '').toString().trim() || undefined,
       exam,
-      category: (row['category'] || '').toString().trim(),
       subject,
       topic,
       difficulty,
@@ -160,6 +153,18 @@ export function validateQuestionRows(
       language: (row['language'] || 'both') as 'en' | 'hi' | 'both',
       status: 'published',
     };
+
+    if (qImg) question.question_image_url = qImg;
+    if (optAImg) question.option_a_image_url = optAImg;
+    if (optBImg) question.option_b_image_url = optBImg;
+    if (optCImg) question.option_c_image_url = optCImg;
+    if (optDImg) question.option_d_image_url = optDImg;
+
+    const explImg = (row['explanation_image_url'] || row['explanation_image'] || '').toString().trim();
+    if (explImg) question.explanation_image_url = explImg;
+
+    const cat = (row['category'] || '').toString().trim();
+    if (cat) question.category = cat;
 
     validQuestions.push(question);
   });

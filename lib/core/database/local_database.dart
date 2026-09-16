@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
-import 'seed_data.dart';
 
 class LocalDatabase {
   static final LocalDatabase instance = LocalDatabase._internal();
@@ -92,11 +91,10 @@ class LocalDatabase {
         }
       } catch (e) {
         debugPrint('Error decoding questions from local cache: $e');
-        _loadSeedQuestions();
+        _questions.clear();
       }
     } else {
-      _loadSeedQuestions();
-      await _persistQuestions();
+      _questions.clear();
     }
 
     // 3.5 Categories
@@ -109,10 +107,10 @@ class LocalDatabase {
           _categories.add(ExamCategory.fromMap(Map<String, dynamic>.from(item)));
         }
       } catch (_) {
-        _loadDefaultCategories();
+        _categories.clear();
       }
     } else {
-      _loadDefaultCategories();
+      _categories.clear();
     }
 
     // 4. Exams
@@ -126,11 +124,9 @@ class LocalDatabase {
         }
       } catch (_) {
         _exams.clear();
-        _exams.addAll(SeedData.exams);
       }
     } else {
       _exams.clear();
-      _exams.addAll(SeedData.exams);
     }
 
     // 5. Subjects
@@ -144,16 +140,26 @@ class LocalDatabase {
         }
       } catch (_) {
         _subjects.clear();
-        _subjects.addAll(SeedData.subjects);
       }
     } else {
       _subjects.clear();
-      _subjects.addAll(SeedData.subjects);
     }
 
     // 6. Topics
-    _topics.clear();
-    _topics.addAll(SeedData.topics);
+    final topicsRaw = prefs.getString('db_topics');
+    if (topicsRaw != null && topicsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(topicsRaw) as List;
+        _topics.clear();
+        for (final item in list) {
+          _topics.add(Topic.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _topics.clear();
+      }
+    } else {
+      _topics.clear();
+    }
 
     // 7. Mock Tests
     final mocksRaw = prefs.getString('db_mock_tests');
@@ -165,11 +171,10 @@ class LocalDatabase {
           _mockTests.add(MockTest.fromMap(Map<String, dynamic>.from(item)));
         }
       } catch (e) {
-        _mockTests.addAll(SeedData.mockTests);
+        _mockTests.clear();
       }
     } else {
-      _mockTests.addAll(SeedData.mockTests);
-      await _persistMockTests();
+      _mockTests.clear();
     }
 
     // 8. Attempts
@@ -184,13 +189,6 @@ class LocalDatabase {
       } catch (e) {
         debugPrint('Error decoding attempts: $e');
       }
-    }
-  }
-
-  void _loadSeedQuestions() {
-    _questions.clear();
-    for (final q in SeedData.questions) {
-      _questions.add(q.copyWith(isBookmarked: _bookmarkedIds.contains(q.id)));
     }
   }
 
@@ -215,7 +213,7 @@ class LocalDatabase {
     try {
       return _exams.firstWhere((e) => e.code.toUpperCase() == code.toUpperCase());
     } catch (_) {
-      return _exams.first;
+      return _exams.isNotEmpty ? _exams.first : null;
     }
   }
 
@@ -250,6 +248,15 @@ class LocalDatabase {
 
   // --- Questions ---
   List<Question> getAllQuestions() => List.unmodifiable(_questions);
+  List<Question> getQuestions() => getAllQuestions();
+
+  Question? getQuestionById(String id) {
+    try {
+      return _questions.firstWhere((q) => q.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 
   List<Question> getQuestionsByTopic(String topicId) {
     return _questions.where((q) => q.topicId == topicId).toList();
@@ -341,13 +348,13 @@ class LocalDatabase {
     await _persistAttempts();
 
     // Increment overall practice stats
-    final totalAttempts = (_prefs?.getInt('user_total_questions') ?? 328) + attempt.correctCount + attempt.wrongCount;
+    final totalAttempts = (_prefs?.getInt('user_total_questions') ?? 0) + attempt.correctCount + attempt.wrongCount;
     await _prefs?.setInt('user_total_questions', totalAttempts);
 
     // Update streak if applicable
     final lastActiveDateStr = _prefs?.getString('user_last_active_date');
     final todayStr = DateTime.now().toIso8601String().split('T').first;
-    int currentStreak = _prefs?.getInt('user_streak_days') ?? 7;
+    int currentStreak = _prefs?.getInt('user_streak_days') ?? 0;
 
     if (lastActiveDateStr != todayStr) {
       currentStreak += 1;
@@ -356,17 +363,17 @@ class LocalDatabase {
     }
   }
 
-  int getStreakDays() => _prefs?.getInt('user_streak_days') ?? 7;
-  int getTotalQuestionsCount() => _prefs?.getInt('user_total_questions') ?? 328;
+  int getStreakDays() => _prefs?.getInt('user_streak_days') ?? 0;
+  int getTotalQuestionsCount() => _prefs?.getInt('user_total_questions') ?? 0;
   int getAccuracyPercentage() {
-    if (_attempts.isEmpty) return 72;
+    if (_attempts.isEmpty) return 0;
     int totalQuestions = 0;
     int totalCorrect = 0;
     for (final a in _attempts) {
       totalQuestions += (a.correctCount + a.wrongCount);
       totalCorrect += a.correctCount;
     }
-    if (totalQuestions == 0) return 72;
+    if (totalQuestions == 0) return 0;
     return ((totalCorrect / totalQuestions) * 100).round();
   }
 
@@ -415,16 +422,6 @@ class LocalDatabase {
     await _persistMockTests();
   }
 
-  void _loadDefaultCategories() {
-    _categories.clear();
-    _categories.addAll([
-      const ExamCategory(id: 'cat_an', name: 'A&N Exams', code: 'AN', order: 1),
-      const ExamCategory(id: 'cat_ssc', name: 'SSC Exams', code: 'SSC', order: 2),
-      const ExamCategory(id: 'cat_police', name: 'Police Exams', code: 'POLICE', order: 3),
-      const ExamCategory(id: 'cat_other', name: 'Other Exams', code: 'OTHER', order: 4),
-    ]);
-  }
-
   List<ExamCategory> getCategories() => List.unmodifiable(_categories);
 
   Future<void> syncCategoriesFromFirestore(List<ExamCategory> categories) async {
@@ -449,6 +446,14 @@ class LocalDatabase {
     _subjects.addAll(subjects);
     final raw = jsonEncode(_subjects.map((s) => s.toMap()).toList());
     await _prefs?.setString('db_subjects', raw);
+  }
+
+  Future<void> syncTopicsFromFirestore(List<Topic> topics) async {
+    if (topics.isEmpty) return;
+    _topics.clear();
+    _topics.addAll(topics);
+    final raw = jsonEncode(_topics.map((t) => t.toMap()).toList());
+    await _prefs?.setString('db_topics', raw);
   }
 
   Future<void> syncMockTestsFromFirestore(List<MockTest> mockTests) async {

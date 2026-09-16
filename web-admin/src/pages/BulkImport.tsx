@@ -109,34 +109,26 @@ export const BulkImport: React.FC = () => {
 
     // Replace filenames in summary.validQuestions with the actual URLs!
     const updatedValid = summary.validQuestions.map((q) => {
-      let qImg = q.question_image_url;
-      if (qImg && urlMap.has(qImg.toLowerCase())) {
-        qImg = urlMap.get(qImg.toLowerCase());
+      const updated = { ...q };
+      if (updated.question_image_url && urlMap.has(updated.question_image_url.toLowerCase())) {
+        updated.question_image_url = urlMap.get(updated.question_image_url.toLowerCase())!;
       }
-      let optA = q.option_a_image_url;
-      if (optA && urlMap.has(optA.toLowerCase())) {
-        optA = urlMap.get(optA.toLowerCase());
+      if (updated.option_a_image_url && urlMap.has(updated.option_a_image_url.toLowerCase())) {
+        updated.option_a_image_url = urlMap.get(updated.option_a_image_url.toLowerCase())!;
       }
-      let optB = q.option_b_image_url;
-      if (optB && urlMap.has(optB.toLowerCase())) {
-        optB = urlMap.get(optB.toLowerCase());
+      if (updated.option_b_image_url && urlMap.has(updated.option_b_image_url.toLowerCase())) {
+        updated.option_b_image_url = urlMap.get(updated.option_b_image_url.toLowerCase())!;
       }
-      let optC = q.option_c_image_url;
-      if (optC && urlMap.has(optC.toLowerCase())) {
-        optC = urlMap.get(optC.toLowerCase());
+      if (updated.option_c_image_url && urlMap.has(updated.option_c_image_url.toLowerCase())) {
+        updated.option_c_image_url = urlMap.get(updated.option_c_image_url.toLowerCase())!;
       }
-      let optD = q.option_d_image_url;
-      if (optD && urlMap.has(optD.toLowerCase())) {
-        optD = urlMap.get(optD.toLowerCase());
+      if (updated.option_d_image_url && urlMap.has(updated.option_d_image_url.toLowerCase())) {
+        updated.option_d_image_url = urlMap.get(updated.option_d_image_url.toLowerCase())!;
       }
-      return {
-        ...q,
-        question_image_url: qImg,
-        option_a_image_url: optA,
-        option_b_image_url: optB,
-        option_c_image_url: optC,
-        option_d_image_url: optD,
-      };
+      if (updated.explanation_image_url && urlMap.has(updated.explanation_image_url.toLowerCase())) {
+        updated.explanation_image_url = urlMap.get(updated.explanation_image_url.toLowerCase())!;
+      }
+      return updated;
     });
 
     setSummary({
@@ -153,7 +145,7 @@ export const BulkImport: React.FC = () => {
     let toImport = summary.validQuestions;
     if (skipDuplicates && summary.duplicates.length > 0) {
       const dupRows = new Set(summary.duplicates.map((d) => d.rowNumber));
-      // Exclude rows marked as duplicates
+      toImport = toImport.filter((_, idx) => !dupRows.has(idx + 2));
     }
 
     setIsImporting(true);

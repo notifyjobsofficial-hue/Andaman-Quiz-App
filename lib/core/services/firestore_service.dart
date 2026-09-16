@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../database/local_database.dart';
-import '../database/seed_data.dart';
 import '../models/models.dart';
 
 class FirestoreService {
@@ -125,6 +124,13 @@ class FirestoreService {
       if (subSnap.docs.isNotEmpty) {
         final subs = subSnap.docs.map((d) => Subject.fromMap(d.data())).toList();
         await LocalDatabase.instance.syncSubjectsFromFirestore(subs);
+      }
+
+      // 3.5 Topics
+      final topSnap = await _firestore.collection(colTopics).get();
+      if (topSnap.docs.isNotEmpty) {
+        final topics = topSnap.docs.map((d) => Topic.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncTopicsFromFirestore(topics);
       }
 
       // 4. Mock Tests (published only)
@@ -266,51 +272,5 @@ class FirestoreService {
   void disposeSync() {
     _questionsSubscription?.cancel();
     _questionsSubscription = null;
-  }
-
-  // --- One-Click Initial Cloud Seeder (Populate empty Firestore) ---
-  Future<int> seedInitialDataToFirestore() async {
-    int count = 0;
-    try {
-      final batch = _firestore.batch();
-
-      // Seed Exams
-      for (final exam in SeedData.exams) {
-        final docRef = _firestore.collection(colExams).doc(exam.id);
-        batch.set(docRef, exam.toMap(), SetOptions(merge: true));
-      }
-
-      // Seed Subjects
-      for (final sub in SeedData.subjects) {
-        final docRef = _firestore.collection(colSubjects).doc(sub.id);
-        batch.set(docRef, sub.toMap(), SetOptions(merge: true));
-      }
-
-      // Seed Topics
-      for (final top in SeedData.topics) {
-        final docRef = _firestore.collection(colTopics).doc(top.id);
-        batch.set(docRef, top.toMap(), SetOptions(merge: true));
-      }
-
-      // Seed Mock Tests
-      for (final mock in SeedData.mockTests) {
-        final docRef = _firestore.collection(colMocks).doc(mock.id);
-        batch.set(docRef, mock.toMap(), SetOptions(merge: true));
-      }
-
-      // Seed Questions
-      for (final q in SeedData.questions) {
-        final docRef = _firestore.collection(colQuestions).doc(q.id);
-        batch.set(docRef, q.toMap(), SetOptions(merge: true));
-        count++;
-      }
-
-      await batch.commit();
-      debugPrint('Successfully seeded $count questions and catalog to Cloud Firestore');
-      return count;
-    } catch (e) {
-      debugPrint('Error seeding data to Firestore: $e');
-      rethrow;
-    }
   }
 }

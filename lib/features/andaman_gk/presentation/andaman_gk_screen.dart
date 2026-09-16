@@ -127,94 +127,124 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
 
             // Topics List
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.all(AppDimens.space16),
-                itemCount: filteredTopics.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final topic = filteredTopics[index];
-                  final progress = topic.questionCount > 0 ? topic.completedCount / topic.questionCount : 0.0;
-
-                  return AnimatedPressable(
-                    onTap: () => context.push('/practice/mcq/${topic.id}'),
-                    child: AppCard(
+              child: filteredTopics.isEmpty
+                  ? Center(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AppColors.islandEmerald.withAlpha(25),
-                                  borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
-                                ),
-                                child: Icon(
-                                  _getTopicIcon(topic.id),
-                                  color: AppColors.islandEmerald,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
+                          Icon(
+                            Icons.waves,
+                            size: 48,
+                            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No A&N GK topics available yet',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? AppColors.textDark : AppColors.textLight,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Topics and questions will appear once added by the administrator.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(AppDimens.space16),
+                      itemCount: filteredTopics.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final topic = filteredTopics[index];
+                        final progress = topic.questionCount > 0 ? topic.completedCount / topic.questionCount : 0.0;
+
+                        return AnimatedPressable(
+                          onTap: () => context.push('/practice/mcq/${topic.id}'),
+                          child: AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      topic.name,
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.islandEmerald.withAlpha(25),
+                                        borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+                                      ),
+                                      child: Icon(
+                                        _getTopicIcon(topic.id),
+                                        color: AppColors.islandEmerald,
+                                        size: 22,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            topic.name,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${topic.questionCount} Questions • ${topic.accuracy.toInt()}% Accuracy',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right, color: AppColors.islandEmerald),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                // Progress bar
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(AppDimens.radiusPill),
+                                        child: LinearProgressIndicator(
+                                          value: progress,
+                                          minHeight: 5,
+                                          backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.islandEmerald),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
                                     Text(
-                                      '${topic.questionCount} Questions • ${topic.accuracy.toInt()}% Accuracy',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                      '${(progress * 100).toInt()}%',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.islandEmerald,
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textMutedLight),
-                            ],
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          // Progress Bar
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(AppDimens.radiusPill),
-                                  child: LinearProgressIndicator(
-                                    value: progress,
-                                    minHeight: 6,
-                                    backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.islandEmerald),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                '${(progress * 100).toInt()}%',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.islandEmerald,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
           ],
         ),

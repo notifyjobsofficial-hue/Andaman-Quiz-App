@@ -107,6 +107,34 @@ export async function deleteTopic(id: string): Promise<void> {
   await deleteDoc(doc(db, 'topics', id));
 }
 
+/**
+ * Recursively removes all `undefined` values from an object or array.
+ * Cloud Firestore throws: "Unsupported field value: undefined" if any field in
+ * a document payload is undefined. This sanitizes every payload recursively so
+ * only valid defined attributes reach Cloud Firestore.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => sanitizeForFirestore(item))
+      .filter((item) => item !== undefined) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data as Record<string, any>)) {
+      if (val === undefined) {
+        continue; // omit undefined keys completely
+      }
+      cleaned[key] = sanitizeForFirestore(val);
+    }
+    return cleaned as any;
+  }
+  return data;
+}
+
 // 4. Question Bank
 export async function fetchQuestions(maxCount: number = 200): Promise<Question[]> {
   const snap = await getDocs(query(collection(db, 'questions'), limit(maxCount)));
@@ -114,10 +142,11 @@ export async function fetchQuestions(maxCount: number = 200): Promise<Question[]
 }
 
 export async function saveQuestion(question: Question): Promise<void> {
-  await setDoc(doc(db, 'questions', question.id), {
+  const cleanData = sanitizeForFirestore({
     ...question,
     updated_at: new Date().toISOString(),
-  }, { merge: true });
+  });
+  await setDoc(doc(db, 'questions', question.id), cleanData, { merge: true });
   await logActivity('Save Question', `Question ${question.id} saved`);
 }
 
@@ -148,16 +177,31 @@ export async function batchInsertQuestions(
     const chunk = questions.slice(i, i + chunkSize);
     const batch = writeBatch(db);
 
-    for (const q of chunk) {
+    for (let idx = 0; idx < chunk.length; idx++) {
+      const q = chunk[idx];
+      const rowNum = i + idx + 2;
       const ref = doc(db, 'questions', q.id);
-      batch.set(ref, {
+
+      const rawData = {
         ...q,
         created_at: q.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }, { merge: true });
+      };
+
+      const cleanData = sanitizeForFirestore(rawData);
+      try {
+        batch.set(ref, cleanData, { merge: true });
+      } catch (err: any) {
+        throw new Error(`Row ${rowNum} ("${(q.question_text || q.id).slice(0, 30)}..."): ${err.message}`);
+      }
     }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (batchErr: any) {
+      throw new Error(`Firestore batch write failed for rows ${i + 2} to ${i + chunk.length + 1}: ${batchErr.message}`);
+    }
+
     inserted += chunk.length;
     onProgress?.(inserted, total);
   }

@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
-import '../../../core/database/seed_data.dart';
 import '../../../core/models/models.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 
@@ -19,7 +19,8 @@ class QotdScreen extends ConsumerStatefulWidget {
 }
 
 class _QotdScreenState extends ConsumerState<QotdScreen> {
-  late Question _question;
+  bool _isLoading = true;
+  Question? _question;
   int _secondsRemaining = 60;
   Timer? _timer;
   int? _selectedOption;
@@ -28,8 +29,73 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   @override
   void initState() {
     super.initState();
-    _question = SeedData.questionOfTheDay;
-    _startTimer();
+    _loadQotd();
+  }
+
+  Future<void> _loadQotd() async {
+    final today = DateTime.now().toIso8601String().split('T').first;
+    Question? found;
+
+    try {
+      final qotdDoc = await FirestoreService.instance.fetchQOTD(today);
+      if (qotdDoc != null) {
+        if (qotdDoc.questionText != null &&
+            qotdDoc.options != null &&
+            qotdDoc.options!.isNotEmpty) {
+          int correctIdx = 0;
+          if (qotdDoc.correctAnswer != null) {
+            final letter = qotdDoc.correctAnswer!.toUpperCase().trim();
+            if (letter == 'B' || letter == '1') {
+              correctIdx = 1;
+            } else if (letter == 'C' || letter == '2') {
+              correctIdx = 2;
+            } else if (letter == 'D' || letter == '3') {
+              correctIdx = 3;
+            }
+          }
+          found = Question(
+            id: qotdDoc.questionId.isNotEmpty ? qotdDoc.questionId : 'qotd_$today',
+            subjectId: 'sub_general',
+            topicId: 'top_daily',
+            examTags: const ['ALL'],
+            questionEn: qotdDoc.questionText!,
+            questionHi: '',
+            optionsEn: qotdDoc.options!,
+            optionsHi: const [],
+            correctIndex: correctIdx,
+            explanationEn: qotdDoc.explanation ?? '',
+            explanationHi: '',
+          );
+        } else if (qotdDoc.questionId.isNotEmpty) {
+          found = LocalDatabase.instance.getQuestionById(qotdDoc.questionId);
+          if (found == null) {
+            final remoteList = await FirestoreService.instance.fetchQuestionsForTest([qotdDoc.questionId]);
+            if (remoteList.isNotEmpty) {
+              found = remoteList.first;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Fall back to an existing question from question bank if any
+    if (found == null) {
+      final allLocal = LocalDatabase.instance.getQuestions();
+      if (allLocal.isNotEmpty) {
+        final index = DateTime.now().day % allLocal.length;
+        found = allLocal[index];
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _question = found;
+        _isLoading = false;
+      });
+      if (_question != null) {
+        _startTimer();
+      }
+    }
   }
 
   void _startTimer() {
@@ -65,10 +131,10 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
       _isSubmitted = true;
     });
 
-    if (_selectedOption != null) {
-      final isCorrect = _selectedOption == _question.correctIndex;
+    if (_selectedOption != null && _question != null) {
+      final isCorrect = _selectedOption == _question!.correctIndex;
       if (!isCorrect) {
-        LocalDatabase.instance.recordWrongQuestion(_question.id);
+        LocalDatabase.instance.recordWrongQuestion(_question!.id);
       }
     }
   }
@@ -76,16 +142,80 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Question of the Day', style: TextStyle(fontWeight: FontWeight.w700)),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_question == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Question of the Day', style: TextStyle(fontWeight: FontWeight.w700)),
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppDimens.space24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.actionBlue.withAlpha(25),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lightbulb_outline, size: 48, color: AppColors.actionBlue),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'No Question of the Day',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'There is no question scheduled for today yet. Please check back later or explore practice modules!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Back to Home', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final question = _question!;
     final lang = ref.watch(selectedLanguageProvider);
-    final questionText = (lang == 'hi' && _question.questionHi.isNotEmpty)
-        ? _question.questionHi
-        : _question.questionEn;
-    final options = (lang == 'hi' && _question.optionsHi.isNotEmpty)
-        ? _question.optionsHi
-        : _question.optionsEn;
-    final explanation = (lang == 'hi' && _question.explanationHi.isNotEmpty)
-        ? _question.explanationHi
-        : _question.explanationEn;
+    final questionText = (lang == 'hi' && question.questionHi.isNotEmpty)
+        ? question.questionHi
+        : question.questionEn;
+    final options = (lang == 'hi' && question.optionsHi.isNotEmpty)
+        ? question.optionsHi
+        : question.optionsEn;
+    final explanation = (lang == 'hi' && question.explanationHi.isNotEmpty)
+        ? question.explanationHi
+        : question.explanationEn;
 
     final progressRatio = _secondsRemaining / 60.0;
     final timerColor = _secondsRemaining <= 10 ? AppColors.error : AppColors.actionBlue;
@@ -169,9 +299,9 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_question.year != null) ...[
+                    if (question.year != null) ...[
                       Text(
-                        _question.year!,
+                        question.year!,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -198,7 +328,7 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 final optionLabel = String.fromCharCode(65 + index); // A, B, C, D
                 final optionText = options[index];
                 final isSelected = _selectedOption == index;
-                final isCorrect = index == _question.correctIndex;
+                final isCorrect = index == question.correctIndex;
 
                 Color borderColor;
                 Color bgColor;
@@ -296,7 +426,7 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 Container(
                   padding: const EdgeInsets.all(AppDimens.space16),
                   decoration: BoxDecoration(
-                    color: _selectedOption == _question.correctIndex
+                    color: _selectedOption == question.correctIndex
                         ? (isDark ? const Color(0xFF064E3B).withAlpha(51) : AppColors.successLight)
                         : (isDark ? const Color(0xFF7F1D1D).withAlpha(51) : AppColors.errorLight),
                     borderRadius: AppDimens.cardBorderRadius,
@@ -304,18 +434,18 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                   child: Row(
                     children: [
                       Icon(
-                        _selectedOption == _question.correctIndex ? Icons.check_circle : Icons.error_outline,
-                        color: _selectedOption == _question.correctIndex ? AppColors.success : AppColors.error,
+                        _selectedOption == question.correctIndex ? Icons.check_circle : Icons.error_outline,
+                        color: _selectedOption == question.correctIndex ? AppColors.success : AppColors.error,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          _selectedOption == _question.correctIndex
+                          _selectedOption == question.correctIndex
                               ? 'Correct! +2 Marks credited to today\'s streak.'
                               : 'Incorrect. Don\'t worry, review the explanation below!',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: _selectedOption == _question.correctIndex ? AppColors.success : AppColors.error,
+                            color: _selectedOption == question.correctIndex ? AppColors.success : AppColors.error,
                           ),
                         ),
                       ),

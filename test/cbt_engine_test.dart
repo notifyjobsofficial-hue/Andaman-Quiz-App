@@ -1,27 +1,41 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:andaman_quiz/core/models/models.dart';
-import 'package:andaman_quiz/core/database/seed_data.dart';
 
 void main() {
   group('SSC CBT Engine & Data Models Test', () {
-    test('SeedData contains authentic Andaman GK and SSC questions', () {
-      final questions = SeedData.questions;
-      expect(questions.isNotEmpty, true);
+    test('Question model verifies options, correct index, and explanations', () {
+      const q = Question(
+        id: 'test_q_1',
+        subjectId: 'sub_an_gk',
+        topicId: 'top_hist',
+        examTags: ['CGL', 'CHSL'],
+        questionEn: 'What is the capital of Andaman and Nicobar Islands?',
+        questionHi: 'अंडमान और निकोबार की राजधानी क्या है?',
+        optionsEn: ['Port Blair', 'Havelock', 'Diglipur', 'Mayabunder'],
+        optionsHi: ['पोर्ट ब्लेयर', 'हेवलॉक', 'डिगलीपुर', 'मायाबंदर'],
+        correctIndex: 0,
+        explanationEn: 'Port Blair is the capital city.',
+        explanationHi: 'पोर्ट ब्लेयर राजधानी है।',
+      );
 
-      // Verify Andaman GK questions exist
-      final anQuestions = questions.where((q) => q.subjectId == 'sub_an_gk').toList();
-      expect(anQuestions.length >= 6, true);
-
-      // Verify question data integrity
-      for (final q in questions) {
-        expect(q.optionsEn.length, 4);
-        expect(q.correctIndex >= 0 && q.correctIndex < 4, true);
-        expect(q.explanationEn.isNotEmpty, true);
-      }
+      expect(q.optionsEn.length, 4);
+      expect(q.correctIndex, 0);
+      expect(q.explanationEn.isNotEmpty, true);
     });
 
     test('Mock test marking calculation validates positive and negative marks', () {
-      final mock = SeedData.mockTests.first;
+      const mock = MockTest(
+        id: 'mock_test_1',
+        title: 'SSC CGL Tier 1 Mock',
+        examCode: 'CGL',
+        totalQuestions: 100,
+        durationMinutes: 60,
+        totalMarks: 200,
+        negativeMarks: 0.50,
+        sections: [],
+        isFree: true,
+      );
+
       const totalQuestions = 100;
       final positiveMarks = mock.totalMarks / totalQuestions; // 200 / 100 = 2.0
       final negativeMarks = mock.negativeMarks; // 0.50

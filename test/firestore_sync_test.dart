@@ -40,9 +40,9 @@ void main() {
     });
 
     test('Flow Verification: Admin adds 1 question -> Firestore saves -> Android app displays it', () async {
-      // 1. Initial State: App starts with pre-seeded questions
+      // 1. Initial State: App starts with clean storage (no hardcoded demo questions)
       final initialCount = LocalDatabase.instance.getAllQuestions().length;
-      expect(initialCount > 0, true);
+      expect(initialCount, 0);
 
       // 2. Admin creates a new question in Control Center
       const newAdminQuestion = Question(
@@ -85,8 +85,22 @@ void main() {
     });
 
     test('Sync preserves student local bookmarks and wrong questions', () async {
-      final questions = LocalDatabase.instance.getAllQuestions();
-      final targetQ = questions.first;
+      const sampleQuestion = Question(
+        id: 'q_test_bookmark_sync',
+        subjectId: 'sub_an_gk',
+        topicId: 'top_an_history',
+        examTags: ['CGL'],
+        questionEn: 'Test question for bookmark preservation',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: 'Test explanation',
+        explanationHi: '',
+      );
+
+      await LocalDatabase.instance.syncQuestionsFromFirestore([sampleQuestion]);
+      final targetQ = LocalDatabase.instance.getAllQuestions().first;
 
       // Student bookmarks a question locally without login
       await LocalDatabase.instance.toggleBookmark(targetQ.id);

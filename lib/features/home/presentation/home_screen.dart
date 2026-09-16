@@ -34,7 +34,7 @@ class HomeScreen extends ConsumerWidget {
 
     final subjects = LocalDatabase.instance.getSubjects(examCode: selectedExam);
     final latestMock = LocalDatabase.instance.getMockTests(examCode: selectedExam).firstOrNull ??
-        LocalDatabase.instance.getMockTests().first;
+        LocalDatabase.instance.getMockTests().firstOrNull;
 
     return Scaffold(
       body: SafeArea(
@@ -361,16 +361,30 @@ class HomeScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: subjects.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final subject = subjects[index];
-                    return _SubjectListItem(subject: subject);
-                  },
-                ),
+                if (subjects.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Text(
+                        'No subjects available for this exam yet.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: subjects.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final subject = subjects[index];
+                      return _SubjectListItem(subject: subject);
+                    },
+                  ),
                 const SizedBox(height: 24),
 
                 // Latest Mock Test Card at Bottom
@@ -379,7 +393,39 @@ class HomeScreen extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 10),
-                _LatestMockTestCard(mockTest: latestMock),
+                if (latestMock != null)
+                  _LatestMockTestCard(mockTest: latestMock)
+                else
+                  AppCard(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.quiz_outlined, color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight, size: 28),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'No Mock Tests Available Yet',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Mock tests for this category will be published soon.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 24),
               ],
             ),
@@ -457,7 +503,10 @@ class _ExamSelectorRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const exams = ['CGL', 'CHSL', 'Police', 'MTS'];
+    final dbExams = LocalDatabase.instance.getExams();
+    final exams = dbExams.isNotEmpty
+        ? dbExams.map((e) => e.code).take(4).toList()
+        : ['CGL', 'CHSL', 'Police', 'MTS'];
 
     return Row(
       children: exams.map((exam) {
@@ -506,26 +555,31 @@ class _ContinuePracticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
+    final attempts = LocalDatabase.instance.getAttempts();
+
+    // If student has previous attempts, display their real latest activity
+    if (attempts.isNotEmpty) {
+      final latest = attempts.last;
+      return AppCard(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Percentage',
-                    style: TextStyle(
+                  Text(
+                    latest.testTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '12/25 completed',
+                    'Score: ${latest.score.toStringAsFixed(1)} • ${latest.correctCount}/${latest.correctCount + latest.wrongCount + latest.unattemptedCount} correct',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
@@ -533,26 +587,63 @@ class _ContinuePracticeCard extends StatelessWidget {
                   ),
                 ],
               ),
-              ElevatedButton(
-                onPressed: () => context.push('/practice/mcq/top_quant_percentage'),
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(90, 36),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                ),
-                child: const Text('Continue', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Progress Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppDimens.radiusPill),
-            child: LinearProgressIndicator(
-              value: 12 / 25,
-              minHeight: 6,
-              backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.actionBlue),
             ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: () => context.push('/practice'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(90, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+              ),
+              child: const Text('Practice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Friendly onboarding state when new
+    return AppCard(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.actionBlue.withAlpha(25),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.school_outlined, color: AppColors.actionBlue, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Start Your Preparation',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Explore subject-wise MCQs & mock tests',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => context.push('/practice'),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(80, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            ),
+            child: const Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
