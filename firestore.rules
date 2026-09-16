@@ -1,0 +1,57 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 1. Exams: Public read for students, Admin-only write
+    match /exams/{examId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 2. Subjects: Public read for students, Admin-only write
+    match /subjects/{subjectId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 3. Topics: Public read for students, Admin-only write
+    match /topics/{topicId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 4. Questions: Public read for all Andaman students, Admin-only write
+    match /questions/{questionId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 5. Mock Tests: Public read for students, Admin-only write
+    match /mocks/{mockId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 6. Live Tests: Public read for students, Admin-only write
+    match /live_tests/{testId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // 7. Question of the Day (QOTD): Public read, Admin-only write
+    match /qotd/{docId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

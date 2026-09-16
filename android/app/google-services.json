@@ -1,0 +1,29 @@
+﻿{
+  "project_info": {
+    "project_number": "974859873844",
+    "project_id": "andaman-quiz",
+    "storage_bucket": "andaman-quiz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:974859873844:android:a47d9856623e566b3b2461",
+        "android_client_info": {
+          "package_name": "com.notifyjobs.andamanquiz"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdkNWXdjhR1tdIdpBz7LXf13bMGr16KDM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
