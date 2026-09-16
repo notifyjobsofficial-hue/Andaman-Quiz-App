@@ -1,4 +1,4 @@
-﻿export interface ExamCategory {
+export interface ExamCategory {
   id: string;
   name: string;
   code: string;
@@ -81,19 +81,28 @@ export interface MockTest {
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
+  positiveMarks?: number;
   negativeMarks: number;
   attemptsCount: number;
   isFree: boolean;
   price?: number;
   originalPrice?: number;
   offerPrice?: number;
+  productId?: string; // Google Play Store SKU / Product ID for paid mocks
   description?: string;
   instructions?: string;
   status: 'published' | 'draft' | 'archived';
   language: 'en' | 'hi' | 'both';
   displayOrder: number;
   isLive: boolean;
+  isFeatured?: boolean;
   isPreviousYear: boolean;
+  startDate?: string;
+  endDate?: string;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  showResultImmediately?: boolean;
+  showExplanation?: boolean;
   sections: TestSection[];
   created_at?: string;
 }
@@ -120,7 +129,11 @@ export interface QuestionOfTheDay {
   id: string;
   date: string; // YYYY-MM-DD
   questionId: string;
-  question: Question;
+  questionText?: string;
+  options?: string[];
+  correctAnswer?: string;
+  explanation?: string;
+  active?: boolean;
 }
 
 export interface AppConfig {
@@ -131,6 +144,12 @@ export interface AppConfig {
   whatsappUrl?: string;
   telegramUrl?: string;
   officialWebsiteUrl?: string;
+  adsEnabled: boolean;
+  freeTestResultAdEnabled: boolean;
+  quizResultAdEnabled: boolean;
+  adFrequency: number;
+  admobBannerId?: string;
+  admobInterstitialId?: string;
 }
 
 export interface AdminActivity {

@@ -7,6 +7,7 @@ import '../../../core/models/models.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/billing/billing_service.dart';
 
 class TestsScreen extends StatefulWidget {
   const TestsScreen({super.key});
@@ -137,16 +138,22 @@ class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStat
   }
 }
 
-class _MockTestListCard extends StatelessWidget {
+class _MockTestListCard extends StatefulWidget {
   final MockTest mockTest;
 
   const _MockTestListCard({required this.mockTest});
 
+  @override
+  State<_MockTestListCard> createState() => _MockTestListCardState();
+}
+
+class _MockTestListCardState extends State<_MockTestListCard> {
   void _handleTestTap(BuildContext context) {
-    if (mockTest.isFree) {
-      context.push('/tests/instructions/${mockTest.id}');
+    final isUnlocked = LocalDatabase.instance.isTestUnlocked(widget.mockTest);
+    if (isUnlocked) {
+      context.push('/tests/instructions/${widget.mockTest.id}');
     } else {
-      _showPaidTestSheet(context, mockTest);
+      _showPaidTestSheet(context, widget.mockTest);
     }
   }
 
@@ -211,7 +218,7 @@ class _MockTestListCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'This is a premium curated examination with in-depth solutions and island rank analytics. Direct payment unlocking will be available in the upcoming release. Practice all free series in the meantime!',
+              'Unlock this complete CBT mock test with section-wise questions, timer simulation, detailed explanations, and 100% ad-free experience via Google Play.',
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
@@ -222,8 +229,45 @@ class _MockTestListCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Got It'),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final success = await BillingService.instance.buyMockTest(
+                    testId: test.id,
+                    testTitle: test.title,
+                    productId: test.productId,
+                    amount: price,
+                  );
+                  if (mounted) setState(() {});
+                  if (success && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Unlocked "${test.title}" successfully!'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                    context.push('/tests/instructions/${test.id}');
+                  }
+                },
+                child: Text('Unlock with Google Play (₹${price.toStringAsFixed(0)})'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await BillingService.instance.restorePurchases();
+                  if (mounted) setState(() {});
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Checking previous Google Play purchases...')),
+                    );
+                  }
+                },
+                child: const Text(
+                  'Already purchased? Restore purchases',
+                  style: TextStyle(fontSize: 12, color: AppColors.actionBlue),
+                ),
               ),
             ),
           ],
@@ -234,8 +278,9 @@ class _MockTestListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mockTest = widget.mockTest;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isPaid = !mockTest.isFree;
+    final isUnlocked = LocalDatabase.instance.isTestUnlocked(mockTest);
     final displayPrice = mockTest.offerPrice ?? mockTest.price;
 
     return AnimatedPressable(
@@ -259,6 +304,8 @@ class _MockTestListCard extends StatelessWidget {
                     ],
                     if (mockTest.isFree)
                       StatusBadge.free()
+                    else if (isUnlocked)
+                      StatusBadge.unlocked()
                     else
                       StatusBadge.paid(price: displayPrice),
                   ],
@@ -314,7 +361,7 @@ class _MockTestListCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                   child: Text(
-                    isPaid ? 'Unlock Test' : 'Start Test',
+                    isUnlocked ? 'Start Test' : 'Unlock (₹${displayPrice?.toInt() ?? 99})',
                     style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                   ),
                 ),

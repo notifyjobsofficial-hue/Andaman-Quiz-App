@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/ads/ad_service.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
@@ -24,16 +23,7 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   void _onStartTest(MockTest test) {
     if (_isStarting) return;
     setState(() => _isStarting = true);
-
-    // CRITICAL AD REQUIREMENT:
-    // Attempt ONE interstitial ad.
-    // If fail, timeout, or dismissed, immediately starts the exam.
-    AdService.instance.showExamInterstitial(
-      onContinue: () {
-        if (!mounted) return;
-        context.pushReplacement('/tests/cbt/${test.id}');
-      },
-    );
+    context.pushReplacement('/tests/cbt/${test.id}');
   }
 
   @override

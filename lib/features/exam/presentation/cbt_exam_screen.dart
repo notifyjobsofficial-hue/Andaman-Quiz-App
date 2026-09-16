@@ -11,6 +11,8 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/services/firestore_service.dart';
+import '../../../core/ads/ad_service.dart';
 
 class CbtExamScreen extends ConsumerStatefulWidget {
   final String testId;
@@ -189,7 +191,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     int unattemptedCount = 0;
     final Map<String, double> sectionScores = {};
 
-    final positiveMarks = _test.totalMarks / (_test.totalQuestions > 0 ? _test.totalQuestions : 100);
+    final positiveMarks = _test.positiveMarks ?? (_test.totalQuestions > 0 ? _test.totalMarks / _test.totalQuestions : 2.0);
     final negativeMarks = _test.negativeMarks;
 
     for (final sec in _test.sections) {
@@ -236,9 +238,17 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     );
 
     await ref.read(studentAttemptsProvider.notifier).record(attempt);
+    // Sync attempt to Cloud Firestore
+    await FirestoreService.instance.recordTestAttempt(attempt);
 
     if (mounted) {
-      context.pushReplacement('/tests/results/${attempt.id}');
+      AdService.instance.showResultInterstitial(
+        isFreeTest: _test.isFree,
+        onContinue: () {
+          if (!mounted) return;
+          context.pushReplacement('/tests/results/${attempt.id}');
+        },
+      );
     }
   }
 

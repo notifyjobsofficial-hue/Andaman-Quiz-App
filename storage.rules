@@ -1,4 +1,4 @@
-﻿rules_version = '2';
+rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     // Helper functions
@@ -7,9 +7,11 @@ service firebase.storage {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
-         request.auth.token.email.matches('.*@andamanquiz[.]com'));
+      return isAuthenticated() && (
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email.matches('.*@andamanquiz\\.com$') ||
+        request.auth.token.email.matches('.*@andamanquiz[.]com')
+      );
     }
 
     // Public read for question images and banners; Admin upload

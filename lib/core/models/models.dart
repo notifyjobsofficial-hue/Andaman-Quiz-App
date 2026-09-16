@@ -379,12 +379,14 @@ class MockTest {
   final int durationMinutes;
   final int totalQuestions;
   final double totalMarks;
+  final double? positiveMarks;
   final double negativeMarks;
   final int attemptsCount;
   final bool isFree;
   final double? price;
   final double? originalPrice;
   final double? offerPrice;
+  final String? productId; // Google Play In-App Product ID / SKU
   final String? categoryId;
   final String? description;
   final String? instructions;
@@ -393,6 +395,12 @@ class MockTest {
   final int displayOrder;
   final bool isLive;
   final bool isPreviousYear;
+  final String? startDate;
+  final String? endDate;
+  final bool shuffleQuestions;
+  final bool shuffleOptions;
+  final bool showResultImmediately;
+  final bool showExplanation;
   final List<TestSection> sections;
 
   const MockTest({
@@ -402,12 +410,14 @@ class MockTest {
     required this.durationMinutes,
     required this.totalQuestions,
     required this.totalMarks,
+    this.positiveMarks,
     required this.negativeMarks,
     this.attemptsCount = 0,
     this.isFree = true,
     this.price,
     this.originalPrice,
     this.offerPrice,
+    this.productId,
     this.categoryId,
     this.description,
     this.instructions,
@@ -416,6 +426,12 @@ class MockTest {
     this.displayOrder = 0,
     this.isLive = false,
     this.isPreviousYear = false,
+    this.startDate,
+    this.endDate,
+    this.shuffleQuestions = true,
+    this.shuffleOptions = true,
+    this.showResultImmediately = true,
+    this.showExplanation = true,
     required this.sections,
   });
 
@@ -426,12 +442,14 @@ class MockTest {
     'durationMinutes': durationMinutes,
     'totalQuestions': totalQuestions,
     'totalMarks': totalMarks,
+    if (positiveMarks != null) 'positiveMarks': positiveMarks,
     'negativeMarks': negativeMarks,
     'attemptsCount': attemptsCount,
     'isFree': isFree,
     if (price != null) 'price': price,
     if (originalPrice != null) 'originalPrice': originalPrice,
     if (offerPrice != null) 'offerPrice': offerPrice,
+    if (productId != null && productId!.isNotEmpty) 'productId': productId,
     if (categoryId != null) 'categoryId': categoryId,
     if (description != null) 'description': description,
     if (instructions != null) 'instructions': instructions,
@@ -440,6 +458,12 @@ class MockTest {
     'displayOrder': displayOrder,
     'isLive': isLive,
     'isPreviousYear': isPreviousYear,
+    if (startDate != null) 'startDate': startDate,
+    if (endDate != null) 'endDate': endDate,
+    'shuffleQuestions': shuffleQuestions,
+    'shuffleOptions': shuffleOptions,
+    'showResultImmediately': showResultImmediately,
+    'showExplanation': showExplanation,
     'sections': sections.map((s) => s.toMap()).toList(),
   };
 
@@ -450,12 +474,14 @@ class MockTest {
     durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 60,
     totalQuestions: (map['totalQuestions'] as num?)?.toInt() ?? 0,
     totalMarks: (map['totalMarks'] as num?)?.toDouble() ?? 0.0,
+    positiveMarks: (map['positiveMarks'] as num?)?.toDouble(),
     negativeMarks: (map['negativeMarks'] as num?)?.toDouble() ?? 0.5,
     attemptsCount: (map['attemptsCount'] as num?)?.toInt() ?? 0,
     isFree: map['isFree'] ?? true,
     price: (map['price'] as num?)?.toDouble(),
     originalPrice: (map['originalPrice'] as num?)?.toDouble(),
     offerPrice: (map['offerPrice'] as num?)?.toDouble(),
+    productId: map['productId']?.toString(),
     categoryId: map['categoryId'],
     description: map['description'],
     instructions: map['instructions'],
@@ -464,6 +490,12 @@ class MockTest {
     displayOrder: (map['displayOrder'] as num?)?.toInt() ?? 0,
     isLive: map['isLive'] ?? false,
     isPreviousYear: map['isPreviousYear'] ?? false,
+    startDate: map['startDate'],
+    endDate: map['endDate'],
+    shuffleQuestions: map['shuffleQuestions'] ?? true,
+    shuffleOptions: map['shuffleOptions'] ?? true,
+    showResultImmediately: map['showResultImmediately'] ?? true,
+    showExplanation: map['showExplanation'] ?? true,
     sections: (map['sections'] as List? ?? [])
         .map((s) => TestSection.fromMap(Map<String, dynamic>.from(s)))
         .toList(),
@@ -567,3 +599,184 @@ class StudentAttempt {
     );
   }
 }
+
+class HomeBanner {
+  final String id;
+  final String title;
+  final String imageUrl;
+  final String targetRoute;
+  final bool active;
+  final int order;
+
+  const HomeBanner({
+    required this.id,
+    required this.title,
+    required this.imageUrl,
+    required this.targetRoute,
+    this.active = true,
+    this.order = 0,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'imageUrl': imageUrl,
+    'targetRoute': targetRoute,
+    'active': active,
+    'order': order,
+  };
+
+  factory HomeBanner.fromMap(Map<String, dynamic> map) => HomeBanner(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    imageUrl: map['imageUrl'] ?? '',
+    targetRoute: map['targetRoute'] ?? '',
+    active: map['active'] ?? true,
+    order: (map['order'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class AppNotice {
+  final String id;
+  final String title;
+  final String body;
+  final String date;
+  final bool active;
+  final bool isPinned;
+
+  const AppNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.date,
+    this.active = true,
+    this.isPinned = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'body': body,
+    'date': date,
+    'active': active,
+    'isPinned': isPinned,
+  };
+
+  factory AppNotice.fromMap(Map<String, dynamic> map) => AppNotice(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    body: map['body'] ?? '',
+    date: map['date'] ?? '',
+    active: map['active'] ?? true,
+    isPinned: map['isPinned'] ?? false,
+  );
+}
+
+class QuestionOfTheDay {
+  final String id;
+  final String date; // YYYY-MM-DD
+  final String questionId;
+  final String? questionText;
+  final List<String>? options;
+  final String? correctAnswer;
+  final String? explanation;
+  final bool active;
+
+  const QuestionOfTheDay({
+    required this.id,
+    required this.date,
+    required this.questionId,
+    this.questionText,
+    this.options,
+    this.correctAnswer,
+    this.explanation,
+    this.active = true,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'date': date,
+    'questionId': questionId,
+    if (questionText != null) 'questionText': questionText,
+    if (options != null) 'options': options,
+    if (correctAnswer != null) 'correctAnswer': correctAnswer,
+    if (explanation != null) 'explanation': explanation,
+    'active': active,
+  };
+
+  factory QuestionOfTheDay.fromMap(Map<String, dynamic> map) => QuestionOfTheDay(
+    id: map['id'] ?? '',
+    date: map['date'] ?? '',
+    questionId: map['questionId'] ?? '',
+    questionText: map['questionText'],
+    options: map['options'] != null ? List<String>.from(map['options']) : null,
+    correctAnswer: map['correctAnswer'],
+    explanation: map['explanation'],
+    active: map['active'] ?? true,
+  );
+}
+
+class RemoteAppConfig {
+  final String id;
+  final bool maintenanceMode;
+  final String? maintenanceMessage;
+  final String supportEmail;
+  final String? whatsappUrl;
+  final String? telegramUrl;
+  final String? officialWebsiteUrl;
+  final bool adsEnabled;
+  final bool freeTestResultAdEnabled;
+  final bool quizResultAdEnabled;
+  final int adFrequency;
+  final String? admobBannerId;
+  final String? admobInterstitialId;
+
+  const RemoteAppConfig({
+    this.id = 'main',
+    this.maintenanceMode = false,
+    this.maintenanceMessage,
+    this.supportEmail = 'support@andamanquiz.com',
+    this.whatsappUrl,
+    this.telegramUrl,
+    this.officialWebsiteUrl,
+    this.adsEnabled = true,
+    this.freeTestResultAdEnabled = true,
+    this.quizResultAdEnabled = true,
+    this.adFrequency = 1,
+    this.admobBannerId,
+    this.admobInterstitialId,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'maintenanceMode': maintenanceMode,
+    if (maintenanceMessage != null) 'maintenanceMessage': maintenanceMessage,
+    'supportEmail': supportEmail,
+    if (whatsappUrl != null) 'whatsappUrl': whatsappUrl,
+    if (telegramUrl != null) 'telegramUrl': telegramUrl,
+    if (officialWebsiteUrl != null) 'officialWebsiteUrl': officialWebsiteUrl,
+    'adsEnabled': adsEnabled,
+    'freeTestResultAdEnabled': freeTestResultAdEnabled,
+    'quizResultAdEnabled': quizResultAdEnabled,
+    'adFrequency': adFrequency,
+    if (admobBannerId != null) 'admobBannerId': admobBannerId,
+    if (admobInterstitialId != null) 'admobInterstitialId': admobInterstitialId,
+  };
+
+  factory RemoteAppConfig.fromMap(Map<String, dynamic> map) => RemoteAppConfig(
+    id: map['id'] ?? 'main',
+    maintenanceMode: map['maintenanceMode'] ?? false,
+    maintenanceMessage: map['maintenanceMessage'],
+    supportEmail: map['supportEmail'] ?? 'support@andamanquiz.com',
+    whatsappUrl: map['whatsappUrl'],
+    telegramUrl: map['telegramUrl'],
+    officialWebsiteUrl: map['officialWebsiteUrl'],
+    adsEnabled: map['adsEnabled'] ?? true,
+    freeTestResultAdEnabled: map['freeTestResultAdEnabled'] ?? true,
+    quizResultAdEnabled: map['quizResultAdEnabled'] ?? true,
+    adFrequency: (map['adFrequency'] as num?)?.toInt() ?? 1,
+    admobBannerId: map['admobBannerId'],
+    admobInterstitialId: map['admobInterstitialId'],
+  );
+}
+

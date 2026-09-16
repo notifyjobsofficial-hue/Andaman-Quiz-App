@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, Check, FolderTree, ArrowUpDown } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Edit2, Trash2, Check, FolderTree, ArrowUpDown, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import {
   fetchCategories,
   saveCategory,
@@ -16,14 +16,18 @@ export const CategoriesExams: React.FC = () => {
   const [categories, setCategories] = useState<ExamCategory[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Modals state
+  // Category Modal state
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
   const [editingCat, setEditingCat] = useState<ExamCategory | null>(null);
   const [catName, setCatName] = useState('');
   const [catCode, setCatCode] = useState('');
   const [catOrder, setCatOrder] = useState(1);
+  const [isSavingCat, setIsSavingCat] = useState(false);
+  const [catError, setCatError] = useState<string | null>(null);
 
+  // Exam Modal state
   const [isExamModalOpen, setIsExamModalOpen] = useState(false);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [examName, setExamName] = useState('');
@@ -31,6 +35,8 @@ export const CategoriesExams: React.FC = () => {
   const [examCategoryId, setExamCategoryId] = useState('');
   const [examDescription, setExamDescription] = useState('');
   const [examOrder, setExamOrder] = useState(1);
+  const [isSavingExam, setIsSavingExam] = useState(false);
+  const [examError, setExamError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -42,8 +48,9 @@ export const CategoriesExams: React.FC = () => {
       const [c, e] = await Promise.all([fetchCategories(), fetchExams()]);
       setCategories(c);
       setExams(e);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to load categories/exams from Firestore.' });
     } finally {
       setLoading(false);
     }
@@ -51,6 +58,7 @@ export const CategoriesExams: React.FC = () => {
 
   // Category Actions
   const handleOpenCatModal = (cat?: ExamCategory) => {
+    setCatError(null);
     if (cat) {
       setEditingCat(cat);
       setCatName(cat.name);
@@ -69,6 +77,9 @@ export const CategoriesExams: React.FC = () => {
     e.preventDefault();
     if (!catName || !catCode) return;
 
+    setCatError(null);
+    setIsSavingCat(true);
+
     const id = editingCat ? editingCat.id : `cat_${catCode.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const newCat: ExamCategory = {
       id,
@@ -78,20 +89,35 @@ export const CategoriesExams: React.FC = () => {
       isActive: true,
     };
 
-    await saveCategory(newCat);
-    setIsCatModalOpen(false);
-    loadData();
+    try {
+      await saveCategory(newCat);
+      setIsCatModalOpen(false);
+      setActionFeedback({ type: 'success', message: `Category "${newCat.name}" saved successfully!` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to save category:', err);
+      setCatError(err?.message || 'Failed to save category in Firestore. Please verify admin write permissions.');
+    } finally {
+      setIsSavingCat(false);
+    }
   };
 
   const handleDeleteCategory = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete category "${name}"?`)) {
+    if (!confirm(`Are you sure you want to delete category "${name}"?`)) return;
+
+    try {
       await deleteCategory(id);
-      loadData();
+      setActionFeedback({ type: 'success', message: `Category "${name}" deleted successfully.` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete category:', err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to delete category.' });
     }
   };
 
   // Exam Actions
   const handleOpenExamModal = (exam?: Exam) => {
+    setExamError(null);
     if (exam) {
       setEditingExam(exam);
       setExamName(exam.name);
@@ -114,6 +140,9 @@ export const CategoriesExams: React.FC = () => {
     e.preventDefault();
     if (!examName || !examCode) return;
 
+    setExamError(null);
+    setIsSavingExam(true);
+
     const id = editingExam ? editingExam.id : `exam_${examCode.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const newExam: Exam = {
       id,
@@ -127,20 +156,56 @@ export const CategoriesExams: React.FC = () => {
       isEnabled: true,
     };
 
-    await saveExam(newExam);
-    setIsExamModalOpen(false);
-    loadData();
+    try {
+      await saveExam(newExam);
+      setIsExamModalOpen(false);
+      setActionFeedback({ type: 'success', message: `Exam "${newExam.name}" saved successfully!` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to save exam:', err);
+      setExamError(err?.message || 'Failed to save exam in Firestore. Please verify permissions.');
+    } finally {
+      setIsSavingExam(false);
+    }
   };
 
   const handleDeleteExam = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete exam "${name}"?`)) {
+    if (!confirm(`Are you sure you want to delete exam "${name}"?`)) return;
+
+    try {
       await deleteExam(id);
-      loadData();
+      setActionFeedback({ type: 'success', message: `Exam "${name}" deleted successfully.` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete exam:', err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to delete exam.' });
     }
   };
 
   return (
     <div className="space-y-8">
+      {/* Action Feedback Toast/Alert */}
+      {actionFeedback && (
+        <div
+          className={`p-4 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold ${
+            actionFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionFeedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <span>{actionFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-xs font-bold underline opacity-70 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -286,6 +351,13 @@ export const CategoriesExams: React.FC = () => {
         title={editingCat ? 'Edit Category' : 'Create Category'}
       >
         <form onSubmit={handleSaveCategory} className="space-y-4">
+          {catError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>{catError}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Category Name</label>
             <input
@@ -323,16 +395,19 @@ export const CategoriesExams: React.FC = () => {
           <div className="flex justify-end gap-2 pt-4">
             <button
               type="button"
+              disabled={isSavingCat}
               onClick={() => setIsCatModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700"
+              disabled={isSavingCat}
+              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5"
             >
-              Save Category
+              {isSavingCat && <Loader2 size={13} className="animate-spin" />}
+              <span>{isSavingCat ? 'Saving Category...' : 'Save Category'}</span>
             </button>
           </div>
         </form>
@@ -345,6 +420,13 @@ export const CategoriesExams: React.FC = () => {
         title={editingExam ? 'Edit Exam' : 'Create Exam'}
       >
         <form onSubmit={handleSaveExam} className="space-y-4">
+          {examError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>{examError}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Exam Name</label>
             <input
@@ -406,16 +488,19 @@ export const CategoriesExams: React.FC = () => {
           <div className="flex justify-end gap-2 pt-4">
             <button
               type="button"
+              disabled={isSavingExam}
               onClick={() => setIsExamModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700"
+              disabled={isSavingExam}
+              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5"
             >
-              Save Exam
+              {isSavingExam && <Loader2 size={13} className="animate-spin" />}
+              <span>{isSavingExam ? 'Saving Exam...' : 'Save Exam'}</span>
             </button>
           </div>
         </form>

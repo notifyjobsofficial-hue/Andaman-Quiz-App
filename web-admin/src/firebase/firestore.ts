@@ -1,4 +1,4 @@
-﻿import {
+import {
   collection,
   doc,
   getDocs,
@@ -220,6 +220,29 @@ export async function fetchAppConfig(): Promise<AppConfig | null> {
 export async function saveAppConfig(config: AppConfig): Promise<void> {
   await setDoc(doc(db, 'app_config', 'main'), config, { merge: true });
   await logActivity('Update App Config', 'Application configuration updated');
+}
+
+// 7. Question of the Day (QOTD)
+export async function fetchQOTDList(): Promise<any[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'qotd'), orderBy('date', 'desc'), limit(30)));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.warn('Failed to fetch QOTD list:', err);
+    return [];
+  }
+}
+
+export async function saveQOTD(qotd: { id: string; date: string; questionId: string; questionText?: string; options?: string[]; correctAnswer?: string; explanation?: string; active?: boolean }): Promise<void> {
+  await setDoc(doc(db, 'qotd', qotd.id), qotd, { merge: true });
+  // Also update 'current' doc for easy student app access
+  await setDoc(doc(db, 'qotd', 'current'), qotd, { merge: true });
+  await logActivity('Save QOTD', `Question of the Day set for date ${qotd.date}`);
+}
+
+export async function deleteQOTD(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'qotd', id));
+  await logActivity('Delete QOTD', `Deleted QOTD ID: ${id}`);
 }
 
 export async function fetchRecentActivities(count: number = 10): Promise<AdminActivity[]> {

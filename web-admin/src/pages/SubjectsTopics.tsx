@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Plus, Edit2, Trash2, BookOpen } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Edit2, Trash2, BookOpen, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import {
   fetchSubjects,
   saveSubject,
@@ -18,6 +18,7 @@ export const SubjectsTopics: React.FC = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Subject modal
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
@@ -26,6 +27,8 @@ export const SubjectsTopics: React.FC = () => {
   const [subHindi, setSubHindi] = useState('');
   const [subExams, setSubExams] = useState<string[]>([]);
   const [isAndamanSpecial, setIsAndamanSpecial] = useState(false);
+  const [isSavingSub, setIsSavingSub] = useState(false);
+  const [subError, setSubError] = useState<string | null>(null);
 
   // Topic modal
   const [isTopModalOpen, setIsTopModalOpen] = useState(false);
@@ -33,6 +36,8 @@ export const SubjectsTopics: React.FC = () => {
   const [topName, setTopName] = useState('');
   const [topHindi, setTopHindi] = useState('');
   const [topSubjectId, setTopSubjectId] = useState('');
+  const [isSavingTop, setIsSavingTop] = useState(false);
+  const [topError, setTopError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -45,14 +50,16 @@ export const SubjectsTopics: React.FC = () => {
       setSubjects(s);
       setTopics(t);
       setExams(e);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to load subjects and topics from Firestore.' });
     } finally {
       setLoading(false);
     }
   };
 
   const handleOpenSubModal = (sub?: Subject) => {
+    setSubError(null);
     if (sub) {
       setEditingSub(sub);
       setSubName(sub.name);
@@ -73,6 +80,9 @@ export const SubjectsTopics: React.FC = () => {
     e.preventDefault();
     if (!subName) return;
 
+    setSubError(null);
+    setIsSavingSub(true);
+
     const id = editingSub ? editingSub.id : `sub_${subName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const newSub: Subject = {
       id,
@@ -84,19 +94,34 @@ export const SubjectsTopics: React.FC = () => {
       isAndamanSpecial,
     };
 
-    await saveSubject(newSub);
-    setIsSubModalOpen(false);
-    loadData();
+    try {
+      await saveSubject(newSub);
+      setIsSubModalOpen(false);
+      setActionFeedback({ type: 'success', message: `Subject "${newSub.name}" saved successfully!` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to save subject:', err);
+      setSubError(err?.message || 'Failed to save subject in Firestore. Please verify permissions.');
+    } finally {
+      setIsSavingSub(false);
+    }
   };
 
   const handleDeleteSubject = async (id: string, name: string) => {
-    if (confirm(`Delete subject "${name}"? This may affect topics linked to it.`)) {
+    if (!confirm(`Delete subject "${name}"? This may affect topics linked to it.`)) return;
+
+    try {
       await deleteSubject(id);
-      loadData();
+      setActionFeedback({ type: 'success', message: `Subject "${name}" deleted successfully.` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete subject:', err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to delete subject.' });
     }
   };
 
   const handleOpenTopModal = (top?: Topic, defaultSubId?: string) => {
+    setTopError(null);
     if (top) {
       setEditingTop(top);
       setTopName(top.name);
@@ -115,6 +140,9 @@ export const SubjectsTopics: React.FC = () => {
     e.preventDefault();
     if (!topName || !topSubjectId) return;
 
+    setTopError(null);
+    setIsSavingTop(true);
+
     const id = editingTop ? editingTop.id : `top_${topName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const newTopic: Topic = {
       id,
@@ -124,20 +152,55 @@ export const SubjectsTopics: React.FC = () => {
       questionCount: editingTop ? editingTop.questionCount : 0,
     };
 
-    await saveTopic(newTopic);
-    setIsTopModalOpen(false);
-    loadData();
+    try {
+      await saveTopic(newTopic);
+      setIsTopModalOpen(false);
+      setActionFeedback({ type: 'success', message: `Topic "${newTopic.name}" saved successfully!` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to save topic:', err);
+      setTopError(err?.message || 'Failed to save topic in Firestore. Please verify permissions.');
+    } finally {
+      setIsSavingTop(false);
+    }
   };
 
   const handleDeleteTopic = async (id: string, name: string) => {
-    if (confirm(`Delete topic "${name}"?`)) {
+    if (!confirm(`Delete topic "${name}"?`)) return;
+
+    try {
       await deleteTopic(id);
-      loadData();
+      setActionFeedback({ type: 'success', message: `Topic "${name}" deleted successfully.` });
+      await loadData();
+    } catch (err: any) {
+      console.error('Failed to delete topic:', err);
+      setActionFeedback({ type: 'error', message: err?.message || 'Failed to delete topic.' });
     }
   };
 
   return (
     <div className="space-y-8">
+      {/* Action Feedback Toast */}
+      {actionFeedback && (
+        <div
+          className={`p-4 rounded-xl flex items-center justify-between gap-3 text-xs font-semibold ${
+            actionFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionFeedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            <span>{actionFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-xs font-bold underline opacity-70 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -255,6 +318,13 @@ export const SubjectsTopics: React.FC = () => {
         title={editingSub ? 'Edit Subject' : 'Add Subject'}
       >
         <form onSubmit={handleSaveSubject} className="space-y-4">
+          {subError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>{subError}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Subject Name (English)</label>
             <input
@@ -302,16 +372,19 @@ export const SubjectsTopics: React.FC = () => {
           <div className="flex justify-end gap-2 pt-4">
             <button
               type="button"
+              disabled={isSavingSub}
               onClick={() => setIsSubModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700"
+              disabled={isSavingSub}
+              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5"
             >
-              Save Subject
+              {isSavingSub && <Loader2 size={13} className="animate-spin" />}
+              <span>{isSavingSub ? 'Saving Subject...' : 'Save Subject'}</span>
             </button>
           </div>
         </form>
@@ -324,6 +397,13 @@ export const SubjectsTopics: React.FC = () => {
         title={editingTop ? 'Edit Topic' : 'Add Topic'}
       >
         <form onSubmit={handleSaveTopic} className="space-y-4">
+          {topError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>{topError}</span>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Parent Subject</label>
             <select
@@ -363,16 +443,19 @@ export const SubjectsTopics: React.FC = () => {
           <div className="flex justify-end gap-2 pt-4">
             <button
               type="button"
+              disabled={isSavingTop}
               onClick={() => setIsTopModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
+              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700"
+              disabled={isSavingTop}
+              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5"
             >
-              Save Topic
+              {isSavingTop && <Loader2 size={13} className="animate-spin" />}
+              <span>{isSavingTop ? 'Saving Topic...' : 'Save Topic'}</span>
             </button>
           </div>
         </form>

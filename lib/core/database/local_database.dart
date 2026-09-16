@@ -20,6 +20,10 @@ class LocalDatabase {
   final List<StudentAttempt> _attempts = [];
   final Set<String> _bookmarkedIds = {};
   final Set<String> _wrongQuestionIds = {};
+  final Set<String> _purchasedProductIds = {};
+  final List<HomeBanner> _banners = [];
+  final List<AppNotice> _notices = [];
+  RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
   bool _isInitialized = false;
 
@@ -41,6 +45,40 @@ class LocalDatabase {
     // 2. Wrong Questions
     final wrongJson = prefs.getStringList('saved_wrong_questions') ?? [];
     _wrongQuestionIds.addAll(wrongJson);
+
+    // 2.5 Purchased Products / Unlocked Mock Tests
+    final purchased = prefs.getStringList('saved_purchased_products') ?? [];
+    _purchasedProductIds.addAll(purchased);
+
+    // 2.6 Banners & Notices
+    final bannersRaw = prefs.getString('db_banners');
+    if (bannersRaw != null && bannersRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(bannersRaw) as List;
+        _banners.clear();
+        for (final item in list) {
+          _banners.add(HomeBanner.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {}
+    }
+
+    final noticesRaw = prefs.getString('db_notices');
+    if (noticesRaw != null && noticesRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(noticesRaw) as List;
+        _notices.clear();
+        for (final item in list) {
+          _notices.add(AppNotice.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {}
+    }
+
+    final configRaw = prefs.getString('db_app_config');
+    if (configRaw != null && configRaw.isNotEmpty) {
+      try {
+        _remoteConfig = RemoteAppConfig.fromMap(Map<String, dynamic>.from(jsonDecode(configRaw)));
+      } catch (_) {}
+    }
 
     // 3. Questions
     final questionsRaw = prefs.getString('db_questions');
@@ -433,5 +471,45 @@ class LocalDatabase {
     _questions.clear();
     _questions.addAll(existingMap.values);
     await _persistQuestions();
+  }
+
+  // --- Purchase & Monetization Access ---
+  bool isTestUnlocked(MockTest test) {
+    if (test.isFree) return true;
+    if (_purchasedProductIds.contains(test.id)) return true;
+    if (test.productId != null && _purchasedProductIds.contains(test.productId!)) return true;
+    return false;
+  }
+
+  Future<void> unlockTest(String testIdOrProductId) async {
+    _purchasedProductIds.add(testIdOrProductId);
+    await _prefs?.setStringList('saved_purchased_products', _purchasedProductIds.toList());
+  }
+
+  Set<String> getPurchasedProductIds() => Set.unmodifiable(_purchasedProductIds);
+
+  // --- Banners, Notices, Remote Config ---
+  List<HomeBanner> getBanners() => List.unmodifiable(_banners);
+  List<AppNotice> getNotices() => List.unmodifiable(_notices);
+  RemoteAppConfig getRemoteConfig() => _remoteConfig;
+
+  Future<void> syncBannersFromFirestore(List<HomeBanner> banners) async {
+    _banners.clear();
+    _banners.addAll(banners);
+    final raw = jsonEncode(_banners.map((b) => b.toMap()).toList());
+    await _prefs?.setString('db_banners', raw);
+  }
+
+  Future<void> syncNoticesFromFirestore(List<AppNotice> notices) async {
+    _notices.clear();
+    _notices.addAll(notices);
+    final raw = jsonEncode(_notices.map((n) => n.toMap()).toList());
+    await _prefs?.setString('db_notices', raw);
+  }
+
+  Future<void> syncRemoteConfigFromFirestore(RemoteAppConfig config) async {
+    _remoteConfig = config;
+    final raw = jsonEncode(_remoteConfig.toMap());
+    await _prefs?.setString('db_app_config', raw);
   }
 }

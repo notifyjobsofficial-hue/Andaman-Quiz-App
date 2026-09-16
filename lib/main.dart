@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app/app.dart';
 import 'core/ads/ad_service.dart';
+import 'core/billing/billing_service.dart';
 import 'core/database/local_database.dart';
 import 'core/services/firestore_service.dart';
 
@@ -65,6 +66,13 @@ void main() async {
     await AdService.instance.init();
   } catch (e) {
     debugPrint('AdService init notice: $e');
+  }
+
+  // Initialize Google Play In-App Purchases
+  try {
+    await BillingService.instance.init();
+  } catch (e) {
+    debugPrint('BillingService init notice: $e');
   }
 
   // Safe non-blocking real-time Cloud Firestore synchronization

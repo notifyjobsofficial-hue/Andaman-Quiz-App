@@ -30,6 +30,16 @@ class StatusBadge extends StatelessWidget {
     );
   }
 
+  factory StatusBadge.unlocked() {
+    return const StatusBadge(
+      label: 'UNLOCKED',
+      backgroundColor: AppColors.successLight,
+      textColor: AppColors.success,
+      icon: Icons.lock_open_rounded,
+      fontSize: 11,
+    );
+  }
+
   factory StatusBadge.paid({double? price}) {
     return StatusBadge(
       label: price != null && price > 0 ? '₹${price.toStringAsFixed(0)}' : 'PREMIUM',

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Layers,
   Plus,
@@ -25,6 +25,7 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ initialTestId }) => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Active section inside the selected test
   const [activeSectionId, setActiveSectionId] = useState<string>('');
@@ -167,11 +168,19 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ initialTestId }) => {
   const handleSaveToFirestore = async () => {
     if (!currentTest) return;
     setIsSaving(true);
+    setActionFeedback(null);
     try {
       await saveMockTest(currentTest);
-      alert('Mock test question structure saved successfully to Cloud Firestore!');
+      setActionFeedback({
+        type: 'success',
+        message: `Successfully saved ${totalQuestionsInTest} questions across ${currentTest.sections.length} sections to Cloud Firestore!`
+      });
     } catch (err: any) {
-      alert('Failed to save test: ' + err.message);
+      console.error(err);
+      setActionFeedback({
+        type: 'error',
+        message: err.message || 'Failed to save test structure to Cloud Firestore.'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -181,6 +190,25 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ initialTestId }) => {
 
   return (
     <div className="space-y-6">
+      {/* Action Feedback Banner */}
+      {actionFeedback && (
+        <div
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+            actionFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <span>{actionFeedback.message}</span>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-xs px-2 py-0.5 rounded hover:bg-black/5"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

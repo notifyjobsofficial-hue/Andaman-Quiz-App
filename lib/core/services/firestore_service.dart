@@ -133,9 +133,86 @@ class FirestoreService {
         final mocks = mockSnap.docs.map((d) => MockTest.fromMap(d.data())).toList();
         await LocalDatabase.instance.syncMockTestsFromFirestore(mocks);
       }
+
+      // 5. Banners
+      final bannerSnap = await _firestore.collection(colBanners).where('active', isEqualTo: true).get();
+      if (bannerSnap.docs.isNotEmpty) {
+        final banners = bannerSnap.docs.map((d) => HomeBanner.fromMap(d.data())).toList();
+        banners.sort((a, b) => a.order.compareTo(b.order));
+        await LocalDatabase.instance.syncBannersFromFirestore(banners);
+      }
+
+      // 6. Notices
+      final noticeSnap = await _firestore.collection(colNotices).where('active', isEqualTo: true).get();
+      if (noticeSnap.docs.isNotEmpty) {
+        final notices = noticeSnap.docs.map((d) => AppNotice.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncNoticesFromFirestore(notices);
+      }
+
+      // 7. Remote App Config & AdMob settings
+      final configDoc = await _firestore.collection('app_config').doc('main').get();
+      if (configDoc.exists && configDoc.data() != null) {
+        final config = RemoteAppConfig.fromMap(configDoc.data()!);
+        await LocalDatabase.instance.syncRemoteConfigFromFirestore(config);
+      }
+
       debugPrint('Andaman Quiz app catalog synchronized with Cloud Firestore.');
     } catch (e) {
       debugPrint('Notice during catalog sync (running in local offline mode): $e');
+    }
+  }
+
+  // --- Question of the Day ---
+  Future<QuestionOfTheDay?> fetchQOTD(String dateStr) async {
+    try {
+      final doc = await _firestore.collection(colQotd).doc(dateStr).get();
+      if (doc.exists && doc.data() != null) {
+        return QuestionOfTheDay.fromMap(doc.data()!);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Notice fetching QOTD: $e');
+      return null;
+    }
+  }
+
+  // --- Record Purchases & Attempts ---
+  Future<void> recordPurchase({
+    required String testId,
+    required String testTitle,
+    String? productId,
+    required double amount,
+    required String orderId,
+    required String purchaseToken,
+  }) async {
+    try {
+      final purchaseId = 'pur_${DateTime.now().millisecondsSinceEpoch}';
+      await _firestore.collection('purchases').doc(purchaseId).set({
+        'id': purchaseId,
+        'testId': testId,
+        'testTitle': testTitle,
+        if (productId != null && productId.isNotEmpty) 'productId': productId,
+        'amount': amount,
+        'orderId': orderId,
+        'purchaseToken': purchaseToken,
+        'status': 'completed',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('Purchase $purchaseId recorded to Cloud Firestore');
+    } catch (e) {
+      debugPrint('Notice recording purchase: $e');
+    }
+  }
+
+  Future<void> recordTestAttempt(StudentAttempt attempt) async {
+    try {
+      await _firestore.collection('test_attempts').doc(attempt.id).set(
+        attempt.toMap()..['createdAt'] = FieldValue.serverTimestamp(),
+        SetOptions(merge: true),
+      );
+      debugPrint('Test attempt ${attempt.id} synced to Cloud Firestore');
+    } catch (e) {
+      debugPrint('Notice syncing test attempt: $e');
     }
   }
 

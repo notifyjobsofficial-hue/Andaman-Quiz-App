@@ -98,7 +98,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // 12. Admins collection:
+    // 12. Student Purchases / Entitlements: Public create, Admin manage
+    match /purchases/{purchaseId} {
+      allow read, create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    // 13. Student Test Attempts: Public create, Admin read/write
+    match /test_attempts/{attemptId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // 14. Admins collection:
     // Any authenticated user can read their own admin document (admins/{uid}) to verify role on login.
     // Full roster listing and all admin modifications are strictly restricted to verified administrators.
     match /admins/{uid} {
