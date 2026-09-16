@@ -76,8 +76,10 @@ To deploy them:
        }
        function isAdmin() {
          return isAuthenticated() && (
+           exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+           request.auth.token.email.matches('.*@andamanquiz[.]com') ||
            request.auth.token.email.matches('.*@andamanquiz\\.com$') ||
-           exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+           request.auth.token.admin == true
          );
        }
        // Public read for students, Admin-only write
@@ -87,9 +89,17 @@ To deploy them:
        match /topics/{doc} { allow read: if true; allow write: if isAdmin(); }
        match /questions/{doc} { allow read: if true; allow write: if isAdmin(); }
        match /mock_tests/{doc} { allow read: if true; allow write: if isAdmin(); }
-       match /app_content/{doc} { allow read: if true; allow write: if isAdmin(); }
-       match /admins/{userId} {
-         allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+       match /mocks/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /app_banners/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /banners/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /app_notices/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /notices/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /app_config/{doc} { allow read: if true; allow write: if isAdmin(); }
+       match /admin_activity/{doc} { allow read, write: if isAdmin(); }
+       // Authenticated users can read their own admin doc; admin writes strictly restricted
+       match /admins/{uid} {
+         allow get: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+         allow list: if isAdmin();
          allow write: if isAdmin();
        }
      }

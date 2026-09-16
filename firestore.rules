@@ -8,10 +8,12 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-         request.auth.token.email.matches('.*@andamanquiz[.]com') ||
-         request.auth.token.admin == true);
+      return isAuthenticated() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email.matches('.*@andamanquiz[.]com') ||
+        request.auth.token.email.matches('.*@andamanquiz\\.com$') ||
+        request.auth.token.admin == true
+      );
     }
 
     // 1. Categories: Public read for students, Admin write
@@ -45,6 +47,10 @@ service cloud.firestore {
     }
 
     // 6. Mock Tests: Public read for students, Admin write
+    match /mock_tests/{mockId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /mocks/{mockId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -62,18 +68,26 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 9. Home Banners & Notices
+    // 9. Home Banners & Notices: Public read, Admin write
+    match /app_banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /banners/{bannerId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
+    match /app_notices/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /notices/{noticeId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // 10. App Config & Maintenance Mode
+    // 10. App Config & Maintenance Mode: Public read, Admin write
     match /app_config/{configId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -84,10 +98,13 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // 12. Admins collection: Authenticated read, self or admin write
-    match /admins/{adminUid} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
+    // 12. Admins collection:
+    // Any authenticated user can read their own admin document (admins/{uid}) to verify role on login.
+    // Full roster listing and all admin modifications are strictly restricted to verified administrators.
+    match /admins/{uid} {
+      allow get: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isAdmin();
     }
 
     // Default deny for everything else

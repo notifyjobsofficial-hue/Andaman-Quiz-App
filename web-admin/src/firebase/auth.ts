@@ -1,4 +1,4 @@
-﻿import {
+import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
@@ -14,45 +14,80 @@ export interface AdminProfile {
   role: string;
 }
 
+/**
+ * Verifies whether the authenticated user is an authorized administrator
+ * by looking up their exact Firebase Auth UID in the Firestore 'admins' collection.
+ */
 export async function checkAdminAuthorization(user: User): Promise<boolean> {
-  if (!user || !user.email) return false;
+  if (!user || !user.uid) {
+    console.warn('[Admin Auth] No valid user or UID provided for authorization check.');
+    return false;
+  }
 
-  // 1. Check if user is the primary admin domain
-  if (user.email.endsWith('@andamanquiz.com')) {
-    // Auto-ensure admin document exists
-    try {
-      const adminDocRef = doc(db, 'admins', user.uid);
-      const snap = await getDoc(adminDocRef);
-      if (!snap.exists()) {
-        await setDoc(adminDocRef, {
-          uid: user.uid,
-          email: user.email,
-          role: 'superadmin',
-          createdAt: new Date().toISOString(),
-        });
-      }
-    } catch (e) {
-      console.warn('Could not auto-write admin doc:', e);
-    }
+  const authUid = user.uid.trim();
+  const userEmail = (user.email || '').trim().toLowerCase();
+
+  console.log(`[Admin Auth] Validating administrator credentials for UID: "${authUid}" (${userEmail || 'no email'})`);
+
+  // 1. Domain fast-path check
+  if (userEmail.endsWith('@andamanquiz.com')) {
+    console.log('[Admin Auth] Authorized via @andamanquiz.com domain.');
     return true;
   }
 
-  // 2. Check in Firestore 'admins' collection
+  // 2. Exact Firebase Auth UID lookup: admins/{authUid}
   try {
-    const adminDocRef = doc(db, 'admins', user.uid);
+    const adminDocRef = doc(db, 'admins', authUid);
     const snap = await getDoc(adminDocRef);
+
     if (snap.exists()) {
-      return true;
+      const data = snap.data();
+      const role = (data?.role || '').toString().trim().toLowerCase();
+      console.log(`[Admin Auth] Successfully located admins/${authUid}:`, data);
+
+      // Validate authorized role: admin, superadmin, super_admin, editor, or default true for roster members
+      if (!role || role === 'admin' || role === 'superadmin' || role === 'super_admin' || role === 'editor') {
+        console.log(`[Admin Auth] Access granted for UID "${authUid}" with role "${role || 'admin'}".`);
+        return true;
+      }
+
+      console.warn(`[Admin Auth] Record exists for UID "${authUid}", but role "${role}" is not permitted.`);
+      return false;
+    } else {
+      console.warn(`[Admin Auth] Document admins/${authUid} does not exist in Firestore.`);
     }
-  } catch (e) {
-    console.error('Error verifying admin authorization in Firestore:', e);
+  } catch (err: any) {
+    console.error(`[Admin Auth] Error reading Firestore document admins/${authUid}:`, err);
+    if (err?.code === 'permission-denied') {
+      console.error(
+        '[Admin Auth] Firestore returned permission-denied. Ensure firestore.rules allows: match /admins/{uid} { allow get: if request.auth.uid == uid; }'
+      );
+    }
+  }
+
+  // 3. Fallback check: in case document was keyed by email
+  if (userEmail) {
+    try {
+      const emailDocRef = doc(db, 'admins', userEmail);
+      const emailSnap = await getDoc(emailDocRef);
+      if (emailSnap.exists()) {
+        const data = emailSnap.data();
+        const role = (data?.role || '').toString().trim().toLowerCase();
+        if (!role || role === 'admin' || role === 'superadmin' || role === 'super_admin' || role === 'editor') {
+          console.log(`[Admin Auth] Access granted via email document admins/${userEmail}.`);
+          return true;
+        }
+      }
+    } catch {
+      // Ignored if permissions are UID-restricted
+    }
   }
 
   return false;
 }
 
 export async function loginAdmin(email: string, pass: string): Promise<User> {
-  const cred = await signInWithEmailAndPassword(auth, email, pass);
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
   const isAuthorized = await checkAdminAuthorization(cred.user);
 
   if (!isAuthorized) {
@@ -68,7 +103,7 @@ export async function logoutAdmin(): Promise<void> {
 }
 
 export async function resetPassword(email: string): Promise<void> {
-  await sendPasswordResetEmail(auth, email);
+  await sendPasswordResetEmail(auth, email.trim());
 }
 
 export function onAdminAuthChanged(callback: (user: User | null, isAuthorized: boolean) => void) {
