@@ -30,6 +30,16 @@ class StatusBadge extends StatelessWidget {
     );
   }
 
+  factory StatusBadge.paid({double? price}) {
+    return StatusBadge(
+      label: price != null && price > 0 ? '₹${price.toStringAsFixed(0)}' : 'PREMIUM',
+      backgroundColor: const Color(0xFFFEF3C7),
+      textColor: const Color(0xFFB45309),
+      icon: Icons.lock_outline,
+      fontSize: 11,
+    );
+  }
+
   factory StatusBadge.live() {
     return const StatusBadge(
       label: 'LIVE NOW',

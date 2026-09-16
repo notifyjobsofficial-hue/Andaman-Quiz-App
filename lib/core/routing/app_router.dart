@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/scaffold_with_nav_bar.dart';
-import '../../features/admin/presentation/admin_screen.dart';
 import '../../features/andaman_gk/presentation/andaman_gk_screen.dart';
 import '../../features/exam/presentation/cbt_exam_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -157,11 +156,6 @@ final GoRouter appRouter = GoRouter(
         final attemptId = state.pathParameters['attemptId'] ?? '';
         return SolutionsReviewScreen(attemptId: attemptId);
       },
-    ),
-    GoRoute(
-      parentNavigatorKey: _rootNavigatorKey,
-      path: '/admin',
-      builder: (context, state) => const AdminScreen(),
     ),
   ],
 );

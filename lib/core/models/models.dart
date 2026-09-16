@@ -8,6 +8,38 @@ enum CbtQuestionState {
   answeredAndMarked,
 }
 
+class ExamCategory {
+  final String id;
+  final String name;
+  final String code;
+  final int order;
+  final bool isActive;
+
+  const ExamCategory({
+    required this.id,
+    required this.name,
+    required this.code,
+    this.order = 0,
+    this.isActive = true,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'code': code,
+    'order': order,
+    'isActive': isActive,
+  };
+
+  factory ExamCategory.fromMap(Map<String, dynamic> map) => ExamCategory(
+    id: map['id'] ?? '',
+    name: map['name'] ?? '',
+    code: map['code'] ?? '',
+    order: (map['order'] as num?)?.toInt() ?? 0,
+    isActive: map['isActive'] ?? true,
+  );
+}
+
 class Exam {
   final String id;
   final String name;
@@ -15,6 +47,9 @@ class Exam {
   final String description;
   final int totalQuestions;
   final String iconName;
+  final String? categoryId;
+  final int order;
+  final bool isEnabled;
 
   const Exam({
     required this.id,
@@ -23,6 +58,9 @@ class Exam {
     required this.description,
     required this.totalQuestions,
     required this.iconName,
+    this.categoryId,
+    this.order = 0,
+    this.isEnabled = true,
   });
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +70,9 @@ class Exam {
     'description': description,
     'totalQuestions': totalQuestions,
     'iconName': iconName,
+    'categoryId': categoryId,
+    'order': order,
+    'isEnabled': isEnabled,
   };
 
   factory Exam.fromMap(Map<String, dynamic> map) => Exam(
@@ -41,6 +82,9 @@ class Exam {
     description: map['description'] ?? '',
     totalQuestions: map['totalQuestions'] ?? 0,
     iconName: map['iconName'] ?? '',
+    categoryId: map['categoryId'],
+    order: (map['order'] as num?)?.toInt() ?? 0,
+    isEnabled: map['isEnabled'] ?? true,
   );
 }
 
@@ -139,6 +183,11 @@ class Question {
   final String? year;
   final String difficulty; // Easy, Medium, Hard
   final bool isBookmarked;
+  final String? questionImageUrl;
+  final List<String>? optionImages;
+  final String? explanationImageUrl;
+  final double positiveMarks;
+  final double negativeMarks;
 
   const Question({
     required this.id,
@@ -155,10 +204,20 @@ class Question {
     this.year,
     this.difficulty = 'Medium',
     this.isBookmarked = false,
+    this.questionImageUrl,
+    this.optionImages,
+    this.explanationImageUrl,
+    this.positiveMarks = 2.0,
+    this.negativeMarks = 0.5,
   });
 
   Question copyWith({
     bool? isBookmarked,
+    String? questionImageUrl,
+    List<String>? optionImages,
+    String? explanationImageUrl,
+    double? positiveMarks,
+    double? negativeMarks,
   }) {
     return Question(
       id: id,
@@ -175,6 +234,11 @@ class Question {
       year: year,
       difficulty: difficulty,
       isBookmarked: isBookmarked ?? this.isBookmarked,
+      questionImageUrl: questionImageUrl ?? this.questionImageUrl,
+      optionImages: optionImages ?? this.optionImages,
+      explanationImageUrl: explanationImageUrl ?? this.explanationImageUrl,
+      positiveMarks: positiveMarks ?? this.positiveMarks,
+      negativeMarks: negativeMarks ?? this.negativeMarks,
     );
   }
 
@@ -193,24 +257,91 @@ class Question {
     'year': year,
     'difficulty': difficulty,
     'isBookmarked': isBookmarked ? 1 : 0,
+    if (questionImageUrl != null && questionImageUrl!.isNotEmpty) 'question_image_url': questionImageUrl,
+    if (optionImages != null && optionImages!.isNotEmpty) 'option_images': optionImages,
+    if (explanationImageUrl != null && explanationImageUrl!.isNotEmpty) 'explanation_image_url': explanationImageUrl,
+    'positive_marks': positiveMarks,
+    'negative_marks': negativeMarks,
   };
 
-  factory Question.fromMap(Map<String, dynamic> map) => Question(
-    id: map['id'] ?? '',
-    subjectId: map['subjectId'] ?? '',
-    topicId: map['topicId'] ?? '',
-    examTags: List<String>.from(map['examTags'] ?? []),
-    questionEn: map['questionEn'] ?? '',
-    questionHi: map['questionHi'] ?? '',
-    optionsEn: List<String>.from(map['optionsEn'] ?? []),
-    optionsHi: List<String>.from(map['optionsHi'] ?? []),
-    correctIndex: map['correctIndex'] ?? 0,
-    explanationEn: map['explanationEn'] ?? '',
-    explanationHi: map['explanationHi'] ?? '',
-    year: map['year'],
-    difficulty: map['difficulty'] ?? 'Medium',
-    isBookmarked: map['isBookmarked'] == 1 || map['isBookmarked'] == true,
-  );
+  factory Question.fromMap(Map<String, dynamic> map) {
+    final qEn = map['questionEn'] ?? map['question_text'] ?? '';
+    final qHi = map['questionHi'] ?? '';
+
+    List<String> optEn = [];
+    if (map['optionsEn'] != null) {
+      optEn = List<String>.from(map['optionsEn']);
+    } else if (map['option_a_text'] != null || map['option_b_text'] != null) {
+      optEn = [
+        map['option_a_text']?.toString() ?? '',
+        map['option_b_text']?.toString() ?? '',
+        map['option_c_text']?.toString() ?? '',
+        map['option_d_text']?.toString() ?? '',
+      ];
+    }
+
+    List<String>? optImgs;
+    if (map['option_images'] != null) {
+      optImgs = List<String>.from(map['option_images']);
+    } else if (map['optionImages'] != null) {
+      optImgs = List<String>.from(map['optionImages']);
+    } else if (map['option_a_image_url'] != null ||
+        map['option_b_image_url'] != null ||
+        map['option_c_image_url'] != null ||
+        map['option_d_image_url'] != null) {
+      optImgs = [
+        map['option_a_image_url']?.toString() ?? '',
+        map['option_b_image_url']?.toString() ?? '',
+        map['option_c_image_url']?.toString() ?? '',
+        map['option_d_image_url']?.toString() ?? '',
+      ];
+    }
+
+    int cIdx = 0;
+    if (map['correctIndex'] != null) {
+      cIdx = (map['correctIndex'] as num).toInt();
+    } else if (map['correct_answer'] != null) {
+      final ans = map['correct_answer'].toString().trim().toUpperCase();
+      if (ans == 'A' || ans == '1') {
+        cIdx = 0;
+      } else if (ans == 'B' || ans == '2') {
+        cIdx = 1;
+      } else if (ans == 'C' || ans == '3') {
+        cIdx = 2;
+      } else if (ans == 'D' || ans == '4') {
+        cIdx = 3;
+      }
+    }
+
+    List<String> tags = [];
+    if (map['examTags'] != null) {
+      tags = List<String>.from(map['examTags']);
+    } else if (map['exam'] != null) {
+      tags = [map['exam'].toString()];
+    }
+
+    return Question(
+      id: map['id'] ?? '',
+      subjectId: map['subjectId'] ?? map['subject'] ?? '',
+      topicId: map['topicId'] ?? map['topic'] ?? '',
+      examTags: tags,
+      questionEn: qEn,
+      questionHi: qHi,
+      optionsEn: optEn,
+      optionsHi: List<String>.from(map['optionsHi'] ?? []),
+      correctIndex: cIdx,
+      explanationEn: map['explanationEn'] ?? map['explanation_text'] ?? '',
+      explanationHi: map['explanationHi'] ?? '',
+      year: map['year'],
+      difficulty: map['difficulty'] ?? 'Medium',
+      isBookmarked: map['isBookmarked'] == 1 || map['isBookmarked'] == true,
+      questionImageUrl: map['question_image_url'] ?? map['questionImageUrl'],
+      optionImages: optImgs,
+      explanationImageUrl: map['explanation_image_url'] ?? map['explanationImageUrl'],
+      positiveMarks: (map['positive_marks'] as num?)?.toDouble() ?? 2.0,
+      negativeMarks: (map['negative_marks'] as num?)?.toDouble() ?? 0.5,
+    );
+  }
 }
 
 class TestSection {
@@ -251,6 +382,15 @@ class MockTest {
   final double negativeMarks;
   final int attemptsCount;
   final bool isFree;
+  final double? price;
+  final double? originalPrice;
+  final double? offerPrice;
+  final String? categoryId;
+  final String? description;
+  final String? instructions;
+  final String status; // published, draft, archived
+  final String language; // en, hi, both
+  final int displayOrder;
   final bool isLive;
   final bool isPreviousYear;
   final List<TestSection> sections;
@@ -265,6 +405,15 @@ class MockTest {
     required this.negativeMarks,
     this.attemptsCount = 0,
     this.isFree = true,
+    this.price,
+    this.originalPrice,
+    this.offerPrice,
+    this.categoryId,
+    this.description,
+    this.instructions,
+    this.status = 'published',
+    this.language = 'both',
+    this.displayOrder = 0,
     this.isLive = false,
     this.isPreviousYear = false,
     required this.sections,
@@ -280,6 +429,15 @@ class MockTest {
     'negativeMarks': negativeMarks,
     'attemptsCount': attemptsCount,
     'isFree': isFree,
+    if (price != null) 'price': price,
+    if (originalPrice != null) 'originalPrice': originalPrice,
+    if (offerPrice != null) 'offerPrice': offerPrice,
+    if (categoryId != null) 'categoryId': categoryId,
+    if (description != null) 'description': description,
+    if (instructions != null) 'instructions': instructions,
+    'status': status,
+    'language': language,
+    'displayOrder': displayOrder,
     'isLive': isLive,
     'isPreviousYear': isPreviousYear,
     'sections': sections.map((s) => s.toMap()).toList(),
@@ -289,12 +447,21 @@ class MockTest {
     id: map['id'] ?? '',
     title: map['title'] ?? '',
     examCode: map['examCode'] ?? '',
-    durationMinutes: map['durationMinutes'] ?? 60,
-    totalQuestions: map['totalQuestions'] ?? 0,
+    durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 60,
+    totalQuestions: (map['totalQuestions'] as num?)?.toInt() ?? 0,
     totalMarks: (map['totalMarks'] as num?)?.toDouble() ?? 0.0,
     negativeMarks: (map['negativeMarks'] as num?)?.toDouble() ?? 0.5,
-    attemptsCount: map['attemptsCount'] ?? 0,
+    attemptsCount: (map['attemptsCount'] as num?)?.toInt() ?? 0,
     isFree: map['isFree'] ?? true,
+    price: (map['price'] as num?)?.toDouble(),
+    originalPrice: (map['originalPrice'] as num?)?.toDouble(),
+    offerPrice: (map['offerPrice'] as num?)?.toDouble(),
+    categoryId: map['categoryId'],
+    description: map['description'],
+    instructions: map['instructions'],
+    status: map['status'] ?? 'published',
+    language: map['language'] ?? 'both',
+    displayOrder: (map['displayOrder'] as num?)?.toInt() ?? 0,
     isLive: map['isLive'] ?? false,
     isPreviousYear: map['isPreviousYear'] ?? false,
     sections: (map['sections'] as List? ?? [])

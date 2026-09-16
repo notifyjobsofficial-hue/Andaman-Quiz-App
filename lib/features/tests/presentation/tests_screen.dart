@@ -142,12 +142,104 @@ class _MockTestListCard extends StatelessWidget {
 
   const _MockTestListCard({required this.mockTest});
 
+  void _handleTestTap(BuildContext context) {
+    if (mockTest.isFree) {
+      context.push('/tests/instructions/${mockTest.id}');
+    } else {
+      _showPaidTestSheet(context, mockTest);
+    }
+  }
+
+  void _showPaidTestSheet(BuildContext context, MockTest test) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final price = test.offerPrice ?? test.price ?? 99.0;
+    final origPrice = test.originalPrice;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(AppDimens.space24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.lock_outline, color: Color(0xFFB45309), size: 28),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              test.title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  '₹${price.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.actionBlue),
+                ),
+                if (origPrice != null && origPrice > price) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '₹${origPrice.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'This is a premium curated examination with in-depth solutions and island rank analytics. Direct payment unlocking will be available in the upcoming release. Practice all free series in the meantime!',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Got It'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isPaid = !mockTest.isFree;
+    final displayPrice = mockTest.offerPrice ?? mockTest.price;
 
     return AnimatedPressable(
-      onTap: () => context.push('/tests/instructions/${mockTest.id}'),
+      onTap: () => _handleTestTap(context),
       child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +257,10 @@ class _MockTestListCard extends StatelessWidget {
                       StatusBadge.pyq(),
                       const SizedBox(width: 6),
                     ],
-                    if (mockTest.isFree) StatusBadge.free(),
+                    if (mockTest.isFree)
+                      StatusBadge.free()
+                    else
+                      StatusBadge.paid(price: displayPrice),
                   ],
                 ),
                 Text(
@@ -213,12 +308,15 @@ class _MockTestListCard extends StatelessWidget {
                   ],
                 ),
                 ElevatedButton(
-                  onPressed: () => context.push('/tests/instructions/${mockTest.id}'),
+                  onPressed: () => _handleTestTap(context),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(110, 38),
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                  child: const Text('Start Test', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  child: Text(
+                    isPaid ? 'Unlock Test' : 'Start Test',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
                 ),
               ],
             ),

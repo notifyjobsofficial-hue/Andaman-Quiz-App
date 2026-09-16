@@ -11,6 +11,7 @@ class LocalDatabase {
   SharedPreferences? _prefs;
 
   // In-memory indexed caches for instant 60 FPS reads
+  final List<ExamCategory> _categories = [];
   final List<Exam> _exams = [];
   final List<Subject> _subjects = [];
   final List<Topic> _topics = [];
@@ -60,13 +61,57 @@ class LocalDatabase {
       await _persistQuestions();
     }
 
+    // 3.5 Categories
+    final catRaw = prefs.getString('db_categories');
+    if (catRaw != null && catRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(catRaw) as List;
+        _categories.clear();
+        for (final item in list) {
+          _categories.add(ExamCategory.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _loadDefaultCategories();
+      }
+    } else {
+      _loadDefaultCategories();
+    }
+
     // 4. Exams
-    _exams.clear();
-    _exams.addAll(SeedData.exams);
+    final examsRaw = prefs.getString('db_exams');
+    if (examsRaw != null && examsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(examsRaw) as List;
+        _exams.clear();
+        for (final item in list) {
+          _exams.add(Exam.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _exams.clear();
+        _exams.addAll(SeedData.exams);
+      }
+    } else {
+      _exams.clear();
+      _exams.addAll(SeedData.exams);
+    }
 
     // 5. Subjects
-    _subjects.clear();
-    _subjects.addAll(SeedData.subjects);
+    final subjectsRaw = prefs.getString('db_subjects');
+    if (subjectsRaw != null && subjectsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(subjectsRaw) as List;
+        _subjects.clear();
+        for (final item in list) {
+          _subjects.add(Subject.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _subjects.clear();
+        _subjects.addAll(SeedData.subjects);
+      }
+    } else {
+      _subjects.clear();
+      _subjects.addAll(SeedData.subjects);
+    }
 
     // 6. Topics
     _topics.clear();
@@ -329,6 +374,49 @@ class LocalDatabase {
 
   Future<void> addMockTest(MockTest mockTest) async {
     _mockTests.insert(0, mockTest);
+    await _persistMockTests();
+  }
+
+  void _loadDefaultCategories() {
+    _categories.clear();
+    _categories.addAll([
+      const ExamCategory(id: 'cat_an', name: 'A&N Exams', code: 'AN', order: 1),
+      const ExamCategory(id: 'cat_ssc', name: 'SSC Exams', code: 'SSC', order: 2),
+      const ExamCategory(id: 'cat_police', name: 'Police Exams', code: 'POLICE', order: 3),
+      const ExamCategory(id: 'cat_other', name: 'Other Exams', code: 'OTHER', order: 4),
+    ]);
+  }
+
+  List<ExamCategory> getCategories() => List.unmodifiable(_categories);
+
+  Future<void> syncCategoriesFromFirestore(List<ExamCategory> categories) async {
+    if (categories.isEmpty) return;
+    _categories.clear();
+    _categories.addAll(categories);
+    final raw = jsonEncode(_categories.map((c) => c.toMap()).toList());
+    await _prefs?.setString('db_categories', raw);
+  }
+
+  Future<void> syncExamsFromFirestore(List<Exam> exams) async {
+    if (exams.isEmpty) return;
+    _exams.clear();
+    _exams.addAll(exams);
+    final raw = jsonEncode(_exams.map((e) => e.toMap()).toList());
+    await _prefs?.setString('db_exams', raw);
+  }
+
+  Future<void> syncSubjectsFromFirestore(List<Subject> subjects) async {
+    if (subjects.isEmpty) return;
+    _subjects.clear();
+    _subjects.addAll(subjects);
+    final raw = jsonEncode(_subjects.map((s) => s.toMap()).toList());
+    await _prefs?.setString('db_subjects', raw);
+  }
+
+  Future<void> syncMockTestsFromFirestore(List<MockTest> mockTests) async {
+    if (mockTests.isEmpty) return;
+    _mockTests.clear();
+    _mockTests.addAll(mockTests);
     await _persistMockTests();
   }
 

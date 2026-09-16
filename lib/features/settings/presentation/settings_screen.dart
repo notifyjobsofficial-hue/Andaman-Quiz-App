@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/providers/app_providers.dart';
@@ -173,44 +172,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Administrator Portal Entry
-            _SectionHeader(title: 'Administrator'),
-            AppCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withAlpha(25),
-                      borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
-                    ),
-                    child: const Icon(Icons.admin_panel_settings_outlined, color: AppColors.primary),
-                  ),
-                  const SizedBox(width: 14),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Control Center (Web Admin)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                        SizedBox(height: 2),
-                        Text('Manage questions, CSV import, mock tests', style: TextStyle(fontSize: 12, color: AppColors.textMutedLight)),
-                      ],
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => context.push('/admin'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(76, 36),
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    child: const Text('Open', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 28),
 
             // Version Footer
             Center(

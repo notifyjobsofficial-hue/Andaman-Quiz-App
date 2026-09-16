@@ -210,14 +210,39 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                             ),
                             const SizedBox(height: 8),
                           ],
-                          Text(
-                            questionText,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              height: 1.45,
+                          if (questionText.isNotEmpty)
+                            Text(
+                              questionText,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                height: 1.45,
+                              ),
                             ),
-                          ),
+                          if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
+                            if (questionText.isNotEmpty) const SizedBox(height: 12),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                currentQ.questionImageUrl!,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                                      SizedBox(width: 8),
+                                      Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -229,6 +254,9 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                       final optionText = options[index];
                       final isSelected = selectedOption == index;
                       final isCorrect = index == currentQ.correctIndex;
+                      final hasOptionImg = currentQ.optionImages != null &&
+                          index < currentQ.optionImages!.length &&
+                          currentQ.optionImages![index].isNotEmpty;
 
                       Color borderColor;
                       Color bgColor;
@@ -323,14 +351,32 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
-                                  child: Text(
-                                    optionText,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: (hasSubmitted && (isCorrect || isSelected))
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (optionText.isNotEmpty)
+                                        Text(
+                                          optionText,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: (hasSubmitted && (isCorrect || isSelected))
+                                                ? FontWeight.w600
+                                                : FontWeight.w400,
+                                          ),
+                                        ),
+                                      if (hasOptionImg) ...[
+                                        if (optionText.isNotEmpty) const SizedBox(height: 6),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Image.network(
+                                            currentQ.optionImages![index],
+                                            height: 70,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                                 ?trailingBadge,

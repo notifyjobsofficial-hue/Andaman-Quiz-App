@@ -1,4 +1,4 @@
-﻿rules_version = '2';
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -7,46 +7,87 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // 1. Exams: Public read for students, Admin-only write
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+         request.auth.token.email.matches('.*@andamanquiz[.]com') ||
+         request.auth.token.admin == true);
+    }
+
+    // 1. Categories: Public read for students, Admin write
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 2. Exams: Public read for students, Admin write
     match /exams/{examId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 2. Subjects: Public read for students, Admin-only write
+    // 3. Subjects: Public read for students, Admin write
     match /subjects/{subjectId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 3. Topics: Public read for students, Admin-only write
+    // 4. Topics: Public read for students, Admin write
     match /topics/{topicId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 4. Questions: Public read for all Andaman students, Admin-only write
+    // 5. Questions Bank: Public read for student exam runner, Admin write
     match /questions/{questionId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 5. Mock Tests: Public read for students, Admin-only write
+    // 6. Mock Tests: Public read for students, Admin write
     match /mocks/{mockId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 6. Live Tests: Public read for students, Admin-only write
+    // 7. Live Tests: Public read for students, Admin write
     match /live_tests/{testId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // 7. Question of the Day (QOTD): Public read, Admin-only write
+    // 8. Question of the Day (QOTD): Public read, Admin write
     match /qotd/{docId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // 9. Home Banners & Notices
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 10. App Config & Maintenance Mode
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 11. Admin Activity Logs: Admin only read/write
+    match /admin_activity/{activityId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 12. Admins collection: Authenticated read, self or admin write
+    match /admins/{adminUid} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || (isAuthenticated() && request.auth.uid == adminUid);
     }
 
     // Default deny for everything else

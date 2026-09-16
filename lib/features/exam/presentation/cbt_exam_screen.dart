@@ -267,12 +267,46 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
           children: [
             const Text('Are you sure you want to end this exam? You cannot modify your answers after submission.'),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Text('Answered: $answered', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success)),
-                Text('Marked: $marked', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.review)),
-                Text('Unanswered: $notAnswered', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.error)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    'Answered: $answered',
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.review.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.review.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    'Marked: $marked',
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.review),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    'Unanswered: $notAnswered',
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.error),
+                  ),
+                ),
               ],
             ),
           ],
@@ -507,14 +541,43 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                     ],
                                   ),
                                   const SizedBox(height: 10),
-                                  Text(
-                                    questionText,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.45,
+                                  if (questionText.isNotEmpty)
+                                    Text(
+                                      questionText,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.45,
+                                      ),
                                     ),
-                                  ),
+                                  if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
+                                    if (questionText.isNotEmpty) const SizedBox(height: 12),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        currentQ.questionImageUrl!,
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (context, error, stackTrace) => Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Row(
+                                            children: [
+                                              Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                                              SizedBox(width: 8),
+                                              Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                            ],
+                                          ),
+                                        ),
+                                        loadingBuilder: (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)));
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -525,6 +588,9 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                               final optionLabel = String.fromCharCode(65 + index);
                               final optionText = options[index];
                               final isSelected = selectedOption == index;
+                              final hasOptionImg = currentQ.optionImages != null &&
+                                  index < currentQ.optionImages!.length &&
+                                  currentQ.optionImages![index].isNotEmpty;
 
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
@@ -570,12 +636,30 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                         ),
                                         const SizedBox(width: 14),
                                         Expanded(
-                                          child: Text(
-                                            optionText,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                            ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              if (optionText.isNotEmpty)
+                                                Text(
+                                                  optionText,
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                                  ),
+                                                ),
+                                              if (hasOptionImg) ...[
+                                                if (optionText.isNotEmpty) const SizedBox(height: 6),
+                                                ClipRRect(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  child: Image.network(
+                                                    currentQ.optionImages![index],
+                                                    height: 70,
+                                                    fit: BoxFit.contain,
+                                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                         ),
                                         if (isSelected)
