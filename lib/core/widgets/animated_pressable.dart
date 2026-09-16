@@ -11,8 +11,8 @@ class AnimatedPressable extends StatefulWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.scaleFactor = 0.98,
-    this.duration = const Duration(milliseconds: 120),
+    this.scaleFactor = 0.985,
+    this.duration = const Duration(milliseconds: 100),
     this.behavior = HitTestBehavior.opaque,
   });
 
@@ -63,6 +63,15 @@ class _AnimatedPressableState extends State<AnimatedPressable> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
+    final disableAnimations = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    if (disableAnimations) {
+      return GestureDetector(
+        behavior: widget.behavior,
+        onTap: widget.onTap,
+        child: widget.child,
+      );
+    }
+
     return GestureDetector(
       behavior: widget.behavior,
       onTapDown: _onTapDown,

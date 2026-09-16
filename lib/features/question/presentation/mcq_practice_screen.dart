@@ -8,6 +8,7 @@ import '../../../core/models/models.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/ads/ad_service.dart';
 
 class McqPracticeScreen extends ConsumerStatefulWidget {
   final String topicId;
@@ -450,7 +451,17 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                     ),
                   ),
                   ElevatedButton.icon(
-                    onPressed: _currentIndex < _questions.length - 1 ? _goToNext : () => context.pop(),
+                    onPressed: _currentIndex < _questions.length - 1
+                        ? _goToNext
+                        : () {
+                            AdService.instance.showResultInterstitial(
+                              isFreeTest: true,
+                              isPracticeQuiz: true,
+                              onContinue: () {
+                                if (mounted) context.pop();
+                              },
+                            );
+                          },
                     icon: Icon(_currentIndex < _questions.length - 1 ? Icons.arrow_forward : Icons.done_all, size: 16),
                     label: Text(_currentIndex < _questions.length - 1 ? 'Next' : 'Finish'),
                     style: ElevatedButton.styleFrom(

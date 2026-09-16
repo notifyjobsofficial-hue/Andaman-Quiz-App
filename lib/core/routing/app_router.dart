@@ -20,6 +20,50 @@ import '../../features/tests/presentation/tests_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
+Page<dynamic> _buildSmoothPage({
+  required BuildContext context,
+  required GoRouterState state,
+  required Widget child,
+  bool isFadeOnly = false,
+  int durationMs = 250,
+  int reverseDurationMs = 220,
+}) {
+  final disableAnimations = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+  if (disableAnimations) {
+    return NoTransitionPage(key: state.pageKey, child: child);
+  }
+
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: Duration(milliseconds: durationMs),
+    reverseTransitionDuration: Duration(milliseconds: reverseDurationMs),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (isFadeOnly) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeInOut),
+          child: child,
+        );
+      }
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.0, 0.025),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/splash',
@@ -27,17 +71,31 @@ final GoRouter appRouter = GoRouter(
     // Splash Route (Always displays on cold start with brand animation)
     GoRoute(
       path: '/splash',
-      builder: (context, state) => const SplashScreen(),
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const SplashScreen(),
+        isFadeOnly: true,
+        durationMs: 280,
+      ),
     ),
 
     // Onboarding Routes
     GoRoute(
       path: '/onboarding/exam',
-      builder: (context, state) => const ChooseExamScreen(),
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const ChooseExamScreen(),
+      ),
     ),
     GoRoute(
       path: '/onboarding/lang',
-      builder: (context, state) => const ChooseLanguageScreen(),
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const ChooseLanguageScreen(),
+      ),
     ),
 
     // Stateful Nested Bottom Navigation Shell
@@ -51,7 +109,13 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/home',
-              builder: (context, state) => const HomeScreen(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                context: context,
+                state: state,
+                child: const HomeScreen(),
+                isFadeOnly: true,
+                durationMs: 240,
+              ),
             ),
           ],
         ),
@@ -61,7 +125,13 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/practice',
-              builder: (context, state) => const PracticeScreen(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                context: context,
+                state: state,
+                child: const PracticeScreen(),
+                isFadeOnly: true,
+                durationMs: 240,
+              ),
             ),
           ],
         ),
@@ -71,7 +141,13 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/tests',
-              builder: (context, state) => const TestsScreen(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                context: context,
+                state: state,
+                child: const TestsScreen(),
+                isFadeOnly: true,
+                durationMs: 240,
+              ),
             ),
           ],
         ),
@@ -81,7 +157,13 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/saved',
-              builder: (context, state) => const SavedScreen(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                context: context,
+                state: state,
+                child: const SavedScreen(),
+                isFadeOnly: true,
+                durationMs: 240,
+              ),
             ),
           ],
         ),
@@ -91,7 +173,13 @@ final GoRouter appRouter = GoRouter(
           routes: [
             GoRoute(
               path: '/more',
-              builder: (context, state) => const SettingsScreen(),
+              pageBuilder: (context, state) => _buildSmoothPage(
+                context: context,
+                state: state,
+                child: const SettingsScreen(),
+                isFadeOnly: true,
+                durationMs: 240,
+              ),
             ),
           ],
         ),
@@ -102,59 +190,91 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/qotd',
-      builder: (context, state) => const QotdScreen(),
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const QotdScreen(),
+      ),
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/andaman-gk',
-      builder: (context, state) => const AndamanGkScreen(),
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const AndamanGkScreen(),
+      ),
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/practice/topics/:subjectId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final subjectId = state.pathParameters['subjectId'] ?? '';
-        return TopicsListScreen(subjectId: subjectId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: TopicsListScreen(subjectId: subjectId),
+        );
       },
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/practice/mcq/:topicId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final topicId = state.pathParameters['topicId'] ?? '';
-        return McqPracticeScreen(topicId: topicId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: McqPracticeScreen(topicId: topicId),
+        );
       },
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/tests/instructions/:testId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final testId = state.pathParameters['testId'] ?? '';
-        return TestInstructionsScreen(testId: testId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: TestInstructionsScreen(testId: testId),
+        );
       },
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/tests/cbt/:testId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final testId = state.pathParameters['testId'] ?? '';
-        return CbtExamScreen(testId: testId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: CbtExamScreen(testId: testId),
+        );
       },
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/tests/results/:attemptId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final attemptId = state.pathParameters['attemptId'] ?? '';
-        return ResultsScreen(attemptId: attemptId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: ResultsScreen(attemptId: attemptId),
+        );
       },
     ),
     GoRoute(
       parentNavigatorKey: _rootNavigatorKey,
       path: '/tests/solutions/:attemptId',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final attemptId = state.pathParameters['attemptId'] ?? '';
-        return SolutionsReviewScreen(attemptId: attemptId);
+        return _buildSmoothPage(
+          context: context,
+          state: state,
+          child: SolutionsReviewScreen(attemptId: attemptId),
+        );
       },
     ),
   ],

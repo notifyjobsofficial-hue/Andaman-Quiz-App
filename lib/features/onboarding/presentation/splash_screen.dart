@@ -16,15 +16,11 @@ class SplashScreen extends ConsumerStatefulWidget {
 class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
-  // Stage 1: Symbol Fade & Scale (0ms -> 450ms)
-  late Animation<double> _symbolOpacity;
-  late Animation<double> _symbolScale;
+  // Stage 1: Brand Logo Fade & Settle (0ms -> 500ms)
+  late Animation<double> _logoOpacity;
+  late Animation<double> _logoScale;
 
-  // Stage 2: Wordmark Fade & Slide Up (300ms -> 750ms)
-  late Animation<double> _wordmarkOpacity;
-  late Animation<Offset> _wordmarkSlide;
-
-  // Stage 3: Tagline Fade (600ms -> 1050ms)
+  // Stage 2: Tagline Fade (350ms -> 800ms)
   late Animation<double> _taglineOpacity;
 
   bool _navigated = false;
@@ -43,48 +39,31 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       ),
     );
 
-    // Coordinated 1600ms master timeline
+    // Coordinated 1400ms master timeline
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(milliseconds: 1400),
     );
 
-    // Stage 1: 0ms -> 450ms (0.0 -> 0.28)
-    _symbolOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+    // Stage 1: Logo Fade & Settle (0ms -> 500ms, interval 0.0 -> 0.36)
+    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.28, curve: Curves.easeOutCubic),
+        curve: const Interval(0.0, 0.36, curve: Curves.easeOutCubic),
       ),
     );
-    _symbolScale = Tween<double>(begin: 0.90, end: 1.0).animate(
+    _logoScale = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.28, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    // Stage 2: 300ms -> 750ms (0.18 -> 0.46)
-    _wordmarkOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.18, 0.46, curve: Curves.easeOutCubic),
-      ),
-    );
-    _wordmarkSlide = Tween<Offset>(
-      begin: const Offset(0.0, 0.20), // subtle ~10dp translate
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.18, 0.46, curve: Curves.easeOutCubic),
+        curve: const Interval(0.0, 0.36, curve: Curves.easeOutCubic),
       ),
     );
 
-    // Stage 3: 600ms -> 1050ms (0.37 -> 0.65)
+    // Stage 2: Tagline Fade (350ms -> 800ms, interval 0.25 -> 0.57)
     _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.37, 0.65, curve: Curves.easeIn),
+        curve: const Interval(0.25, 0.57, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -99,7 +78,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       // Respect accessibility reduced-motion preference
       if (MediaQuery.of(context).disableAnimations) {
         _controller.value = 1.0;
-        Future.delayed(const Duration(milliseconds: 400), _navigateNext);
+        Future.delayed(const Duration(milliseconds: 300), _navigateNext);
       } else {
         _controller.forward();
       }
@@ -141,7 +120,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final maxSymbolWidth = (size.width * 0.54).clamp(160.0, 240.0);
+    final maxLogoWidth = (size.width * 0.62).clamp(180.0, 260.0);
 
     return Scaffold(
       backgroundColor: AppColors.splashCream,
@@ -157,37 +136,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                 children: [
                   const Spacer(flex: 2),
 
-                  // Stage 1: Brand Symbol (Stylized A + Island + Waves)
+                  // Unified Pristine Brand Logo (Aspect ratio strictly preserved, no crop/stretch)
                   FadeTransition(
-                    opacity: _symbolOpacity,
+                    opacity: _logoOpacity,
                     child: ScaleTransition(
-                      scale: _symbolScale,
+                      scale: _logoScale,
                       child: Image.asset(
-                        'assets/images/andaman_symbol.png',
-                        width: maxSymbolWidth,
+                        'assets/images/andaman_logo_clean.png',
+                        width: maxLogoWidth,
                         fit: BoxFit.contain,
-                        filterQuality: FilterQuality.medium,
+                        filterQuality: FilterQuality.high,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
 
-                  // Stage 2: ANDAMAN QUIZ Wordmark
-                  FadeTransition(
-                    opacity: _wordmarkOpacity,
-                    child: SlideTransition(
-                      position: _wordmarkSlide,
-                      child: Image.asset(
-                        'assets/images/andaman_wordmark.png',
-                        width: maxSymbolWidth * 0.95,
-                        fit: BoxFit.contain,
-                        filterQuality: FilterQuality.medium,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Stage 3: Clean Academic Tagline
+                  // Academic Tagline
                   FadeTransition(
                     opacity: _taglineOpacity,
                     child: const Text(

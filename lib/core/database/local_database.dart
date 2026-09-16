@@ -512,4 +512,23 @@ class LocalDatabase {
     final raw = jsonEncode(_remoteConfig.toMap());
     await _prefs?.setString('db_app_config', raw);
   }
+
+  // --- Active Exam State Preservation ---
+  Future<void> saveExamDraft(String testId, Map<String, dynamic> draftData) async {
+    await _prefs?.setString('exam_draft_$testId', jsonEncode(draftData));
+  }
+
+  Map<String, dynamic>? getExamDraft(String testId) {
+    final raw = _prefs?.getString('exam_draft_$testId');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> clearExamDraft(String testId) async {
+    await _prefs?.remove('exam_draft_$testId');
+  }
 }

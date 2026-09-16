@@ -280,96 +280,102 @@ class _MockTestListCardState extends State<_MockTestListCard> {
   Widget build(BuildContext context) {
     final mockTest = widget.mockTest;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isUnlocked = LocalDatabase.instance.isTestUnlocked(mockTest);
     final displayPrice = mockTest.offerPrice ?? mockTest.price;
 
-    return AnimatedPressable(
-      onTap: () => _handleTestTap(context),
-      child: AppCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: BillingService.instance.unlockedNotifier,
+      builder: (context, unlockedSet, _) {
+        final isUnlocked = LocalDatabase.instance.isTestUnlocked(mockTest);
+
+        return AnimatedPressable(
+          onTap: () => _handleTestTap(context),
+          child: AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    if (mockTest.isLive) ...[
-                      StatusBadge.live(),
-                      const SizedBox(width: 6),
-                    ],
-                    if (mockTest.isPreviousYear) ...[
-                      StatusBadge.pyq(),
-                      const SizedBox(width: 6),
-                    ],
-                    if (mockTest.isFree)
-                      StatusBadge.free()
-                    else if (isUnlocked)
-                      StatusBadge.unlocked()
-                    else
-                      StatusBadge.paid(price: displayPrice),
-                  ],
-                ),
-                Text(
-                  '${mockTest.attemptsCount} attempts',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              mockTest.title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes\n${mockTest.totalMarks.toInt()} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.layers_outlined, size: 16, color: AppColors.actionBlue),
-                    const SizedBox(width: 4),
+                    Row(
+                      children: [
+                        if (mockTest.isLive) ...[
+                          StatusBadge.live(),
+                          const SizedBox(width: 6),
+                        ],
+                        if (mockTest.isPreviousYear) ...[
+                          StatusBadge.pyq(),
+                          const SizedBox(width: 6),
+                        ],
+                        if (mockTest.isFree)
+                          StatusBadge.free()
+                        else if (isUnlocked)
+                          StatusBadge.unlocked()
+                        else
+                          StatusBadge.paid(price: displayPrice),
+                      ],
+                    ),
                     Text(
-                      '${mockTest.sections.length} Sections',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.actionBlue,
+                      '${mockTest.attemptsCount} attempts',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
                       ),
                     ),
                   ],
                 ),
-                ElevatedButton(
-                  onPressed: () => _handleTestTap(context),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(110, 38),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                const SizedBox(height: 10),
+                Text(
+                  mockTest.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
-                  child: Text(
-                    isUnlocked ? 'Start Test' : 'Unlock (₹${displayPrice?.toInt() ?? 99})',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes\n${mockTest.totalMarks.toInt()} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                    height: 1.4,
                   ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.layers_outlined, size: 16, color: AppColors.actionBlue),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${mockTest.sections.length} Sections',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.actionBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                    ElevatedButton(
+                      onPressed: () => _handleTestTap(context),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(110, 38),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      child: Text(
+                        isUnlocked ? 'Start Test' : 'Unlock (₹${displayPrice?.toInt() ?? 99})',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

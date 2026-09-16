@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../database/local_database.dart';
 import '../services/firestore_service.dart';
 
-class BillingService {
+class BillingService with WidgetsBindingObserver {
   static final BillingService instance = BillingService._internal();
   BillingService._internal();
 
@@ -13,6 +14,9 @@ class BillingService {
 
   bool _isAvailable = false;
   bool get isAvailable => _isAvailable;
+
+  // Reactive notifier for UI components to listen to unlocked product IDs
+  final ValueNotifier<Set<String>> unlockedNotifier = ValueNotifier<Set<String>>({});
 
   // Track pending purchase context to record proper test metadata
   String? _pendingTestId;
@@ -25,7 +29,12 @@ class BillingService {
   ValueNotifier<bool> isPurchasing = ValueNotifier<bool>(false);
 
   Future<void> init() async {
+    // Seed initial cached entitlements for instant offline startup
+    unlockedNotifier.value = LocalDatabase.instance.getPurchasedProductIds();
+
     if (kIsWeb) return;
+
+    WidgetsBinding.instance.addObserver(this);
 
     try {
       _isAvailable = await _iap.isAvailable();
@@ -43,12 +52,24 @@ class BillingService {
           onPurchaseError?.call('Billing connection error: $error');
         },
       );
+
+      // Auto-query / restore purchases silently on startup to sync current entitlements
+      restorePurchases(silent: true);
     } catch (e) {
       debugPrint('Error initializing InAppPurchase: $e');
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isAvailable) {
+      // Silently refresh entitlements whenever student resumes the app
+      restorePurchases(silent: true);
+    }
+  }
+
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
     _subscription = null;
   }
@@ -76,6 +97,9 @@ class BillingService {
         if (productId != targetTestId) {
           await LocalDatabase.instance.unlockTest(productId);
         }
+
+        // Update reactive notifier immediately
+        unlockedNotifier.value = LocalDatabase.instance.getPurchasedProductIds();
 
         // Record to Cloud Firestore
         await FirestoreService.instance.recordPurchase(
@@ -122,6 +146,7 @@ class BillingService {
       if (productId != null) {
         await LocalDatabase.instance.unlockTest(productId);
       }
+      unlockedNotifier.value = LocalDatabase.instance.getPurchasedProductIds();
       onPurchaseSuccess?.call(effectiveProductId);
       return true;
     }
@@ -154,15 +179,23 @@ class BillingService {
   }
 
   /// Restore previous purchases for returning users or new device setup
-  Future<void> restorePurchases() async {
+  Future<void> restorePurchases({bool silent = false}) async {
     if (!_isAvailable) return;
     try {
-      isPurchasing.value = true;
+      if (!silent) {
+        isPurchasing.value = true;
+      }
       await _iap.restorePurchases();
+      unlockedNotifier.value = LocalDatabase.instance.getPurchasedProductIds();
+      if (!silent) {
+        isPurchasing.value = false;
+      }
     } catch (e) {
       debugPrint('Error restoring purchases: $e');
-      isPurchasing.value = false;
-      onPurchaseError?.call('Failed to restore purchases: $e');
+      if (!silent) {
+        isPurchasing.value = false;
+        onPurchaseError?.call('Failed to restore purchases: $e');
+      }
     }
   }
 }

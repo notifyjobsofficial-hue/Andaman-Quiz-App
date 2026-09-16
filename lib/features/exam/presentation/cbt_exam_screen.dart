@@ -69,13 +69,74 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       }
     }
 
-    _loadSection(0);
+    // Check for an active unexpired draft attempt
+    bool draftRestored = false;
+    final draft = LocalDatabase.instance.getExamDraft(_test.id);
+    if (draft != null) {
+      final endTimeMs = draft['endTimeMs'] as int?;
+      if (endTimeMs != null) {
+        final savedEndTime = DateTime.fromMillisecondsSinceEpoch(endTimeMs);
+        if (DateTime.now().isBefore(savedEndTime)) {
+          final startTimeMs = draft['startTimeMs'] as int?;
+          if (startTimeMs != null) {
+            _startTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+          }
+          _endTime = savedEndTime;
+
+          if (draft['selectedAnswers'] != null) {
+            final ansMap = Map<String, dynamic>.from(draft['selectedAnswers'] as Map);
+            for (final e in ansMap.entries) {
+              if (e.value is int) {
+                _selectedAnswers[e.key] = e.value as int;
+              }
+            }
+          }
+
+          if (draft['questionStates'] != null) {
+            final statesMap = Map<String, dynamic>.from(draft['questionStates'] as Map);
+            for (final e in statesMap.entries) {
+              final idx = e.value as int?;
+              if (idx != null && idx >= 0 && idx < CbtQuestionState.values.length) {
+                _questionStates[e.key] = CbtQuestionState.values[idx];
+              }
+            }
+          }
+
+          final savedSec = (draft['currentSectionIndex'] as int? ?? 0).clamp(0, _test.sections.length - 1);
+          _loadSection(savedSec);
+          final savedQ = (draft['currentQuestionIndex'] as int? ?? 0).clamp(0, _currentSectionQuestionIds.length - 1);
+          _currentQuestionIndex = savedQ;
+          draftRestored = true;
+        } else {
+          // Stale draft that expired while away
+          LocalDatabase.instance.clearExamDraft(_test.id);
+        }
+      }
+    }
+
+    if (!draftRestored) {
+      _loadSection(0);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _saveExamDraft() {
+    if (_isSubmitting) return;
+    LocalDatabase.instance.saveExamDraft(_test.id, {
+      'startTimeMs': _startTime.millisecondsSinceEpoch,
+      'endTimeMs': _endTime.millisecondsSinceEpoch,
+      'currentSectionIndex': _currentSectionIndex,
+      'currentQuestionIndex': _currentQuestionIndex,
+      'selectedAnswers': _selectedAnswers,
+      'questionStates': {
+        for (final entry in _questionStates.entries) entry.key: entry.value.index,
+      },
+    });
   }
 
   @override
@@ -85,6 +146,9 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       if (DateTime.now().isAfter(_endTime) && !_isSubmitting) {
         _submitExam(autoSubmit: true);
       }
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // Preserve active state when screen turns off or user switches apps
+      _saveExamDraft();
     }
   }
 
@@ -109,6 +173,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
         _questionStates[qId] = CbtQuestionState.notAnswered;
       }
     });
+    _saveExamDraft();
   }
 
   void _selectOption(int optionIndex) {
@@ -116,6 +181,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     setState(() {
       _selectedAnswers[currentQId] = optionIndex;
     });
+    _saveExamDraft();
   }
 
   void _clearResponse() {
@@ -124,6 +190,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       _selectedAnswers.remove(currentQId);
       _questionStates[currentQId] = CbtQuestionState.notAnswered;
     });
+    _saveExamDraft();
   }
 
   void _saveAndNext() {
@@ -145,6 +212,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
         _loadSection(_currentSectionIndex + 1);
       }
     });
+    _saveExamDraft();
   }
 
   void _markForReviewAndNext() {
@@ -166,6 +234,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
         _loadSection(_currentSectionIndex + 1);
       }
     });
+    _saveExamDraft();
   }
 
   void _previousQuestion() {
@@ -173,11 +242,13 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       setState(() {
         _currentQuestionIndex--;
       });
+      _saveExamDraft();
     } else if (_currentSectionIndex > 0) {
       setState(() {
         _loadSection(_currentSectionIndex - 1);
         _currentQuestionIndex = _currentSectionQuestionIds.length - 1;
       });
+      _saveExamDraft();
     }
   }
 
@@ -240,6 +311,8 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     await ref.read(studentAttemptsProvider.notifier).record(attempt);
     // Sync attempt to Cloud Firestore
     await FirestoreService.instance.recordTestAttempt(attempt);
+    // Clear persisted draft now that attempt is submitted
+    await LocalDatabase.instance.clearExamDraft(_test.id);
 
     if (mounted) {
       AdService.instance.showResultInterstitial(
@@ -250,6 +323,39 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
         },
       );
     }
+  }
+
+  void _showExitConfirmationDialog() {
+    _saveExamDraft();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave Examination?'),
+        content: const Text(
+          'Your answers and timer progress have been safely saved. You can resume this exam anytime before time expires, or submit it now.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Stay & Continue'),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.pop();
+            },
+            child: const Text('Save & Exit'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _submitExam();
+            },
+            child: const Text('Submit Now'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSubmitConfirmationDialog() {
@@ -387,7 +493,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          _showSubmitConfirmationDialog();
+          _showExitConfirmationDialog();
         }
       },
       child: Scaffold(
@@ -518,169 +624,178 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
               Expanded(
                 child: currentQ == null
                     ? const Center(child: CircularProgressIndicator())
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.all(AppDimens.space16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Question Box
-                            AppCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        '+${(_test.totalMarks / _test.totalQuestions).toStringAsFixed(1)} / -${_test.negativeMarks.toStringAsFixed(2)} Marks',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                                        ),
-                                      ),
-                                      if (currentQ.year != null)
+                    : AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 150),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) {
+                          final disable = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+                          if (disable) return child;
+                          return FadeTransition(opacity: animation, child: child);
+                        },
+                        child: SingleChildScrollView(
+                          key: ValueKey<String>('q_${_test.id}_${_currentSectionIndex}_$_currentQuestionIndex'),
+                          padding: const EdgeInsets.all(AppDimens.space16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Question Box
+                              AppCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
                                         Text(
-                                          currentQ.year!,
+                                          '+${(_test.totalMarks / _test.totalQuestions).toStringAsFixed(1)} / -${_test.negativeMarks.toStringAsFixed(2)} Marks',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
                                             color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
                                           ),
                                         ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  if (questionText.isNotEmpty)
-                                    Text(
-                                      questionText,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        height: 1.45,
-                                      ),
-                                    ),
-                                  if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
-                                    if (questionText.isNotEmpty) const SizedBox(height: 12),
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(
-                                        currentQ.questionImageUrl!,
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (context, error, stackTrace) => Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.withValues(alpha: 0.1),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: const Row(
-                                            children: [
-                                              Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                                              SizedBox(width: 8),
-                                              Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                            ],
-                                          ),
-                                        ),
-                                        loadingBuilder: (context, child, progress) {
-                                          if (progress == null) return child;
-                                          return const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)));
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-
-                            // Options
-                            ...List.generate(options.length, (index) {
-                              final optionLabel = String.fromCharCode(65 + index);
-                              final optionText = options[index];
-                              final isSelected = selectedOption == index;
-                              final hasOptionImg = currentQ.optionImages != null &&
-                                  index < currentQ.optionImages!.length &&
-                                  currentQ.optionImages![index].isNotEmpty;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: AnimatedPressable(
-                                  onTap: () => _selectOption(index),
-                                  child: Container(
-                                    constraints: const BoxConstraints(minHeight: AppDimens.mcqOptionMinHeight),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? (isDark ? const Color(0xFF1E3A8A).withAlpha(51) : AppColors.actionBlueLight)
-                                          : (isDark ? AppColors.surfaceDark : Colors.white),
-                                      borderRadius: AppDimens.cardBorderRadius,
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? AppColors.actionBlue
-                                            : (isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
-                                        width: isSelected ? 2.0 : 1.0,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 32,
-                                          height: 32,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: isSelected
-                                                ? AppColors.actionBlue
-                                                : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            optionLabel,
+                                        if (currentQ.year != null)
+                                          Text(
+                                            currentQ.year!,
                                             style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13,
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : (isDark ? AppColors.textDark : AppColors.textLight),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              if (optionText.isNotEmpty)
-                                                Text(
-                                                  optionText,
-                                                  style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                                  ),
-                                                ),
-                                              if (hasOptionImg) ...[
-                                                if (optionText.isNotEmpty) const SizedBox(height: 6),
-                                                ClipRRect(
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  child: Image.network(
-                                                    currentQ.optionImages![index],
-                                                    height: 70,
-                                                    fit: BoxFit.contain,
-                                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        if (isSelected)
-                                          const Icon(Icons.check_circle, color: AppColors.actionBlue, size: 20),
                                       ],
                                     ),
-                                  ),
+                                    const SizedBox(height: 10),
+                                    if (questionText.isNotEmpty)
+                                      Text(
+                                        questionText,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          height: 1.45,
+                                        ),
+                                      ),
+                                    if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
+                                      if (questionText.isNotEmpty) const SizedBox(height: 12),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          currentQ.questionImageUrl!,
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Row(
+                                              children: [
+                                                Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                                                SizedBox(width: 8),
+                                                Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                              ],
+                                            ),
+                                          ),
+                                          loadingBuilder: (context, child, progress) {
+                                            if (progress == null) return child;
+                                            return const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)));
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
-                              );
-                            }),
-                          ],
+                              ),
+                              const SizedBox(height: 18),
+
+                              // Options
+                              ...List.generate(options.length, (index) {
+                                final optionLabel = String.fromCharCode(65 + index);
+                                final optionText = options[index];
+                                final isSelected = selectedOption == index;
+                                final hasOptionImg = currentQ.optionImages != null &&
+                                    index < currentQ.optionImages!.length &&
+                                    currentQ.optionImages![index].isNotEmpty;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: AnimatedPressable(
+                                    onTap: () => _selectOption(index),
+                                    child: Container(
+                                      constraints: const BoxConstraints(minHeight: AppDimens.mcqOptionMinHeight),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? (isDark ? const Color(0xFF1E3A8A).withAlpha(51) : AppColors.actionBlueLight)
+                                            : (isDark ? AppColors.surfaceDark : Colors.white),
+                                        borderRadius: AppDimens.cardBorderRadius,
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppColors.actionBlue
+                                              : (isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
+                                          width: isSelected ? 2.0 : 1.0,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            width: 28,
+                                            height: 28,
+                                            alignment: Alignment.center,
+                                            decoration: BoxDecoration(
+                                              color: isSelected ? AppColors.actionBlue : (isDark ? Colors.grey[800] : Colors.grey[200]),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Text(
+                                              optionLabel,
+                                              style: TextStyle(
+                                                color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                if (optionText.isNotEmpty)
+                                                  Text(
+                                                    optionText,
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                                      color: isDark ? AppColors.textDark : AppColors.textLight,
+                                                    ),
+                                                  ),
+                                                if (hasOptionImg) ...[
+                                                  if (optionText.isNotEmpty) const SizedBox(height: 8),
+                                                  ClipRRect(
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    child: Image.network(
+                                                      currentQ.optionImages![index],
+                                                      height: 90,
+                                                      fit: BoxFit.contain,
+                                                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          if (isSelected)
+                                            const Icon(Icons.check_circle, color: AppColors.actionBlue, size: 20),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
                         ),
                       ),
               ),

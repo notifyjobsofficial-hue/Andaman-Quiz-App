@@ -60,7 +60,14 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                             children: [
                               StatusBadge.exam(test.examCode),
                               const SizedBox(width: 8),
-                              if (test.isLive) StatusBadge.live() else StatusBadge.free(),
+                              if (test.isLive)
+                                StatusBadge.live()
+                              else if (test.isFree)
+                                StatusBadge.free()
+                              else if (LocalDatabase.instance.isTestUnlocked(test))
+                                StatusBadge.unlocked()
+                              else
+                                StatusBadge.paid(price: test.offerPrice ?? test.price),
                             ],
                           ),
                           const SizedBox(height: 12),
