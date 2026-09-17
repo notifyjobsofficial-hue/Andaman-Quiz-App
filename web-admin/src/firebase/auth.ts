@@ -5,7 +5,7 @@ import {
   onAuthStateChanged,
   User
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './config';
 
 export interface AdminProfile {

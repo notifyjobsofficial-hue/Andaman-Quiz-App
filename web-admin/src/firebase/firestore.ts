@@ -285,9 +285,9 @@ export async function fetchMockTests(): Promise<MockTest[]> {
 }
 
 export async function saveMockTest(test: MockTest): Promise<void> {
-  const payload: any = { ...test };
+  const payload: any = sanitizeForFirestore({ ...test });
 
-  // For FREE tests: productId, price, originalPrice, offerPrice must be omitted from Firestore
+  // For FREE tests: productId, price, originalPrice, offerPrice must be completely omitted from Firestore
   if (payload.isFree) {
     delete payload.price;
     delete payload.originalPrice;
@@ -301,9 +301,12 @@ export async function saveMockTest(test: MockTest): Promise<void> {
     delete payload.endDate;
   }
 
+  // Final defensive sanitization immediately before write
+  const cleanPayload = sanitizeForFirestore(payload);
+
   // Save to BOTH 'mock_tests' and 'mocks' collections for complete project-wide compatibility
-  await safeSetDoc(doc(db, 'mock_tests', test.id), payload, { merge: true });
-  await safeSetDoc(doc(db, 'mocks', test.id), payload, { merge: true });
+  await safeSetDoc(doc(db, 'mock_tests', test.id), cleanPayload, { merge: true });
+  await safeSetDoc(doc(db, 'mocks', test.id), cleanPayload, { merge: true });
   await logActivity('Save Mock Test', `Test ${test.title} (${test.isFree ? 'FREE' : 'PAID: ₹' + (test.offerPrice || test.price || 0)}) saved`);
 }
 

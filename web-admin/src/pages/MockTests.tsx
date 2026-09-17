@@ -256,18 +256,11 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
         negativeMarks: negativeMarksNum,
         attemptsCount: editingTest ? editingTest.attemptsCount : 0,
         isFree,
-        price: cleanPrice,
-        originalPrice: cleanOriginalPrice,
-        offerPrice: cleanOfferPrice,
-        productId: cleanProductId,
-        instructions: instructions.trim() || undefined,
         status,
         language: 'both',
         displayOrder: editingTest ? editingTest.displayOrder : mockTests.length + 1,
         isLive,
         isPreviousYear,
-        startDate: cleanStartDate,
-        endDate: cleanEndDate,
         shuffleQuestions,
         shuffleOptions,
         showResultImmediately,
@@ -279,6 +272,25 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
           { id: 'sec_4', name: 'English Language', questionIds: [] },
         ],
       };
+
+      // For PAID tests: add validated pricing and Google Play Product ID (SKU)
+      if (!isFree) {
+        test.productId = cleanProductId;
+        test.price = cleanPrice;
+        if (cleanOriginalPrice !== undefined) test.originalPrice = cleanOriginalPrice;
+        if (cleanOfferPrice !== undefined) test.offerPrice = cleanOfferPrice;
+      }
+
+      // For LIVE / SCHEDULED tests: add validated start and end dates
+      if (isLive && cleanStartDate) {
+        test.startDate = cleanStartDate;
+        if (cleanEndDate) test.endDate = cleanEndDate;
+      }
+
+      // Optional instructions
+      if (instructions.trim()) {
+        test.instructions = instructions.trim();
+      }
 
       await saveMockTest(test);
       setIsModalOpen(false);
