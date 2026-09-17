@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
+import '../../../core/database/local_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/widgets/app_card.dart';
@@ -243,13 +244,16 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showUpdateDialog(BuildContext context) {
+    final notices = LocalDatabase.instance.getNotices();
+    final noticeText = notices.isNotEmpty
+        ? notices.map((n) => '• ${n.title}: ${n.body}').join('\n\n')
+        : 'No updates published yet. Please check back later.';
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Latest Examination Updates'),
-        content: const Text(
-          '• A&N Police Constable Recruitment Notification 2026 expected shortly.\n\n• SSC CGL 2026 Tier-I calendar released.\n\n• New Andaman & Nicobar GK questions on 10 Degree Channel and Island Wildlife added.',
-        ),
+        content: Text(noticeText),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
         ],

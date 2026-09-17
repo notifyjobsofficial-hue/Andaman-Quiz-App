@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 
@@ -17,14 +18,21 @@ class PracticeScreen extends ConsumerStatefulWidget {
 class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   String _activeExam = 'ALL';
 
-  final List<String> _examFilters = ['ALL', 'CGL', 'CHSL', 'POLICE', 'MTS'];
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final subjects = LocalDatabase.instance.getSubjects(
-      examCode: _activeExam == 'ALL' ? null : _activeExam,
-    );
+
+    // Dynamic exams from Firestore → build filter chips
+    final dbExams = ref.watch(examsStreamProvider).value ??
+        LocalDatabase.instance.getExams();
+    final examFilters = ['ALL', ...dbExams.map((e) => e.code)];
+
+    // Dynamic subjects from Firestore
+    final allSubjects = ref.watch(subjectsStreamProvider).value ??
+        LocalDatabase.instance.getSubjects();
+    final subjects = _activeExam == 'ALL'
+        ? allSubjects
+        : allSubjects.where((s) => s.examCodes.contains(_activeExam)).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -34,17 +42,17 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Filter Pills Row
+            // Filter Pills Row — dynamic from Firestore exams
             Container(
               height: 48,
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: AppDimens.space16),
-                itemCount: _examFilters.length,
+                itemCount: examFilters.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
-                  final exam = _examFilters[index];
+                  final exam = examFilters[index];
                   final isSelected = _activeExam == exam;
 
                   return ChoiceChip(
@@ -74,7 +82,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
               ),
             ),
 
-            // Subject List
+            // Subject List — live from Firestore
             Expanded(
               child: subjects.isEmpty
                   ? Center(

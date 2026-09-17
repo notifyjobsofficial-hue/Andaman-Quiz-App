@@ -26,15 +26,52 @@ class LocalDatabase {
 
   bool _isInitialized = false;
 
+  // Increment when the cache schema changes to force a migration on existing devices
+  static const int _kCurrentDbVersion = 2;
+
   Future<void> init() async {
     if (_isInitialized) return;
     _prefs = await SharedPreferences.getInstance();
 
-    await _loadOrSeedData();
+    await _runMigrationIfNeeded();
+    await _loadCachedData();
     _isInitialized = true;
   }
 
-  Future<void> _loadOrSeedData() async {
+  /// One-time migration: purges all legacy seeded/dev content while preserving
+  /// genuine student data (attempts, bookmarks, wrong questions, purchases).
+  Future<void> _runMigrationIfNeeded() async {
+    final prefs = _prefs!;
+    final savedVersion = prefs.getInt('local_db_version') ?? 0;
+    if (savedVersion >= _kCurrentDbVersion) return;
+
+    debugPrint('LocalDatabase: migrating from v$savedVersion → v$_kCurrentDbVersion');
+
+    // Purge all legacy seeded/cached content keys (Firestore is now the source of truth)
+    await prefs.remove('db_questions');
+    await prefs.remove('db_categories');
+    await prefs.remove('db_exams');
+    await prefs.remove('db_subjects');
+    await prefs.remove('db_topics');
+    await prefs.remove('db_mock_tests');
+    await prefs.remove('db_banners');
+    await prefs.remove('db_notices');
+    await prefs.remove('db_app_config');
+
+    // Reset fake hardcoded stats ONLY if student has no genuine attempt history
+    final attemptsRaw = prefs.getString('db_student_attempts');
+    final hasRealAttempts = attemptsRaw != null && attemptsRaw.isNotEmpty && attemptsRaw != '[]';
+    if (!hasRealAttempts) {
+      await prefs.setInt('user_total_questions', 0);
+      await prefs.setInt('user_streak_days', 0);
+      await prefs.remove('user_last_active_date');
+    }
+
+    await prefs.setInt('local_db_version', _kCurrentDbVersion);
+    debugPrint('LocalDatabase: migration complete.');
+  }
+
+  Future<void> _loadCachedData() async {
     final prefs = _prefs!;
 
     // 1. Bookmarks
@@ -234,6 +271,8 @@ class LocalDatabase {
   }
 
   // --- Topics ---
+  List<Topic> getTopics() => List.unmodifiable(_topics);
+
   List<Topic> getTopicsBySubject(String subjectId) {
     return _topics.where((t) => t.subjectId == subjectId).toList();
   }
@@ -425,7 +464,6 @@ class LocalDatabase {
   List<ExamCategory> getCategories() => List.unmodifiable(_categories);
 
   Future<void> syncCategoriesFromFirestore(List<ExamCategory> categories) async {
-    if (categories.isEmpty) return;
     _categories.clear();
     _categories.addAll(categories);
     final raw = jsonEncode(_categories.map((c) => c.toMap()).toList());
@@ -433,7 +471,6 @@ class LocalDatabase {
   }
 
   Future<void> syncExamsFromFirestore(List<Exam> exams) async {
-    if (exams.isEmpty) return;
     _exams.clear();
     _exams.addAll(exams);
     final raw = jsonEncode(_exams.map((e) => e.toMap()).toList());
@@ -441,7 +478,6 @@ class LocalDatabase {
   }
 
   Future<void> syncSubjectsFromFirestore(List<Subject> subjects) async {
-    if (subjects.isEmpty) return;
     _subjects.clear();
     _subjects.addAll(subjects);
     final raw = jsonEncode(_subjects.map((s) => s.toMap()).toList());
@@ -449,7 +485,6 @@ class LocalDatabase {
   }
 
   Future<void> syncTopicsFromFirestore(List<Topic> topics) async {
-    if (topics.isEmpty) return;
     _topics.clear();
     _topics.addAll(topics);
     final raw = jsonEncode(_topics.map((t) => t.toMap()).toList());
@@ -457,7 +492,6 @@ class LocalDatabase {
   }
 
   Future<void> syncMockTestsFromFirestore(List<MockTest> mockTests) async {
-    if (mockTests.isEmpty) return;
     _mockTests.clear();
     _mockTests.addAll(mockTests);
     await _persistMockTests();

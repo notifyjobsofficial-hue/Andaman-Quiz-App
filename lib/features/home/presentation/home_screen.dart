@@ -32,9 +32,20 @@ class HomeScreen extends ConsumerWidget {
     final accuracy = ref.watch(accuracyProvider);
     final totalQuestions = ref.watch(totalQuestionsCountProvider);
 
-    final subjects = LocalDatabase.instance.getSubjects(examCode: selectedExam);
-    final latestMock = LocalDatabase.instance.getMockTests(examCode: selectedExam).firstOrNull ??
-        LocalDatabase.instance.getMockTests().firstOrNull;
+    // Watch reactive streams — auto-rebuild when Firestore changes
+    final allSubjects = ref.watch(subjectsStreamProvider).value ??
+        LocalDatabase.instance.getSubjects();
+    final subjects = selectedExam == 'ALL'
+        ? allSubjects
+        : allSubjects.where((s) => s.examCodes.contains(selectedExam)).toList();
+
+    final allMocks = ref.watch(mockTestsStreamProvider).value ??
+        LocalDatabase.instance.getMockTests();
+    final latestMock = allMocks
+            .where((m) => m.examCode.toUpperCase() == selectedExam.toUpperCase())
+            .toList()
+            .firstOrNull ??
+        allMocks.firstOrNull;
 
     return Scaffold(
       body: SafeArea(
@@ -503,10 +514,14 @@ class _ExamSelectorRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dbExams = LocalDatabase.instance.getExams();
-    final exams = dbExams.isNotEmpty
-        ? dbExams.map((e) => e.code).take(4).toList()
-        : ['CGL', 'CHSL', 'Police', 'MTS'];
+    final dbExams = ref.watch(examsStreamProvider).value ??
+        LocalDatabase.instance.getExams();
+    // Show up to first 4 exams from Firestore; shows nothing if no exams configured yet
+    final exams = dbExams.take(4).map((e) => e.code).toList();
+
+    if (exams.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Row(
       children: exams.map((exam) {

@@ -23,7 +23,29 @@ class FirestoreService {
   static const String colBanners = 'banners';
   static const String colNotices = 'notices';
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _questionsSubscription;
+  // Broadcast stream controllers for reactive UI updates
+  final _categoriesController = StreamController<List<ExamCategory>>.broadcast();
+  final _examsController = StreamController<List<Exam>>.broadcast();
+  final _subjectsController = StreamController<List<Subject>>.broadcast();
+  final _topicsController = StreamController<List<Topic>>.broadcast();
+  final _mockTestsController = StreamController<List<MockTest>>.broadcast();
+  final _bannersController = StreamController<List<HomeBanner>>.broadcast();
+  final _noticesController = StreamController<List<AppNotice>>.broadcast();
+  final _remoteConfigController = StreamController<RemoteAppConfig>.broadcast();
+
+  // Public streams for Riverpod providers to subscribe to
+  Stream<List<ExamCategory>> get categoriesStream => _categoriesController.stream;
+  Stream<List<Exam>> get examsStream => _examsController.stream;
+  Stream<List<Subject>> get subjectsStream => _subjectsController.stream;
+  Stream<List<Topic>> get topicsStream => _topicsController.stream;
+  Stream<List<MockTest>> get mockTestsStream => _mockTestsController.stream;
+  Stream<List<HomeBanner>> get bannersStream => _bannersController.stream;
+  Stream<List<AppNotice>> get noticesStream => _noticesController.stream;
+  Stream<RemoteAppConfig> get remoteConfigStream => _remoteConfigController.stream;
+
+  // Active subscriptions
+  final List<StreamSubscription> _subscriptions = [];
+  bool _syncStarted = false;
 
   // --- Questions ---
   Future<void> saveQuestion(Question question) async {
@@ -51,9 +73,7 @@ class FirestoreService {
 
   Stream<List<Question>> streamQuestions() {
     return _firestore.collection(colQuestions).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
-        return Question.fromMap(doc.data());
-      }).toList();
+      return snapshot.docs.map((doc) => Question.fromMap(doc.data())).toList();
     });
   }
 
@@ -99,73 +119,157 @@ class FirestoreService {
     await _firestore.collection(colTopics).doc(topic.id).set(topic.toMap(), SetOptions(merge: true));
   }
 
-  // --- Cost-Optimized Real-time Sync & On-Demand Question Fetching ---
-  Future<void> syncAppCatalog() async {
-    if (Firebase.apps.isEmpty) return;
-
-    try {
-      // 1. Categories
-      final catSnap = await _firestore.collection(colCategories).where('isActive', isEqualTo: true).get();
-      if (catSnap.docs.isNotEmpty) {
-        final cats = catSnap.docs.map((d) => ExamCategory.fromMap(d.data())).toList();
-        cats.sort((a, b) => a.order.compareTo(b.order));
-        await LocalDatabase.instance.syncCategoriesFromFirestore(cats);
-      }
-
-      // 2. Exams
-      final examSnap = await _firestore.collection(colExams).get();
-      if (examSnap.docs.isNotEmpty) {
-        final exams = examSnap.docs.map((d) => Exam.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncExamsFromFirestore(exams);
-      }
-
-      // 3. Subjects
-      final subSnap = await _firestore.collection(colSubjects).get();
-      if (subSnap.docs.isNotEmpty) {
-        final subs = subSnap.docs.map((d) => Subject.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncSubjectsFromFirestore(subs);
-      }
-
-      // 3.5 Topics
-      final topSnap = await _firestore.collection(colTopics).get();
-      if (topSnap.docs.isNotEmpty) {
-        final topics = topSnap.docs.map((d) => Topic.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncTopicsFromFirestore(topics);
-      }
-
-      // 4. Mock Tests (published only)
-      final mockSnap = await _firestore.collection(colMocks).where('status', isEqualTo: 'published').get();
-      if (mockSnap.docs.isNotEmpty) {
-        final mocks = mockSnap.docs.map((d) => MockTest.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncMockTestsFromFirestore(mocks);
-      }
-
-      // 5. Banners
-      final bannerSnap = await _firestore.collection(colBanners).where('active', isEqualTo: true).get();
-      if (bannerSnap.docs.isNotEmpty) {
-        final banners = bannerSnap.docs.map((d) => HomeBanner.fromMap(d.data())).toList();
-        banners.sort((a, b) => a.order.compareTo(b.order));
-        await LocalDatabase.instance.syncBannersFromFirestore(banners);
-      }
-
-      // 6. Notices
-      final noticeSnap = await _firestore.collection(colNotices).where('active', isEqualTo: true).get();
-      if (noticeSnap.docs.isNotEmpty) {
-        final notices = noticeSnap.docs.map((d) => AppNotice.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncNoticesFromFirestore(notices);
-      }
-
-      // 7. Remote App Config & AdMob settings
-      final configDoc = await _firestore.collection('app_config').doc('main').get();
-      if (configDoc.exists && configDoc.data() != null) {
-        final config = RemoteAppConfig.fromMap(configDoc.data()!);
-        await LocalDatabase.instance.syncRemoteConfigFromFirestore(config);
-      }
-
-      debugPrint('Andaman Quiz app catalog synchronized with Cloud Firestore.');
-    } catch (e) {
-      debugPrint('Notice during catalog sync (running in local offline mode): $e');
+  // --- Real-Time Sync: Persistent Snapshot Listeners ---
+  void initRealtimeSync({void Function(List<Question>)? onSync}) {
+    if (Firebase.apps.isEmpty) {
+      debugPrint('Firebase not initialized; running in offline local mode.');
+      return;
     }
+    if (_syncStarted) return;
+    _syncStarted = true;
+
+    _subscribeToCategories();
+    _subscribeToExams();
+    _subscribeToSubjects();
+    _subscribeToTopics();
+    _subscribeToMockTests();
+    _subscribeToBanners();
+    _subscribeToNotices();
+    _subscribeToAppConfig();
+
+    debugPrint('FirestoreService: real-time listeners started for all collections.');
+  }
+
+  void _subscribeToCategories() {
+    final sub = _firestore
+        .collection(colCategories)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final cats = snapshot.docs
+            .map((d) => ExamCategory.fromMap(d.data()))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+        await LocalDatabase.instance.syncCategoriesFromFirestore(cats);
+        _categoriesController.add(cats);
+      } catch (e) {
+        debugPrint('Categories sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Categories stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToExams() {
+    final sub = _firestore.collection(colExams).snapshots().listen((snapshot) async {
+      try {
+        final exams = snapshot.docs.map((d) => Exam.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncExamsFromFirestore(exams);
+        _examsController.add(exams);
+      } catch (e) {
+        debugPrint('Exams sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Exams stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToSubjects() {
+    final sub = _firestore.collection(colSubjects).snapshots().listen((snapshot) async {
+      try {
+        final subs = snapshot.docs.map((d) => Subject.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncSubjectsFromFirestore(subs);
+        _subjectsController.add(subs);
+      } catch (e) {
+        debugPrint('Subjects sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Subjects stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToTopics() {
+    final sub = _firestore.collection(colTopics).snapshots().listen((snapshot) async {
+      try {
+        final topics = snapshot.docs.map((d) => Topic.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncTopicsFromFirestore(topics);
+        _topicsController.add(topics);
+      } catch (e) {
+        debugPrint('Topics sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Topics stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToMockTests() {
+    final sub = _firestore
+        .collection(colMocks)
+        .where('status', isEqualTo: 'published')
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final mocks = snapshot.docs.map((d) => MockTest.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncMockTestsFromFirestore(mocks);
+        _mockTestsController.add(mocks);
+      } catch (e) {
+        debugPrint('MockTests sync error: $e');
+      }
+    }, onError: (e) => debugPrint('MockTests stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToBanners() {
+    final sub = _firestore
+        .collection(colBanners)
+        .where('active', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final banners = snapshot.docs
+            .map((d) => HomeBanner.fromMap(d.data()))
+            .toList()
+          ..sort((a, b) => a.order.compareTo(b.order));
+        await LocalDatabase.instance.syncBannersFromFirestore(banners);
+        _bannersController.add(banners);
+      } catch (e) {
+        debugPrint('Banners sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Banners stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToNotices() {
+    final sub = _firestore
+        .collection(colNotices)
+        .where('active', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final notices = snapshot.docs.map((d) => AppNotice.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncNoticesFromFirestore(notices);
+        _noticesController.add(notices);
+      } catch (e) {
+        debugPrint('Notices sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Notices stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
+  void _subscribeToAppConfig() {
+    final sub = _firestore
+        .collection('app_config')
+        .doc('main')
+        .snapshots()
+        .listen((doc) async {
+      try {
+        if (doc.exists && doc.data() != null) {
+          final config = RemoteAppConfig.fromMap(doc.data()!);
+          await LocalDatabase.instance.syncRemoteConfigFromFirestore(config);
+          _remoteConfigController.add(config);
+        }
+      } catch (e) {
+        debugPrint('AppConfig sync error: $e');
+      }
+    }, onError: (e) => debugPrint('AppConfig stream error: $e'));
+    _subscriptions.add(sub);
   }
 
   // --- Question of the Day ---
@@ -222,7 +326,8 @@ class FirestoreService {
     }
   }
 
-  /// On-demand fetch for specific test questions to minimize Firestore reads
+  /// On-demand fetch for specific test questions to minimize Firestore reads.
+  /// Called when a student opens a test — NOT on app startup.
   Future<List<Question>> fetchQuestionsForTest(List<String> questionIds) async {
     if (questionIds.isEmpty) return [];
 
@@ -236,9 +341,10 @@ class FirestoreService {
 
     try {
       final List<Question> fetched = [];
-      // Firestore whereIn supports up to 30 elements
+      // Firestore whereIn supports up to 30 elements per call
       for (var i = 0; i < missingIds.length; i += 30) {
-        final chunk = missingIds.sublist(i, i + 30 > missingIds.length ? missingIds.length : i + 30);
+        final chunk = missingIds.sublist(
+            i, i + 30 > missingIds.length ? missingIds.length : i + 30);
         final snap = await _firestore
             .collection(colQuestions)
             .where(FieldPath.documentId, whereIn: chunk)
@@ -259,18 +365,38 @@ class FirestoreService {
     }
   }
 
-  void initRealtimeSync({void Function(List<Question>)? onSync}) {
+  /// On-demand fetch for questions belonging to a specific topic for MCQ practice.
+  Future<List<Question>> fetchQuestionsForTopic(String topicId) async {
     if (Firebase.apps.isEmpty) {
-      debugPrint('Firebase not initialized; running in offline local mode.');
-      return;
+      return LocalDatabase.instance.getQuestionsByTopic(topicId);
     }
 
-    // Cost-optimized catalog sync on launch
-    syncAppCatalog();
+    // Check local cache first
+    final cached = LocalDatabase.instance.getQuestionsByTopic(topicId);
+    if (cached.isNotEmpty) return cached;
+
+    try {
+      final snap = await _firestore
+          .collection(colQuestions)
+          .where('topicId', isEqualTo: topicId)
+          .get();
+
+      final fetched = snap.docs.map((d) => Question.fromMap(d.data())).toList();
+      if (fetched.isNotEmpty) {
+        await LocalDatabase.instance.syncQuestionsFromFirestore(fetched);
+      }
+      return LocalDatabase.instance.getQuestionsByTopic(topicId);
+    } catch (e) {
+      debugPrint('Error fetching topic questions on demand: $e');
+      return cached;
+    }
   }
 
   void disposeSync() {
-    _questionsSubscription?.cancel();
-    _questionsSubscription = null;
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    _syncStarted = false;
   }
 }

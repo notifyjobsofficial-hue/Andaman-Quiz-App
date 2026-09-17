@@ -191,24 +191,81 @@ class _QuestionListTab extends StatelessWidget {
   }
 }
 
-class _RevisionDueTab extends StatelessWidget {
+class _RevisionDueTab extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final dueTopics = [
-      {'title': 'Time & Work', 'accuracy': '62%', 'subject': 'Quantitative Aptitude', 'id': 'top_quant_time_work'},
-      {'title': 'Syllogisms', 'accuracy': '60%', 'subject': 'General Intelligence', 'id': 'top_reason_syllogism'},
-      {'title': 'A&N Indigenous Tribes', 'accuracy': '68%', 'subject': 'Andaman GK', 'id': 'top_an_tribes'},
-      {'title': 'Profit & Loss', 'accuracy': '65%', 'subject': 'Quantitative Aptitude', 'id': 'top_quant_profit_loss'},
-    ];
+    // Derive revision-due topics from wrong questions in the student's question bank
+    final wrongQuestions = ref.watch(wrongQuestionsProvider);
+    if (wrongQuestions.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline,
+                size: 52,
+                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight),
+            const SizedBox(height: 14),
+            Text(
+              'No revision due yet.',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textDark : AppColors.textLight,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Practice topics and mock tests to populate revision items.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Group wrong questions by topicId and show unique topics
+    final topicIdsSeen = <String>{};
+    final revisionTopics = <Map<String, dynamic>>[];
+    for (final q in wrongQuestions) {
+      if (!topicIdsSeen.contains(q.topicId)) {
+        topicIdsSeen.add(q.topicId);
+        final topic = LocalDatabase.instance.getTopicById(q.topicId);
+        if (topic != null) {
+          revisionTopics.add({
+            'id': topic.id,
+            'title': topic.name,
+            'accuracy': '${topic.accuracy.toInt()}%',
+            'subject': LocalDatabase.instance.getSubjectById(q.subjectId)?.name ?? 'Practice',
+          });
+        }
+      }
+    }
+
+    if (revisionTopics.isEmpty) {
+      return Center(
+        child: Text(
+          'No topics with wrong answers yet.\nKeep practising to see revision items here.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+          ),
+        ),
+      );
+    }
 
     return ListView.separated(
       padding: const EdgeInsets.all(AppDimens.space16),
-      itemCount: dueTopics.length,
+      itemCount: revisionTopics.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
-        final item = dueTopics[index];
+        final item = revisionTopics[index];
 
         return AnimatedPressable(
           onTap: () => context.push('/practice/mcq/${item['id']}'),

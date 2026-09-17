@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/models/models.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 
@@ -17,6 +19,7 @@ class AndamanGkScreen extends ConsumerStatefulWidget {
 class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
   String _selectedCategory = 'All';
 
+  // Category display names; actual topic filtering uses topic.name or id
   final List<String> _categories = [
     'All',
     'Geography',
@@ -30,16 +33,42 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final allTopics = LocalDatabase.instance.getTopicsBySubject('sub_an_gk');
 
-    final filteredTopics = allTopics.where((t) {
+    // Find the Andaman GK subject dynamically by isAndamanSpecial flag
+    final allSubjects = ref.watch(subjectsStreamProvider).value ??
+        LocalDatabase.instance.getSubjects();
+    final andamanSubject = allSubjects.firstWhere(
+      (s) => s.isAndamanSpecial,
+      orElse: () => allSubjects.firstWhere(
+        (s) => s.id.contains('an_gk') || s.name.toLowerCase().contains('andaman'),
+        orElse: () => const Subject(
+          id: '',
+          name: '',
+          hindiName: '',
+          iconName: '',
+          questionCount: 0,
+          examCodes: [],
+        ),
+      ),
+    );
+
+    // Topics from Firestore for this subject
+    final allTopics = ref.watch(topicsStreamProvider).value ??
+        LocalDatabase.instance.getTopics();
+    final subjectTopics = andamanSubject.id.isNotEmpty
+        ? allTopics.where((t) => t.subjectId == andamanSubject.id).toList()
+        : <Topic>[];
+
+    // Filter topics by selected category (matches topic name/id keywords)
+    final filteredTopics = subjectTopics.where((t) {
       if (_selectedCategory == 'All') return true;
-      if (_selectedCategory == 'Geography') return t.id.contains('geography');
-      if (_selectedCategory == 'History') return t.id.contains('history');
-      if (_selectedCategory == 'Tribes') return t.id.contains('tribes');
-      if (_selectedCategory == 'Wildlife') return t.id.contains('wildlife');
-      if (_selectedCategory == 'Polity') return t.id.contains('polity');
-      if (_selectedCategory == 'PYQ') return t.id.contains('pyq');
+      final lower = t.name.toLowerCase() + t.id.toLowerCase();
+      if (_selectedCategory == 'Geography') return lower.contains('geography') || lower.contains('geo');
+      if (_selectedCategory == 'History') return lower.contains('history');
+      if (_selectedCategory == 'Tribes') return lower.contains('tribe');
+      if (_selectedCategory == 'Wildlife') return lower.contains('wildlife') || lower.contains('fauna');
+      if (_selectedCategory == 'Polity') return lower.contains('polity') || lower.contains('govern');
+      if (_selectedCategory == 'PYQ') return lower.contains('pyq') || lower.contains('previous');
       return true;
     }).toList();
 

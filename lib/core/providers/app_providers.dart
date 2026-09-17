@@ -1,8 +1,60 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/local_database.dart';
 import '../models/models.dart';
+import '../services/firestore_service.dart';
 
-// Current Selected Exam Provider (CGL, CHSL, POLICE, MTS)
+// ---------------------------------------------------------------------------
+// Reactive Stream Providers (Firestore real-time → UI auto-rebuilds)
+// ---------------------------------------------------------------------------
+
+/// Emits a new list every time Firestore categories change.
+/// Seeds from LocalDatabase so the UI renders instantly offline.
+final categoriesStreamProvider = StreamProvider<List<ExamCategory>>((ref) async* {
+  // Emit cached state immediately so the UI isn't blank on first frame
+  yield LocalDatabase.instance.getCategories();
+  // Then yield real-time Firestore updates
+  yield* FirestoreService.instance.categoriesStream;
+});
+
+final examsStreamProvider = StreamProvider<List<Exam>>((ref) async* {
+  yield LocalDatabase.instance.getExams();
+  yield* FirestoreService.instance.examsStream;
+});
+
+final subjectsStreamProvider = StreamProvider<List<Subject>>((ref) async* {
+  yield LocalDatabase.instance.getSubjects();
+  yield* FirestoreService.instance.subjectsStream;
+});
+
+final topicsStreamProvider = StreamProvider<List<Topic>>((ref) async* {
+  yield LocalDatabase.instance.getTopics();
+  yield* FirestoreService.instance.topicsStream;
+});
+
+final mockTestsStreamProvider = StreamProvider<List<MockTest>>((ref) async* {
+  yield LocalDatabase.instance.getMockTests();
+  yield* FirestoreService.instance.mockTestsStream;
+});
+
+final bannersStreamProvider = StreamProvider<List<HomeBanner>>((ref) async* {
+  yield LocalDatabase.instance.getBanners();
+  yield* FirestoreService.instance.bannersStream;
+});
+
+final noticesStreamProvider = StreamProvider<List<AppNotice>>((ref) async* {
+  yield LocalDatabase.instance.getNotices();
+  yield* FirestoreService.instance.noticesStream;
+});
+
+final remoteConfigStreamProvider = StreamProvider<RemoteAppConfig>((ref) async* {
+  yield LocalDatabase.instance.getRemoteConfig();
+  yield* FirestoreService.instance.remoteConfigStream;
+});
+
+// ---------------------------------------------------------------------------
+// User Preferences (selected exam, language)
+// ---------------------------------------------------------------------------
+
 class SelectedExamNotifier extends Notifier<String> {
   @override
   String build() => LocalDatabase.instance.getSelectedExam();
@@ -13,9 +65,9 @@ class SelectedExamNotifier extends Notifier<String> {
   }
 }
 
-final selectedExamProvider = NotifierProvider<SelectedExamNotifier, String>(SelectedExamNotifier.new);
+final selectedExamProvider =
+    NotifierProvider<SelectedExamNotifier, String>(SelectedExamNotifier.new);
 
-// Current Language Provider ('en' or 'hi')
 class SelectedLanguageNotifier extends Notifier<String> {
   @override
   String build() => LocalDatabase.instance.getSelectedLanguage();
@@ -26,9 +78,13 @@ class SelectedLanguageNotifier extends Notifier<String> {
   }
 }
 
-final selectedLanguageProvider = NotifierProvider<SelectedLanguageNotifier, String>(SelectedLanguageNotifier.new);
+final selectedLanguageProvider =
+    NotifierProvider<SelectedLanguageNotifier, String>(SelectedLanguageNotifier.new);
 
-// Home Statistics Notifiers
+// ---------------------------------------------------------------------------
+// Home Statistics (computed from genuine attempts only)
+// ---------------------------------------------------------------------------
+
 class StreakNotifier extends Notifier<int> {
   @override
   int build() => LocalDatabase.instance.getStreakDays();
@@ -51,9 +107,13 @@ class TotalQuestionsCountNotifier extends Notifier<int> {
   void refresh() => state = LocalDatabase.instance.getTotalQuestionsCount();
 }
 
-final totalQuestionsCountProvider = NotifierProvider<TotalQuestionsCountNotifier, int>(TotalQuestionsCountNotifier.new);
+final totalQuestionsCountProvider =
+    NotifierProvider<TotalQuestionsCountNotifier, int>(TotalQuestionsCountNotifier.new);
 
-// Bookmarks Provider
+// ---------------------------------------------------------------------------
+// Bookmarks & Wrong Questions
+// ---------------------------------------------------------------------------
+
 class BookmarksNotifier extends Notifier<List<Question>> {
   @override
   List<Question> build() => LocalDatabase.instance.getBookmarkedQuestions();
@@ -69,9 +129,9 @@ class BookmarksNotifier extends Notifier<List<Question>> {
   }
 }
 
-final bookmarksProvider = NotifierProvider<BookmarksNotifier, List<Question>>(BookmarksNotifier.new);
+final bookmarksProvider =
+    NotifierProvider<BookmarksNotifier, List<Question>>(BookmarksNotifier.new);
 
-// Wrong Questions Provider
 class WrongQuestionsNotifier extends Notifier<List<Question>> {
   @override
   List<Question> build() => LocalDatabase.instance.getWrongQuestions();
@@ -81,9 +141,13 @@ class WrongQuestionsNotifier extends Notifier<List<Question>> {
   }
 }
 
-final wrongQuestionsProvider = NotifierProvider<WrongQuestionsNotifier, List<Question>>(WrongQuestionsNotifier.new);
+final wrongQuestionsProvider =
+    NotifierProvider<WrongQuestionsNotifier, List<Question>>(WrongQuestionsNotifier.new);
 
-// Student Attempts Provider
+// ---------------------------------------------------------------------------
+// Student Attempts
+// ---------------------------------------------------------------------------
+
 class StudentAttemptsNotifier extends Notifier<List<StudentAttempt>> {
   @override
   List<StudentAttempt> build() => LocalDatabase.instance.getAttempts();
@@ -98,18 +162,26 @@ class StudentAttemptsNotifier extends Notifier<List<StudentAttempt>> {
   }
 }
 
-final studentAttemptsProvider = NotifierProvider<StudentAttemptsNotifier, List<StudentAttempt>>(StudentAttemptsNotifier.new);
+final studentAttemptsProvider =
+    NotifierProvider<StudentAttemptsNotifier, List<StudentAttempt>>(StudentAttemptsNotifier.new);
 
-// Sound & Haptics preferences
+// ---------------------------------------------------------------------------
+// Sound & Haptics
+// ---------------------------------------------------------------------------
+
 class SoundHapticsNotifier extends Notifier<bool> {
   @override
   bool build() => true;
   void toggle(bool val) => state = val;
 }
 
-final soundHapticsProvider = NotifierProvider<SoundHapticsNotifier, bool>(SoundHapticsNotifier.new);
+final soundHapticsProvider =
+    NotifierProvider<SoundHapticsNotifier, bool>(SoundHapticsNotifier.new);
 
-// Questions List Provider (for real-time Firestore sync & UI updates)
+// ---------------------------------------------------------------------------
+// Questions List (used for bookmarks/wrong question lookups)
+// ---------------------------------------------------------------------------
+
 class QuestionsListNotifier extends Notifier<List<Question>> {
   @override
   List<Question> build() => LocalDatabase.instance.getAllQuestions();
@@ -119,4 +191,5 @@ class QuestionsListNotifier extends Notifier<List<Question>> {
   }
 }
 
-final questionsListProvider = NotifierProvider<QuestionsListNotifier, List<Question>>(QuestionsListNotifier.new);
+final questionsListProvider =
+    NotifierProvider<QuestionsListNotifier, List<Question>>(QuestionsListNotifier.new);

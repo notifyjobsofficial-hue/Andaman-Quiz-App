@@ -6,6 +6,7 @@ import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/models/models.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/ads/ad_service.dart';
@@ -20,9 +21,10 @@ class McqPracticeScreen extends ConsumerStatefulWidget {
 }
 
 class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
-  late List<Question> _questions;
-  late Topic? _topic;
+  List<Question> _questions = [];
+  Topic? _topic;
   int _currentIndex = 0;
+  bool _isLoading = true;
 
   // Stored state for current session: questionId -> selectedOptionIndex
   final Map<String, int> _selectedAnswers = {};
@@ -32,10 +34,17 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
   void initState() {
     super.initState();
     _topic = LocalDatabase.instance.getTopicById(widget.topicId);
-    _questions = LocalDatabase.instance.getQuestionsByTopic(widget.topicId);
-    if (_questions.isEmpty) {
-      // Fallback: If topic has few questions in seed, pull related questions
-      _questions = LocalDatabase.instance.getAllQuestions();
+    _loadQuestions();
+  }
+
+  Future<void> _loadQuestions() async {
+    // On-demand fetch from Firestore — never falls back to entire question bank
+    final fetched = await FirestoreService.instance.fetchQuestionsForTopic(widget.topicId);
+    if (mounted) {
+      setState(() {
+        _questions = fetched;
+        _isLoading = false;
+      });
     }
   }
 
@@ -72,10 +81,41 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: Text(_topic?.name ?? 'Practice')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     if (_questions.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Practice')),
-        body: const Center(child: Text('No questions available.')),
+        appBar: AppBar(title: Text(_topic?.name ?? 'Practice')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.quiz_outlined, size: 52, color: Colors.grey),
+              const SizedBox(height: 14),
+              const Text(
+                'No questions available for this topic yet.',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Questions will appear once added by the administrator.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 

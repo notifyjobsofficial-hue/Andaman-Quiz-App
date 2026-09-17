@@ -1,24 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/models/models.dart';
+import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/billing/billing_service.dart';
 
-class TestsScreen extends StatefulWidget {
+class TestsScreen extends ConsumerStatefulWidget {
   const TestsScreen({super.key});
 
   @override
-  State<TestsScreen> createState() => _TestsScreenState();
+  ConsumerState<TestsScreen> createState() => _TestsScreenState();
 }
 
-class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final List<String> _examTabs = ['All', 'CGL', 'CHSL', 'Police', 'MTS'];
+class _TestsScreenState extends ConsumerState<TestsScreen>
+    with SingleTickerProviderStateMixin {
+  TabController? _tabController;
+  List<String> _examTabs = ['All'];
 
   String _selectedFilter = 'All';
   final List<String> _filters = ['All', 'Free', 'Live', 'Previous Year'];
@@ -26,12 +29,20 @@ class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _examTabs.length, vsync: this);
+    _tabController = TabController(length: 1, vsync: this);
+  }
+
+  void _rebuildTabs(List<String> newTabs) {
+    if (newTabs.length != _examTabs.length) {
+      _tabController?.dispose();
+      _tabController = TabController(length: newTabs.length, vsync: this);
+      _examTabs = newTabs;
+    }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -39,17 +50,29 @@ class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Dynamic exam tabs from Firestore
+    final dbExams = ref.watch(examsStreamProvider).value ??
+        LocalDatabase.instance.getExams();
+    final examTabs = ['All', ...dbExams.map((e) => e.code)];
+    _rebuildTabs(examTabs);
+
+    // Dynamic mock tests from Firestore
+    final allMocks = ref.watch(mockTestsStreamProvider).value ??
+        LocalDatabase.instance.getMockTests();
+
+    final controller = _tabController!;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mock Tests & CBT', style: TextStyle(fontWeight: FontWeight.w700)),
         bottom: TabBar(
-          controller: _tabController,
-          isScrollable: false,
+          controller: controller,
+          isScrollable: examTabs.length > 4,
           indicatorColor: AppColors.actionBlue,
           labelColor: AppColors.actionBlue,
           unselectedLabelColor: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-          tabs: _examTabs.map((e) => Tab(text: e)).toList(),
+          tabs: examTabs.map((e) => Tab(text: e)).toList(),
           onTap: (_) => setState(() {}),
         ),
       ),
@@ -70,7 +93,10 @@ class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStat
                   final isSelected = _selectedFilter == f;
 
                   return ChoiceChip(
-                    label: Text(f, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
+                    label: Text(f,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
                     selected: isSelected,
                     onSelected: (selected) {
                       if (selected) {
@@ -79,39 +105,62 @@ class _TestsScreenState extends State<TestsScreen> with SingleTickerProviderStat
                     },
                     selectedColor: AppColors.actionBlue,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : (isDark ? AppColors.textDark : AppColors.textLight),
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? AppColors.textDark : AppColors.textLight),
                     ),
                     side: BorderSide(
-                      color: isSelected ? AppColors.actionBlue : (isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
+                      color: isSelected
+                          ? AppColors.actionBlue
+                          : (isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
                     ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppDimens.radiusPill)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppDimens.radiusPill)),
                   );
                 },
               ),
             ),
 
-            // Mock Tests List for Current Tab & Filter
+            // Mock Tests List for Current Tab & Filter — live from Firestore
             Expanded(
               child: Builder(
                 builder: (context) {
-                  final currentTab = _examTabs[_tabController.index];
+                  final tabIdx = controller.index.clamp(0, examTabs.length - 1);
+                  final currentTab = examTabs[tabIdx];
                   final examCode = currentTab == 'All' ? 'ALL' : currentTab.toUpperCase();
-                  final tests = LocalDatabase.instance.getMockTests(
-                    examCode: examCode,
-                    filter: _selectedFilter == 'All' ? null : _selectedFilter,
-                  );
+
+                  // Filter from reactive stream
+                  var tests = examCode == 'ALL'
+                      ? allMocks
+                      : allMocks
+                          .where((m) => m.examCode.toUpperCase() == examCode)
+                          .toList();
+
+                  if (_selectedFilter == 'Free') {
+                    tests = tests.where((m) => m.isFree).toList();
+                  } else if (_selectedFilter == 'Live') {
+                    tests = tests.where((m) => m.isLive).toList();
+                  } else if (_selectedFilter == 'Previous Year') {
+                    tests = tests.where((m) => m.isPreviousYear).toList();
+                  }
 
                   if (tests.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.quiz_outlined, size: 48, color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight),
+                          Icon(Icons.quiz_outlined,
+                              size: 48,
+                              color: isDark
+                                  ? AppColors.textMutedDark
+                                  : AppColors.textMutedLight),
                           const SizedBox(height: 12),
                           Text(
                             'No mock tests in this category yet.',
                             style: TextStyle(
-                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                              color: isDark
+                                  ? AppColors.textMutedDark
+                                  : AppColors.textMutedLight,
                             ),
                           ),
                         ],

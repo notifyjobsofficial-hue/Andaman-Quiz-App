@@ -41,33 +41,53 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
   final Map<String, CbtQuestionState> _questionStates = {}; // questionId -> state
 
   bool _isSubmitting = false;
+  bool _isLoadingQuestions = true;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _initExam();
+  }
 
+  Future<void> _initExam() async {
     final mock = LocalDatabase.instance.getMockTestById(widget.testId);
-    if (mock != null) {
-      _test = mock;
-    } else {
-      _test = LocalDatabase.instance.getMockTests().first;
+    if (mock == null) {
+      if (mounted) {
+        setState(() {
+          _loadError = 'Test not found. Please try again.';
+          _isLoadingQuestions = false;
+        });
+      }
+      return;
+    }
+    _test = mock;
+
+    // Collect all question IDs from all sections
+    final allQuestionIds = <String>[];
+    for (final sec in _test.sections) {
+      allQuestionIds.addAll(sec.questionIds);
+    }
+
+    // Fetch questions on-demand from Firestore (only the IDs needed for this test)
+    if (allQuestionIds.isNotEmpty) {
+      await FirestoreService.instance.fetchQuestionsForTest(allQuestionIds);
+    }
+
+    // Build question cache from local DB (now populated by fetchQuestionsForTest)
+    for (final sec in _test.sections) {
+      for (final qId in sec.questionIds) {
+        final q = LocalDatabase.instance.getQuestionById(qId);
+        if (q != null) {
+          _questionCache[qId] = q;
+        }
+        _questionStates[qId] = CbtQuestionState.notVisited;
+      }
     }
 
     _startTime = DateTime.now();
     _endTime = _startTime.add(Duration(minutes: _test.durationMinutes));
-
-    // Cache all questions for instant access
-    for (final sec in _test.sections) {
-      for (final qId in sec.questionIds) {
-        final q = LocalDatabase.instance.getAllQuestions().firstWhere(
-          (item) => item.id == qId,
-          orElse: () => LocalDatabase.instance.getAllQuestions().first,
-        );
-        _questionCache[qId] = q;
-        _questionStates[qId] = CbtQuestionState.notVisited;
-      }
-    }
 
     // Check for an active unexpired draft attempt
     bool draftRestored = false;
@@ -102,13 +122,16 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
             }
           }
 
-          final savedSec = (draft['currentSectionIndex'] as int? ?? 0).clamp(0, _test.sections.length - 1);
+          final savedSec =
+              (draft['currentSectionIndex'] as int? ?? 0).clamp(0, _test.sections.length - 1);
           _loadSection(savedSec);
-          final savedQ = (draft['currentQuestionIndex'] as int? ?? 0).clamp(0, _currentSectionQuestionIds.length - 1);
-          _currentQuestionIndex = savedQ;
+          if (_currentSectionQuestionIds.isNotEmpty) {
+            final savedQ =
+                (draft['currentQuestionIndex'] as int? ?? 0).clamp(0, _currentSectionQuestionIds.length - 1);
+            _currentQuestionIndex = savedQ;
+          }
           draftRestored = true;
         } else {
-          // Stale draft that expired while away
           LocalDatabase.instance.clearExamDraft(_test.id);
         }
       }
@@ -116,6 +139,10 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
 
     if (!draftRestored) {
       _loadSection(0);
+    }
+
+    if (mounted) {
+      setState(() => _isLoadingQuestions = false);
     }
   }
 
@@ -474,6 +501,47 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
 
   @override
   Widget build(BuildContext context) {
+    // Show loading spinner while questions are being fetched on-demand from Firestore
+    if (_isLoadingQuestions) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading exam questions…', style: TextStyle(fontSize: 14)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show error if test/questions could not be loaded
+    if (_loadError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Exam')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 52, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(_loadError!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Go Back'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentQId = _currentSectionQuestionIds.isNotEmpty
         ? _currentSectionQuestionIds[_currentQuestionIndex]
