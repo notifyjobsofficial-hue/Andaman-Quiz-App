@@ -260,8 +260,28 @@ export async function batchInsertQuestions(
 
 // 5. Mock Tests
 export async function fetchMockTests(): Promise<MockTest[]> {
-  const snap = await getDocs(collection(db, 'mocks'));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as MockTest));
+  const map = new Map<string, MockTest>();
+  try {
+    const snapMockTests = await getDocs(collection(db, 'mock_tests'));
+    snapMockTests.docs.forEach((d) => {
+      map.set(d.id, { id: d.id, ...d.data() } as MockTest);
+    });
+  } catch (err) {
+    console.warn('Notice querying mock_tests:', err);
+  }
+
+  try {
+    const snapMocks = await getDocs(collection(db, 'mocks'));
+    snapMocks.docs.forEach((d) => {
+      if (!map.has(d.id)) {
+        map.set(d.id, { id: d.id, ...d.data() } as MockTest);
+      }
+    });
+  } catch (err) {
+    console.warn('Notice querying mocks:', err);
+  }
+
+  return Array.from(map.values());
 }
 
 export async function saveMockTest(test: MockTest): Promise<void> {
@@ -281,11 +301,14 @@ export async function saveMockTest(test: MockTest): Promise<void> {
     delete payload.endDate;
   }
 
+  // Save to BOTH 'mock_tests' and 'mocks' collections for complete project-wide compatibility
+  await safeSetDoc(doc(db, 'mock_tests', test.id), payload, { merge: true });
   await safeSetDoc(doc(db, 'mocks', test.id), payload, { merge: true });
   await logActivity('Save Mock Test', `Test ${test.title} (${test.isFree ? 'FREE' : 'PAID: ₹' + (test.offerPrice || test.price || 0)}) saved`);
 }
 
 export async function deleteMockTest(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'mock_tests', id));
   await deleteDoc(doc(db, 'mocks', id));
   await logActivity('Delete Mock Test', `Deleted mock test ID: ${id}`);
 }

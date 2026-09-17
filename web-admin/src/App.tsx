@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { onAdminAuthChanged } from './firebase/auth';
 import { Login } from './pages/Login';
 import { AdminLayout } from './components/layout/AdminLayout';
@@ -62,7 +62,12 @@ export function App() {
           }}
         />
       )}
-      {currentTab === 'test-builder' && <TestBuilder initialTestId={builderTestId} />}
+      {currentTab === 'test-builder' && (
+        <TestBuilder
+          initialTestId={builderTestId}
+          onNavigate={setCurrentTab}
+        />
+      )}
       {currentTab === 'categories-exams' && <CategoriesExams />}
       {currentTab === 'subjects' && <SubjectsTopics />}
       {currentTab === 'content' && <AppContent />}
