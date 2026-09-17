@@ -101,7 +101,10 @@ export const TestBuilder: React.FC<TestBuilderProps> = ({ initialTestId }) => {
   const handleRemoveSection = (secId: string) => {
     if (!currentTest) return;
     if (currentTest.sections.length <= 1) {
-      alert('A test must contain at least one section.');
+      setActionFeedback({
+        type: 'error',
+        message: 'A test must contain at least one section.'
+      });
       return;
     }
     if (confirm('Delete this section and remove its assigned questions?')) {

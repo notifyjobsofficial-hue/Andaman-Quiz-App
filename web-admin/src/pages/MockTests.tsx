@@ -121,36 +121,153 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
 
   const handleSaveTest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-
     setTestError(null);
+
+    // 1. Title validation
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      setTestError('Test Title is required.');
+      return;
+    }
+
+    // 2. Target exam validation
+    const cleanExamCode = examCode.trim();
+    if (!cleanExamCode) {
+      setTestError('Target Exam is required.');
+      return;
+    }
+
+    // 3. Duration validation (> 0)
+    const durationNum = Number(duration);
+    if (isNaN(durationNum) || durationNum <= 0) {
+      setTestError('Duration must be greater than 0 minutes.');
+      return;
+    }
+
+    // 4. Total marks validation (> 0)
+    const totalMarksNum = Number(totalMarks);
+    if (isNaN(totalMarksNum) || totalMarksNum <= 0) {
+      setTestError('Total Marks must be greater than 0.');
+      return;
+    }
+
+    // 5. Marks per question (+) validation (> 0)
+    const positiveMarksNum = Number(positiveMarks);
+    if (isNaN(positiveMarksNum) || positiveMarksNum <= 0) {
+      setTestError('Marks per question must be greater than 0.');
+      return;
+    }
+
+    // 6. Negative marks (-) validation (>= 0)
+    const negativeMarksNum = Number(negativeMarks);
+    if (isNaN(negativeMarksNum) || negativeMarksNum < 0) {
+      setTestError('Negative marks must be 0 or greater.');
+      return;
+    }
+
+    // 7. Access Type & Pricing validation
+    let cleanProductId: string | undefined = undefined;
+    let cleanPrice: number | undefined = undefined;
+    let cleanOriginalPrice: number | undefined = undefined;
+    let cleanOfferPrice: number | undefined = undefined;
+
+    if (isFree) {
+      // For FREE tests: productId, selling price, original price and offer price must not be required and should be omitted/null
+      cleanProductId = undefined;
+      cleanPrice = undefined;
+      cleanOriginalPrice = undefined;
+      cleanOfferPrice = undefined;
+    } else {
+      // For PAID tests: Google Play Product ID/SKU is REQUIRED
+      if (!productId || !productId.trim()) {
+        setTestError('Google Play Product ID is required for paid tests.');
+        return;
+      }
+      cleanProductId = productId.trim();
+
+      const priceNum = Number(price);
+      if (isNaN(priceNum) || priceNum <= 0) {
+        setTestError('Selling price must be greater than ₹0 for paid tests.');
+        return;
+      }
+      cleanPrice = priceNum;
+
+      if (offerPrice !== undefined && offerPrice !== null && String(offerPrice).trim() !== '') {
+        const offerNum = Number(offerPrice);
+        if (isNaN(offerNum) || offerNum <= 0) {
+          setTestError('Offer price must be greater than ₹0.');
+          return;
+        }
+        cleanOfferPrice = offerNum;
+      }
+
+      if (originalPrice !== undefined && originalPrice !== null && String(originalPrice).trim() !== '') {
+        const origNum = Number(originalPrice);
+        if (isNaN(origNum) || origNum <= 0) {
+          setTestError('Original price must be greater than ₹0.');
+          return;
+        }
+        cleanOriginalPrice = origNum;
+      }
+    }
+
+    // 8. Scheduled/Live exam dates validation
+    let cleanStartDate: string | undefined = undefined;
+    let cleanEndDate: string | undefined = undefined;
+
+    if (isLive) {
+      if (!startDate || !startDate.trim()) {
+        setTestError('Start Date & Time is required for scheduled/live exams.');
+        return;
+      }
+      const startD = new Date(startDate);
+      if (isNaN(startD.getTime())) {
+        setTestError('Invalid start date for scheduled exam.');
+        return;
+      }
+      cleanStartDate = startDate.trim();
+
+      if (endDate && endDate.trim()) {
+        const endD = new Date(endDate);
+        if (isNaN(endD.getTime())) {
+          setTestError('Invalid end date for scheduled exam.');
+          return;
+        }
+        if (endD <= startD) {
+          setTestError('End date must be after the start date.');
+          return;
+        }
+        cleanEndDate = endDate.trim();
+      }
+    }
+
     setIsSavingTest(true);
 
     try {
       const id = editingTest ? editingTest.id : `mock_${Date.now()}`;
       const test: MockTest = {
         id,
-        title: title.trim(),
-        examCode,
-        durationMinutes: Number(duration) || 60,
+        title: cleanTitle,
+        examCode: cleanExamCode,
+        durationMinutes: durationNum,
         totalQuestions: editingTest ? editingTest.totalQuestions : 0,
-        totalMarks: Number(totalMarks) || 100,
-        positiveMarks: Number(positiveMarks) || 2,
-        negativeMarks: Number(negativeMarks) || 0.5,
+        totalMarks: totalMarksNum,
+        positiveMarks: positiveMarksNum,
+        negativeMarks: negativeMarksNum,
         attemptsCount: editingTest ? editingTest.attemptsCount : 0,
         isFree,
-        price: isFree ? undefined : Number(price) || 99,
-        originalPrice: isFree ? undefined : Number(originalPrice) || undefined,
-        offerPrice: isFree ? undefined : Number(offerPrice) || undefined,
-        productId: isFree ? undefined : (productId.trim() || undefined),
-        instructions,
+        price: cleanPrice,
+        originalPrice: cleanOriginalPrice,
+        offerPrice: cleanOfferPrice,
+        productId: cleanProductId,
+        instructions: instructions.trim() || undefined,
         status,
         language: 'both',
         displayOrder: editingTest ? editingTest.displayOrder : mockTests.length + 1,
         isLive,
         isPreviousYear,
-        startDate: startDate.trim() || undefined,
-        endDate: endDate.trim() || undefined,
+        startDate: cleanStartDate,
+        endDate: cleanEndDate,
         shuffleQuestions,
         shuffleOptions,
         showResultImmediately,
@@ -522,7 +639,7 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Google Play In-App Product ID (SKU)
+                    Google Play In-App Product ID (SKU) <span className="text-rose-600 font-extrabold">*</span>
                   </label>
                   <input
                     type="text"
@@ -571,6 +688,35 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
               <span className="text-xs font-semibold text-slate-700">Previous Year Paper (PYQ)</span>
             </label>
           </div>
+
+          {/* Scheduled / Live Exam Dates (shown only when isLive is checked) */}
+          {isLive && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-rose-50/50 border border-rose-100 rounded-xl">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Start Date & Time <span className="text-rose-600 font-extrabold">*</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  End Date & Time (Optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Shuffling & Exam Rules */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl">

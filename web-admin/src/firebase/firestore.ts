@@ -10,7 +10,10 @@ import {
   limit,
   writeBatch,
   where,
-  addDoc
+  addDoc,
+  DocumentReference,
+  CollectionReference,
+  SetOptions
 } from 'firebase/firestore';
 import { db, auth } from './config';
 import {
@@ -26,11 +29,84 @@ import {
   AdminActivity
 } from '../types';
 
+/**
+ * Recursively sanitizes any payload destined for Cloud Firestore:
+ * 1. Omit all keys with `undefined` values (Cloud Firestore throws: "Unsupported field value: undefined").
+ * 2. Omit or filter `NaN` and infinite numeric values.
+ * 3. Omit invalid Date objects (isNaN(date.getTime())).
+ * 4. Recursively sanitize nested objects and arrays.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (typeof data === 'number') {
+    if (Number.isNaN(data) || !Number.isFinite(data)) {
+      return null as any;
+    }
+    return data;
+  }
+  if (data instanceof Date) {
+    if (Number.isNaN(data.getTime())) {
+      return null as any;
+    }
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .map((item) => sanitizeForFirestore(item))
+      .filter((item) => item !== undefined && item !== null) as any;
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data as Record<string, any>)) {
+      if (val === undefined) {
+        continue; // omit undefined keys completely
+      }
+      if (typeof val === 'number' && (Number.isNaN(val) || !Number.isFinite(val))) {
+        continue; // omit NaN / infinite numbers
+      }
+      if (val instanceof Date && Number.isNaN(val.getTime())) {
+        continue; // omit invalid Dates
+      }
+      const sanitizedVal = sanitizeForFirestore(val);
+      if (sanitizedVal !== undefined) {
+        cleaned[key] = sanitizedVal;
+      }
+    }
+    return cleaned as any;
+  }
+  return data;
+}
+
+/**
+ * Safe Firestore setDoc wrapper that automatically sanitizes all data before writing.
+ */
+export async function safeSetDoc<T>(
+  docRef: DocumentReference,
+  data: T,
+  options?: SetOptions
+): Promise<void> {
+  const cleanData: any = sanitizeForFirestore(data);
+  return options ? setDoc(docRef, cleanData, options) : setDoc(docRef, cleanData);
+}
+
+/**
+ * Safe Firestore addDoc wrapper that automatically sanitizes all data before writing.
+ */
+export async function safeAddDoc<T>(
+  collRef: CollectionReference,
+  data: T
+): Promise<DocumentReference> {
+  const cleanData: any = sanitizeForFirestore(data);
+  return addDoc(collRef, cleanData);
+}
+
 // Audit Log Helper
 export async function logActivity(action: string, details: string) {
   try {
     const adminEmail = auth.currentUser?.email || 'System';
-    await addDoc(collection(db, 'admin_activity'), {
+    await safeAddDoc(collection(db, 'admin_activity'), {
       adminEmail,
       action,
       details,
@@ -48,7 +124,7 @@ export async function fetchCategories(): Promise<ExamCategory[]> {
 }
 
 export async function saveCategory(cat: ExamCategory): Promise<void> {
-  await setDoc(doc(db, 'categories', cat.id), cat, { merge: true });
+  await safeSetDoc(doc(db, 'categories', cat.id), cat, { merge: true });
   await logActivity('Save Category', `Category ${cat.name} (${cat.code}) updated/created`);
 }
 
@@ -64,7 +140,7 @@ export async function fetchExams(): Promise<Exam[]> {
 }
 
 export async function saveExam(exam: Exam): Promise<void> {
-  await setDoc(doc(db, 'exams', exam.id), exam, { merge: true });
+  await safeSetDoc(doc(db, 'exams', exam.id), exam, { merge: true });
   await logActivity('Save Exam', `Exam ${exam.name} (${exam.code}) saved`);
 }
 
@@ -80,7 +156,7 @@ export async function fetchSubjects(): Promise<Subject[]> {
 }
 
 export async function saveSubject(sub: Subject): Promise<void> {
-  await setDoc(doc(db, 'subjects', sub.id), sub, { merge: true });
+  await safeSetDoc(doc(db, 'subjects', sub.id), sub, { merge: true });
   await logActivity('Save Subject', `Subject ${sub.name} saved`);
 }
 
@@ -90,7 +166,7 @@ export async function deleteSubject(id: string): Promise<void> {
 }
 
 export async function fetchTopics(subjectId?: string): Promise<Topic[]> {
-  let q = collection(db, 'topics');
+  const q = collection(db, 'topics');
   if (subjectId) {
     const snap = await getDocs(query(q, where('subjectId', '==', subjectId)));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Topic));
@@ -100,39 +176,11 @@ export async function fetchTopics(subjectId?: string): Promise<Topic[]> {
 }
 
 export async function saveTopic(topic: Topic): Promise<void> {
-  await setDoc(doc(db, 'topics', topic.id), topic, { merge: true });
+  await safeSetDoc(doc(db, 'topics', topic.id), topic, { merge: true });
 }
 
 export async function deleteTopic(id: string): Promise<void> {
   await deleteDoc(doc(db, 'topics', id));
-}
-
-/**
- * Recursively removes all `undefined` values from an object or array.
- * Cloud Firestore throws: "Unsupported field value: undefined" if any field in
- * a document payload is undefined. This sanitizes every payload recursively so
- * only valid defined attributes reach Cloud Firestore.
- */
-export function sanitizeForFirestore<T>(data: T): T {
-  if (data === null || data === undefined) {
-    return null as any;
-  }
-  if (Array.isArray(data)) {
-    return data
-      .map((item) => sanitizeForFirestore(item))
-      .filter((item) => item !== undefined) as any;
-  }
-  if (typeof data === 'object' && !(data instanceof Date)) {
-    const cleaned: Record<string, any> = {};
-    for (const [key, val] of Object.entries(data as Record<string, any>)) {
-      if (val === undefined) {
-        continue; // omit undefined keys completely
-      }
-      cleaned[key] = sanitizeForFirestore(val);
-    }
-    return cleaned as any;
-  }
-  return data;
 }
 
 // 4. Question Bank
@@ -142,11 +190,11 @@ export async function fetchQuestions(maxCount: number = 200): Promise<Question[]
 }
 
 export async function saveQuestion(question: Question): Promise<void> {
-  const cleanData = sanitizeForFirestore({
+  const payload = {
     ...question,
     updated_at: new Date().toISOString(),
-  });
-  await setDoc(doc(db, 'questions', question.id), cleanData, { merge: true });
+  };
+  await safeSetDoc(doc(db, 'questions', question.id), payload, { merge: true });
   await logActivity('Save Question', `Question ${question.id} saved`);
 }
 
@@ -217,8 +265,24 @@ export async function fetchMockTests(): Promise<MockTest[]> {
 }
 
 export async function saveMockTest(test: MockTest): Promise<void> {
-  await setDoc(doc(db, 'mocks', test.id), test, { merge: true });
-  await logActivity('Save Mock Test', `Test ${test.title} (${test.isFree ? 'FREE' : 'PAID: ₹' + test.price}) saved`);
+  const payload: any = { ...test };
+
+  // For FREE tests: productId, price, originalPrice, offerPrice must be omitted from Firestore
+  if (payload.isFree) {
+    delete payload.price;
+    delete payload.originalPrice;
+    delete payload.offerPrice;
+    delete payload.productId;
+  }
+
+  // If not scheduled / live, clean up start/end dates
+  if (!payload.isLive) {
+    delete payload.startDate;
+    delete payload.endDate;
+  }
+
+  await safeSetDoc(doc(db, 'mocks', test.id), payload, { merge: true });
+  await logActivity('Save Mock Test', `Test ${test.title} (${test.isFree ? 'FREE' : 'PAID: ₹' + (test.offerPrice || test.price || 0)}) saved`);
 }
 
 export async function deleteMockTest(id: string): Promise<void> {
@@ -233,7 +297,7 @@ export async function fetchBanners(): Promise<HomeBanner[]> {
 }
 
 export async function saveBanner(banner: HomeBanner): Promise<void> {
-  await setDoc(doc(db, 'banners', banner.id), banner, { merge: true });
+  await safeSetDoc(doc(db, 'banners', banner.id), banner, { merge: true });
 }
 
 export async function deleteBanner(id: string): Promise<void> {
@@ -246,7 +310,7 @@ export async function fetchNotices(): Promise<AppNotice[]> {
 }
 
 export async function saveNotice(notice: AppNotice): Promise<void> {
-  await setDoc(doc(db, 'notices', notice.id), notice, { merge: true });
+  await safeSetDoc(doc(db, 'notices', notice.id), notice, { merge: true });
 }
 
 export async function deleteNotice(id: string): Promise<void> {
@@ -262,7 +326,7 @@ export async function fetchAppConfig(): Promise<AppConfig | null> {
 }
 
 export async function saveAppConfig(config: AppConfig): Promise<void> {
-  await setDoc(doc(db, 'app_config', 'main'), config, { merge: true });
+  await safeSetDoc(doc(db, 'app_config', 'main'), config, { merge: true });
   await logActivity('Update App Config', 'Application configuration updated');
 }
 
@@ -277,10 +341,19 @@ export async function fetchQOTDList(): Promise<any[]> {
   }
 }
 
-export async function saveQOTD(qotd: { id: string; date: string; questionId: string; questionText?: string; options?: string[]; correctAnswer?: string; explanation?: string; active?: boolean }): Promise<void> {
-  await setDoc(doc(db, 'qotd', qotd.id), qotd, { merge: true });
+export async function saveQOTD(qotd: {
+  id: string;
+  date: string;
+  questionId: string;
+  questionText?: string;
+  options?: string[];
+  correctAnswer?: string;
+  explanation?: string;
+  active?: boolean;
+}): Promise<void> {
+  await safeSetDoc(doc(db, 'qotd', qotd.id), qotd, { merge: true });
   // Also update 'current' doc for easy student app access
-  await setDoc(doc(db, 'qotd', 'current'), qotd, { merge: true });
+  await safeSetDoc(doc(db, 'qotd', 'current'), qotd, { merge: true });
   await logActivity('Save QOTD', `Question of the Day set for date ${qotd.date}`);
 }
 

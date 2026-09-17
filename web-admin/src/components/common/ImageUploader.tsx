@@ -1,5 +1,5 @@
-﻿import React, { useState } from 'react';
-import { Upload, Link as LinkIcon, X, Check, Loader2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, Link as LinkIcon, X, Check, Loader2, AlertCircle } from 'lucide-react';
 import { uploadImage } from '../../firebase/storage';
 
 interface ImageUploaderProps {
@@ -19,35 +19,45 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [urlInput, setUrlInput] = useState(value || '');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
+      setUploadError(null);
       setIsUploading(true);
       setProgress(0);
       const downloadUrl = await uploadImage(file, folder, (p) => setProgress(p));
       onChange(downloadUrl);
       setUrlInput(downloadUrl);
     } catch (err: any) {
-      alert('Failed to upload image to Firebase Storage: ' + err.message);
+      setUploadError(err.message || 'Failed to upload image to Firebase Storage.');
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleApplyUrl = () => {
+    setUploadError(null);
     onChange(urlInput.trim());
   };
 
   const handleClear = () => {
+    setUploadError(null);
     onChange('');
     setUrlInput('');
   };
 
   return (
     <div className="space-y-2">
+      {uploadError && (
+        <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700 flex items-center gap-1.5">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>{uploadError}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
         <span>{label} (Optional)</span>
         <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">

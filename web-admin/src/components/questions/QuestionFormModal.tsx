@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { Question, Exam, Subject } from '../../types';
 import { ImageUploader } from '../common/ImageUploader';
@@ -40,8 +41,10 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
+    setFormError(null);
     if (questionToEdit) {
       setFormData(questionToEdit);
     } else {
@@ -68,8 +71,10 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.question_text && !formData.question_image_url) {
-      alert('Please provide either Question Text or a Question Image.');
+    setFormError(null);
+
+    if (!formData.question_text?.trim() && !formData.question_image_url?.trim()) {
+      setFormError('Please provide either Question Text or a Question Image.');
       return;
     }
 
@@ -104,7 +109,7 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
       onSaved(q);
       onClose();
     } catch (err: any) {
-      alert('Error saving question: ' + err.message);
+      setFormError(err.message || 'Error saving question.');
     } finally {
       setIsSaving(false);
     }
@@ -118,6 +123,12 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
       maxWidth="4xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {formError && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{formError}</span>
+          </div>
+        )}
         {/* Meta Bar */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
           <div>

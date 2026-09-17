@@ -40,6 +40,7 @@ export const BulkImport: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importCompleted, setImportCompleted] = useState(false);
+  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     Promise.all([fetchQuestions(1000), fetchExams(), fetchSubjects()]).then(([q, e, s]) => {
@@ -53,6 +54,7 @@ export const BulkImport: React.FC = () => {
     const selected = e.target.files?.[0];
     if (!selected) return;
 
+    setActionFeedback(null);
     setFile(selected);
     setIsParsing(true);
     setSummary(null);
@@ -63,7 +65,7 @@ export const BulkImport: React.FC = () => {
       const valSummary = validateQuestionRows(rawRows, existingQuestions);
       setSummary(valSummary);
     } catch (err: any) {
-      alert('Failed to parse file: ' + err.message);
+      setActionFeedback({ type: 'error', message: 'Failed to parse file: ' + err.message });
     } finally {
       setIsParsing(false);
     }
@@ -86,6 +88,7 @@ export const BulkImport: React.FC = () => {
   const handleUploadMatchedImages = async () => {
     if (localImageFiles.size === 0 || !summary) return;
 
+    setActionFeedback(null);
     setIsUploadingImages(true);
     setImageUploadProgress(0);
     const urlMap = new Map<string, string>();
@@ -136,12 +139,16 @@ export const BulkImport: React.FC = () => {
       validQuestions: updatedValid,
     });
 
-    alert(`Successfully uploaded and linked ${urlMap.size} images to question records!`);
+    setActionFeedback({
+      type: 'success',
+      message: `Successfully uploaded and linked ${urlMap.size} images to question records!`
+    });
   };
 
   const handleStartImport = async () => {
     if (!summary || summary.validQuestions.length === 0) return;
 
+    setActionFeedback(null);
     let toImport = summary.validQuestions;
     if (skipDuplicates && summary.duplicates.length > 0) {
       const dupRows = new Set(summary.duplicates.map((d) => d.rowNumber));
@@ -157,13 +164,14 @@ export const BulkImport: React.FC = () => {
       });
       setImportCompleted(true);
     } catch (err: any) {
-      alert('Import failed: ' + err.message);
+      setActionFeedback({ type: 'error', message: 'Import failed: ' + err.message });
     } finally {
       setIsImporting(false);
     }
   };
 
   const handleReset = () => {
+    setActionFeedback(null);
     setFile(null);
     setSummary(null);
     setImportCompleted(false);
@@ -171,6 +179,25 @@ export const BulkImport: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Feedback Banner */}
+      {actionFeedback && (
+        <div
+          className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+            actionFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <span>{actionFeedback.message}</span>
+          <button
+            onClick={() => setActionFeedback(null)}
+            className="text-xs px-2 py-0.5 rounded hover:bg-black/5"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
