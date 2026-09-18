@@ -19,7 +19,7 @@ class TestsScreen extends ConsumerStatefulWidget {
 }
 
 class _TestsScreenState extends ConsumerState<TestsScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   TabController? _tabController;
   List<String> _examTabs = ['All'];
 
@@ -29,20 +29,51 @@ class _TestsScreenState extends ConsumerState<TestsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 1, vsync: this);
+    final cachedExams = LocalDatabase.instance.getExams();
+    _examTabs = ['All', ...cachedExams.map((e) => e.code)];
+    _initController(_examTabs.length, 0);
+  }
+
+  void _initController(int length, int initialIndex) {
+    _tabController = TabController(
+      length: length,
+      initialIndex: initialIndex.clamp(0, length > 0 ? length - 1 : 0),
+      vsync: this,
+    );
+    _tabController!.addListener(_handleTabChange);
+  }
+
+  void _handleTabChange() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool _tabsEqual(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   void _rebuildTabs(List<String> newTabs) {
-    if (newTabs.length != _examTabs.length) {
+    if (!_tabsEqual(_examTabs, newTabs)) {
+      final oldIndex = _tabController?.index ?? 0;
+      _tabController?.removeListener(_handleTabChange);
       _tabController?.dispose();
-      _tabController = TabController(length: newTabs.length, vsync: this);
-      _examTabs = newTabs;
+      _tabController = null;
+
+      _examTabs = List.from(newTabs);
+      _initController(_examTabs.length, oldIndex);
     }
   }
 
   @override
   void dispose() {
+    _tabController?.removeListener(_handleTabChange);
     _tabController?.dispose();
+    _tabController = null;
     super.dispose();
   }
 
@@ -50,15 +81,19 @@ class _TestsScreenState extends ConsumerState<TestsScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Dynamic exam tabs from Firestore
-    final dbExams = ref.watch(examsStreamProvider).value ??
-        LocalDatabase.instance.getExams();
+    // Dynamic exam tabs from Firestore or cached LocalDatabase
+    final streamExams = ref.watch(examsStreamProvider).value;
+    final dbExams = (streamExams != null && streamExams.isNotEmpty)
+        ? streamExams
+        : LocalDatabase.instance.getExams();
     final examTabs = ['All', ...dbExams.map((e) => e.code)];
     _rebuildTabs(examTabs);
 
-    // Dynamic mock tests from Firestore
-    final allMocks = ref.watch(mockTestsStreamProvider).value ??
-        LocalDatabase.instance.getMockTests();
+    // Dynamic mock tests from Firestore or cached LocalDatabase
+    final streamMocks = ref.watch(mockTestsStreamProvider).value;
+    final allMocks = (streamMocks != null && streamMocks.isNotEmpty)
+        ? streamMocks
+        : LocalDatabase.instance.getMockTests();
 
     final controller = _tabController!;
 
@@ -345,24 +380,25 @@ class _MockTestListCardState extends State<_MockTestListCard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        if (mockTest.isLive) ...[
-                          StatusBadge.live(),
-                          const SizedBox(width: 6),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (mockTest.isLive)
+                            StatusBadge.live(),
+                          if (mockTest.isPreviousYear)
+                            StatusBadge.pyq(),
+                          if (mockTest.isFree)
+                            StatusBadge.free()
+                          else if (isUnlocked)
+                            StatusBadge.unlocked()
+                          else
+                            StatusBadge.paid(price: displayPrice),
                         ],
-                        if (mockTest.isPreviousYear) ...[
-                          StatusBadge.pyq(),
-                          const SizedBox(width: 6),
-                        ],
-                        if (mockTest.isFree)
-                          StatusBadge.free()
-                        else if (isUnlocked)
-                          StatusBadge.unlocked()
-                        else
-                          StatusBadge.paid(price: displayPrice),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${mockTest.attemptsCount} attempts',
                       style: TextStyle(

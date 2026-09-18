@@ -11,7 +11,7 @@ class AnimatedPressable extends StatefulWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.scaleFactor = 0.985,
+    this.scaleFactor = 0.98,
     this.duration = const Duration(milliseconds: 100),
     this.behavior = HitTestBehavior.opaque,
   });

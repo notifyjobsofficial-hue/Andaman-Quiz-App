@@ -23,13 +23,17 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Dynamic exams from Firestore → build filter chips
-    final dbExams = ref.watch(examsStreamProvider).value ??
-        LocalDatabase.instance.getExams();
+    final streamExams = ref.watch(examsStreamProvider).value;
+    final dbExams = (streamExams != null && streamExams.isNotEmpty)
+        ? streamExams
+        : LocalDatabase.instance.getExams();
     final examFilters = ['ALL', ...dbExams.map((e) => e.code)];
 
     // Dynamic subjects from Firestore
-    final allSubjects = ref.watch(subjectsStreamProvider).value ??
-        LocalDatabase.instance.getSubjects();
+    final streamSubjects = ref.watch(subjectsStreamProvider).value;
+    final allSubjects = (streamSubjects != null && streamSubjects.isNotEmpty)
+        ? streamSubjects
+        : LocalDatabase.instance.getSubjects();
     final subjects = _activeExam == 'ALL'
         ? allSubjects
         : allSubjects.where((s) => s.examCodes.contains(_activeExam)).toList();
@@ -155,15 +159,19 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                                     children: [
                                       Row(
                                         children: [
-                                          Text(
-                                            subject.name,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
+                                          Flexible(
+                                            child: Text(
+                                              subject.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                             ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          if (subject.isAndamanSpecial)
+                                          if (subject.isAndamanSpecial) ...[
+                                            const SizedBox(width: 8),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                               decoration: BoxDecoration(
@@ -179,6 +187,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                                                 ),
                                               ),
                                             ),
+                                          ],
                                         ],
                                       ),
                                       const SizedBox(height: 3),

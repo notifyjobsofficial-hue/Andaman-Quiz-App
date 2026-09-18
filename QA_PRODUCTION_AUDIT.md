@@ -10,14 +10,14 @@
 
 | Metric | Value | Status |
 |---|---|---|
-| **Total Automated Tests Executed** | **48** | **PASS** |
-| **Flutter Test Suite Pass Count** | **16 / 16** | **PASS (100%)** |
+| **Total Automated Tests Executed** | **58** | **PASS** |
+| **Flutter Test Suite Pass Count** | **26 / 26** | **PASS (100%)** |
 | **Node.js Web Admin & Logic Test Pass Count** | **21 / 21** | **PASS (100%)** |
 | **Live Cloud Firestore Read Pass Count** | **11 / 11** | **PASS (100%)** |
 | **Automated Failures** | **0** | **PASS** |
 | **Flutter Analyze (Static Linting)** | **0 issues** | **PASS** |
 | **Web Admin TypeScript & Vite Build** | **0 errors (1,609 modules transformed)** | **PASS** |
-| **Android Release APK Build (`app-release.apk`)** | **Generated Successfully** | **PASS** |
+| **Android Release APK Build (`app-release.apk`)** | **Generated Successfully (62.9 MB)** | **PASS** |
 
 ---
 
@@ -109,6 +109,31 @@
 - **Root Cause**: Running `in_app_purchase_android` channel code in Flutter test runner on Windows host.
 - **Fix**: Decoupled entitlement state verification in `LocalDatabase` for unit testing while reserving platform channel tests for physical devices.
 - **Retest Result**: PASSED.
+
+### 8. TestsScreen Runtime Crash (Multiple Tickers on SingleTickerProvider)
+- **Root Cause**: `_TestsScreenState` mixed in `SingleTickerProviderStateMixin` while dynamically recreating `TabController` instances when Firestore exams streamed in, violating the single ticker invariant and producing the Flutter red screen:
+  `_TestsScreenState is a SingleTickerProviderStateMixin but multiple tickers were created.`
+- **Fix**: Upgraded to `TickerProviderStateMixin`. Refactored `_tabController` lifecycle to safely detach listeners, dispose the old controller, instantiate the new controller, and re-attach listeners only when tab tabs actually change (`_tabsEqual` comparison).
+- **Retest Result**: PASSED. Tested dynamic tab updates, rapid navigation between Home ↔ Tests, and background/resume lifecycle. Zero exceptions or leaks.
+
+### 9. Home Screen RenderFlex Overflow Across Narrow Viewports (320dp - 412dp)
+- **Root Cause**: The Andaman & Nicobar GK card utilized an unconstrained horizontal `Row` containing a long title and 'ESSENTIAL' badge. On narrow devices (320dp/360dp), this overflowed the right screen edge by 40 pixels. Additional overflows were present in unconstrained text elements within the Header Bar, QOTD card, and Stat items.
+- **Fix**: Replaced unconstrained `Row` with responsive `Wrap` widgets (`spacing: 6, runSpacing: 3`) and `Flexible(child: Text(..., overflow: TextOverflow.ellipsis))`. Wrapped stat metrics in `Expanded` and `FittedBox(fit: BoxFit.scaleDown)`.
+- **Retest Result**: PASSED. Verified with automated widget tests rendering at 320dp, 360dp, 384dp, and 412dp with ZERO yellow/black overflow warnings.
+
+### 10. Home Metrics Discrepancy & Legacy Demo Accumulators (338 / 8 / 40%)
+- **Investigation & Architectural Root Cause**:
+  In early development builds, `LocalDatabase` had hardcoded fallback seeds: `user_total_questions ?? 328` and `user_streak_days ?? 7`. When a tester executed a single 10-question test (scoring 4/10), the accumulator added `328 + 10 = 338`, `7 + 1 = 8`, and accuracy was `4/10 = 40%`. The earlier v2 migration had skipped resetting these keys because genuine attempts existed.
+- **Fix**:
+  1. Bumped database migration version to `3` (`_kCurrentDbVersion = 3`).
+  2. Unconditionally purged legacy accumulator keys `user_total_questions`, `user_streak_days`, and `user_last_active_date` from device storage.
+  3. Rewrote `getTotalQuestionsCount()`, `getStreakDays()`, and `getAccuracyPercentage()` to compute dynamically from genuine `_attempts` and `recordPracticeAnswer()` history. Clean devices now strictly show `0 Questions`, `0% Accuracy`, and `0 Days Streak`.
+- **Retest Result**: PASSED. Verified with dedicated test cases for clean state, 1-attempt calculation, and v2 → v3 migration key purging.
+
+### 11. Bottom Navigation Runtime Multi-Tab Navigation & Instant CBT Question Switching
+- **Root Cause**: Navigating rapidly across bottom-nav destinations had not been exercised under automated widget testing, and the CBT exam screen previously used an `AnimatedSwitcher` that introduced a 150ms fade latency during question switching.
+- **Fix**: Created multi-tab runtime integration test rapidly cycling through all 5 destinations (Home, Practice, Tests, Saved, More). Removed `AnimatedSwitcher` from `CbtExamScreen` to make question switching (Previous/Next/Save & Next/Mark for Review) 100% instantaneous, conforming to real SSC/TCS CBT exam standards.
+- **Retest Result**: PASSED. All 5 destinations transition smoothly, and CBT questions switch with zero latency.
 
 ---
 

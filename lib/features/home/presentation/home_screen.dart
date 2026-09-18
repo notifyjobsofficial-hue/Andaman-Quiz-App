@@ -33,28 +33,35 @@ class HomeScreen extends ConsumerWidget {
     final totalQuestions = ref.watch(totalQuestionsCountProvider);
 
     // Watch reactive streams — auto-rebuild when Firestore changes
-    final allSubjects = ref.watch(subjectsStreamProvider).value ??
-        LocalDatabase.instance.getSubjects();
+    final streamSubjects = ref.watch(subjectsStreamProvider).value;
+    final allSubjects = (streamSubjects != null && streamSubjects.isNotEmpty)
+        ? streamSubjects
+        : LocalDatabase.instance.getSubjects();
     final subjects = selectedExam == 'ALL'
         ? allSubjects
         : allSubjects.where((s) => s.examCodes.contains(selectedExam)).toList();
 
-    final allMocks = ref.watch(mockTestsStreamProvider).value ??
-        LocalDatabase.instance.getMockTests();
+    final streamMocks = ref.watch(mockTestsStreamProvider).value;
+    final allMocks = (streamMocks != null && streamMocks.isNotEmpty)
+        ? streamMocks
+        : LocalDatabase.instance.getMockTests();
     final latestMock = allMocks
             .where((m) => m.examCode.toUpperCase() == selectedExam.toUpperCase())
             .toList()
             .firstOrNull ??
         allMocks.firstOrNull;
 
+    final attempts = ref.watch(studentAttemptsProvider);
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            // instant local refresh
+            // Instant local refresh
             ref.read(streakProvider.notifier).refresh();
             ref.read(accuracyProvider.notifier).refresh();
             ref.read(totalQuestionsCountProvider.notifier).refresh();
+            ref.invalidate(todayQotdProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -65,47 +72,55 @@ class HomeScreen extends ConsumerWidget {
                 // Header Bar
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Image.asset(
-                              'assets/images/andaman_symbol.png',
-                              width: 22,
-                              height: 22,
-                              fit: BoxFit.contain,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'ANDAMAN QUIZ',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.deepNavy,
-                                letterSpacing: 0.8,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Image.asset(
+                                'assets/images/andaman_symbol.png',
+                                width: 22,
+                                height: 22,
+                                fit: BoxFit.contain,
                               ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'ANDAMAN QUIZ',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? AppColors.textPrimaryDark : AppColors.deepNavy,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _getGreeting(),
+                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _getGreeting(),
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
                           ),
-                        ),
-                        Text(
-                          'Ready for today\'s preparation?',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                          Text(
+                            'Ready for today\'s preparation?',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    // Notification / Info Icon
+                    const SizedBox(width: 8),
+                    // Settings / More Shortcut
                     IconButton.filledTonal(
                       onPressed: () => context.push('/more'),
                       icon: const Icon(Icons.settings_outlined, size: 20),
@@ -118,22 +133,29 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Compact Statistics Row
+                // Compact Premium Statistics Card (100% genuine calculated data)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: AppDimens.space16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: AppDimens.space14, vertical: 12),
                   decoration: BoxDecoration(
                     color: isDark ? AppColors.surfaceDark : Colors.white,
                     borderRadius: AppDimens.cardBorderRadius,
                     border: Border.all(
                       color: isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(isDark ? 30 : 10),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _StatItem(
                         icon: Icons.local_fire_department,
                         iconColor: const Color(0xFFEA580C),
+                        bgColor: const Color(0xFFEA580C).withAlpha(22),
                         value: '$streak Days',
                         label: 'Streak',
                       ),
@@ -141,6 +163,7 @@ class HomeScreen extends ConsumerWidget {
                       _StatItem(
                         icon: Icons.track_changes,
                         iconColor: AppColors.actionBlue,
+                        bgColor: AppColors.actionBlue.withAlpha(22),
                         value: '$accuracy%',
                         label: 'Accuracy',
                       ),
@@ -148,6 +171,7 @@ class HomeScreen extends ConsumerWidget {
                       _StatItem(
                         icon: Icons.check_circle_outline,
                         iconColor: AppColors.success,
+                        bgColor: AppColors.success.withAlpha(22),
                         value: '$totalQuestions',
                         label: 'Questions',
                       ),
@@ -156,113 +180,8 @@ class HomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Question of the Day (60-second challenge)
-                AnimatedPressable(
-                  onTap: () => context.push('/qotd'),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppDimens.space16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isDark
-                            ? [const Color(0xFF0F2652), const Color(0xFF1E3A8A)]
-                            : [const Color(0xFF0B2C5F), const Color(0xFF1D4ED8)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: AppDimens.cardBorderRadius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0B2C5F).withAlpha(38),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withAlpha(51),
-                                borderRadius: BorderRadius.circular(AppDimens.radiusPill),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(Icons.bolt, color: Color(0xFFFDE047), size: 14),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'QUESTION OF THE DAY',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Row(
-                              children: [
-                                Icon(Icons.timer_outlined, color: Colors.white70, size: 14),
-                                SizedBox(width: 4),
-                                Text(
-                                  '60s Challenge',
-                                  style: TextStyle(color: Colors.white70, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Test your Island & exam knowledge with today\'s fresh question.',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            height: 1.35,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Text(
-                                    'Attempt Now',
-                                    style: TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
-                                ],
-                              ),
-                            ),
-                            const Spacer(),
-                            const Text(
-                              '+2 Marks • Daily Rank',
-                              style: TextStyle(color: Colors.white70, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                // Live Question of the Day Hero Card (Firestore-backed with professional empty state)
+                const _QotdHeroCard(),
                 const SizedBox(height: 24),
 
                 // Choose Your Exam Section
@@ -274,20 +193,25 @@ class HomeScreen extends ConsumerWidget {
                 _ExamSelectorRow(selectedExam: selectedExam),
                 const SizedBox(height: 24),
 
-                // Continue Practice Progress Card
-                Text(
-                  'Continue Practice',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                _ContinuePracticeCard(),
-                const SizedBox(height: 24),
+                // Continue Practice Progress Card (Only shown when genuine attempts exist)
+                if (attempts.isNotEmpty) ...[
+                  Text(
+                    'Continue Practice',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 10),
+                  _ContinuePracticeCard(latestAttempt: attempts.last),
+                  const SizedBox(height: 24),
+                ],
 
-                // Andaman & Nicobar GK Special Banner (Prominent!)
+                // Andaman & Nicobar GK Special Banner (Prominent & Responsive!)
                 AnimatedPressable(
                   onTap: () => context.push('/andaman-gk'),
                   child: Container(
-                    padding: const EdgeInsets.all(AppDimens.space16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimens.space16,
+                      vertical: AppDimens.space14,
+                    ),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF064E3B).withAlpha(76) : const Color(0xFFECFDF5),
                       borderRadius: AppDimens.cardBorderRadius,
@@ -298,30 +222,32 @@ class HomeScreen extends ConsumerWidget {
                     child: Row(
                       children: [
                         Container(
-                          width: 48,
-                          height: 48,
+                          width: 44,
+                          height: 44,
                           decoration: BoxDecoration(
                             color: AppColors.islandEmerald,
                             borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
                           ),
-                          child: const Icon(Icons.waves, color: Colors.white, size: 28),
+                          child: const Icon(Icons.waves, color: Colors.white, size: 26),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 6,
+                                runSpacing: 3,
                                 children: [
                                   Text(
                                     'Andaman & Nicobar GK',
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: isDark ? Colors.white : const Color(0xFF065F46),
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
@@ -342,6 +268,8 @@ class HomeScreen extends ConsumerWidget {
                               const SizedBox(height: 3),
                               Text(
                                 'History, Tribes, Geography, 10° Channel, Wildlife & PYQs',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
@@ -350,7 +278,8 @@ class HomeScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_right, color: AppColors.islandEmerald),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.chevron_right, color: AppColors.islandEmerald, size: 22),
                       ],
                     ),
                   ),
@@ -361,9 +290,11 @@ class HomeScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Practice by Subject',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    Expanded(
+                      child: Text(
+                        'Practice by Subject',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
                     TextButton(
                       onPressed: () => context.go('/practice'),
@@ -450,12 +381,14 @@ class HomeScreen extends ConsumerWidget {
 class _StatItem extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
+  final Color bgColor;
   final String value;
   final String label;
 
   const _StatItem({
     required this.icon,
     required this.iconColor,
+    required this.bgColor,
     required this.value,
     required this.label,
   });
@@ -463,33 +396,41 @@ class _StatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Column(
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: iconColor),
-            const SizedBox(width: 4),
-            Text(
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
               value,
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: isDark ? AppColors.textDark : AppColors.textLight,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-            fontWeight: FontWeight.w500,
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -508,157 +449,402 @@ class _StatDivider extends StatelessWidget {
   }
 }
 
+class _QotdHeroCard extends ConsumerWidget {
+  const _QotdHeroCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final qotdAsync = ref.watch(todayQotdProvider);
+
+    return qotdAsync.when(
+      loading: () => Container(
+        height: 130,
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+          borderRadius: AppDimens.cardBorderRadius,
+          border: Border.all(
+            color: isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight,
+          ),
+        ),
+        padding: const EdgeInsets.all(AppDimens.space16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Container(
+              width: 130,
+              height: 16,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white12 : Colors.black12,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              height: 18,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white10 : Colors.black12,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            Container(
+              width: 100,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white12 : Colors.black12,
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ],
+        ),
+      ),
+      error: (_, _) => _buildEmptyState(context, isDark),
+      data: (qotd) {
+        if (qotd == null || !qotd.active) {
+          return _buildEmptyState(context, isDark);
+        }
+
+        final questionSnippet = (qotd.questionText != null && qotd.questionText!.trim().isNotEmpty)
+            ? qotd.questionText!.trim()
+            : "Today's daily challenge is live! Test your knowledge and claim your rank.";
+
+        return AnimatedPressable(
+          onTap: () => context.push('/qotd'),
+          child: Container(
+            padding: const EdgeInsets.all(AppDimens.space16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF0F2652), const Color(0xFF1E3A8A)]
+                    : [const Color(0xFF0B2C5F), const Color(0xFF1D4ED8)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: AppDimens.cardBorderRadius,
+              border: Border.all(
+                color: Colors.white.withAlpha(25),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0B2C5F).withAlpha(45),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(51),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusPill),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt, color: Color(0xFFFDE047), size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'QUESTION OF THE DAY',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.timer_outlined, color: Colors.white70, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          '60s Challenge',
+                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  questionSnippet,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.38,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Attempt Now',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
+                        ],
+                      ),
+                    ),
+                    const Text(
+                      '+2 Marks • Daily Rank',
+                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(AppDimens.space16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: AppDimens.cardBorderRadius,
+        border: Border.all(
+          color: isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.actionBlue.withAlpha(25),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.wb_sunny_outlined, color: AppColors.actionBlue, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Question of the Day',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  "Today's daily question is being curated by the editorial team. Check back shortly, or explore subject MCQs below!",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ExamSelectorRow extends ConsumerWidget {
   final String selectedExam;
   const _ExamSelectorRow({required this.selectedExam});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dbExams = ref.watch(examsStreamProvider).value ??
-        LocalDatabase.instance.getExams();
-    // Show up to first 4 exams from Firestore; shows nothing if no exams configured yet
-    final exams = dbExams.take(4).map((e) => e.code).toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final streamExams = ref.watch(examsStreamProvider).value;
+    final dbExams = (streamExams != null && streamExams.isNotEmpty)
+        ? streamExams
+        : LocalDatabase.instance.getExams();
 
-    if (exams.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    // Dynamically build exam options from Firestore (prepend ALL)
+    final examOptions = <Map<String, String>>[
+      {'code': 'ALL', 'label': 'All Exams'},
+      ...dbExams.map((e) => {'code': e.code, 'label': e.code}),
+    ];
 
-    return Row(
-      children: exams.map((exam) {
-        final isSelected = selectedExam.toUpperCase() == exam.toUpperCase();
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: examOptions.map((item) {
+          final code = item['code']!;
+          final label = item['label']!;
+          final isSelected = selectedExam.toUpperCase() == code.toUpperCase();
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
             child: AnimatedPressable(
               onTap: () {
-                ref.read(selectedExamProvider.notifier).setExam(exam);
+                ref.read(selectedExamProvider.notifier).setExam(code);
               },
-              child: Container(
-                height: 42,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppColors.actionBlue
-                      : (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.white),
-                  borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+                      : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                  borderRadius: BorderRadius.circular(AppDimens.radiusPill),
                   border: Border.all(
                     color: isSelected
                         ? AppColors.actionBlue
-                        : (Theme.of(context).brightness == Brightness.dark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
+                        : (isDark ? AppColors.cardBorderDark : AppColors.cardBorderLight),
                   ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            color: AppColors.actionBlue.withAlpha(60),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
-                alignment: Alignment.center,
                 child: Text(
-                  exam,
+                  label,
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                     color: isSelected
                         ? Colors.white
-                        : (Theme.of(context).brightness == Brightness.dark ? AppColors.textDark : AppColors.textLight),
+                        : (isDark ? AppColors.textDark : AppColors.textLight),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      }).toList(),
+          );
+        }).toList(),
+      ),
     );
   }
 }
 
 class _ContinuePracticeCard extends StatelessWidget {
+  final StudentAttempt latestAttempt;
+  const _ContinuePracticeCard({required this.latestAttempt});
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final attempts = LocalDatabase.instance.getAttempts();
+    final totalQuestions = latestAttempt.correctCount + latestAttempt.wrongCount + latestAttempt.unattemptedCount;
+    final progress = totalQuestions > 0 ? (latestAttempt.correctCount / totalQuestions).clamp(0.0, 1.0) : 0.0;
 
-    // If student has previous attempts, display their real latest activity
-    if (attempts.isNotEmpty) {
-      final latest = attempts.last;
-      return AppCard(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    latest.testTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Score: ${latest.score.toStringAsFixed(1)} • ${latest.correctCount}/${latest.correctCount + latest.wrongCount + latest.unattemptedCount} correct',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            ElevatedButton(
-              onPressed: () => context.push('/practice'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(90, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-              ),
-              child: const Text('Practice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Friendly onboarding state when new
     return AppCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.actionBlue.withAlpha(25),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.school_outlined, color: AppColors.actionBlue, size: 24),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Start Your Preparation',
-                  style: TextStyle(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  latestAttempt.testTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Explore subject-wise MCQs & mock tests',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.actionBlue.withAlpha(25),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${latestAttempt.accuracy.round()}% ACC',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.actionBlue,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Score: ${latestAttempt.score.toStringAsFixed(1)} / ${latestAttempt.maxScore.toStringAsFixed(0)} • ${latestAttempt.correctCount}/$totalQuestions correct',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
             ),
           ),
-          ElevatedButton(
-            onPressed: () => context.push('/practice'),
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(80, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.actionBlue),
             ),
-            child: const Text('Start', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton(
+                onPressed: () => context.push('/tests/solutions/${latestAttempt.id}'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(80, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () => context.push('/tests/instructions/${latestAttempt.testId}'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(90, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Retake', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
           ),
         ],
       ),

@@ -58,6 +58,7 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     });
 
     final isCorrect = index == currentQ.correctIndex;
+    LocalDatabase.instance.recordPracticeAnswer(isCorrect: isCorrect);
     if (!isCorrect) {
       LocalDatabase.instance.recordWrongQuestion(currentQ.id);
     }

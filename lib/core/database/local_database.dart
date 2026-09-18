@@ -27,15 +27,33 @@ class LocalDatabase {
   bool _isInitialized = false;
 
   // Increment when the cache schema changes to force a migration on existing devices
-  static const int _kCurrentDbVersion = 2;
+  static const int _kCurrentDbVersion = 3;
 
-  Future<void> init() async {
-    if (_isInitialized) return;
+  Future<void> init({bool force = false}) async {
+    if (_isInitialized && !force) return;
     _prefs = await SharedPreferences.getInstance();
 
     await _runMigrationIfNeeded();
     await _loadCachedData();
     _isInitialized = true;
+  }
+
+  @visibleForTesting
+  Future<void> resetForTesting() async {
+    _isInitialized = false;
+    _prefs = null;
+    _bookmarkedIds.clear();
+    _wrongQuestionIds.clear();
+    _purchasedProductIds.clear();
+    _banners.clear();
+    _notices.clear();
+    _questions.clear();
+    _categories.clear();
+    _exams.clear();
+    _subjects.clear();
+    _topics.clear();
+    _mockTests.clear();
+    _attempts.clear();
   }
 
   /// One-time migration: purges all legacy seeded/dev content while preserving
@@ -58,14 +76,11 @@ class LocalDatabase {
     await prefs.remove('db_notices');
     await prefs.remove('db_app_config');
 
-    // Reset fake hardcoded stats ONLY if student has no genuine attempt history
-    final attemptsRaw = prefs.getString('db_student_attempts');
-    final hasRealAttempts = attemptsRaw != null && attemptsRaw.isNotEmpty && attemptsRaw != '[]';
-    if (!hasRealAttempts) {
-      await prefs.setInt('user_total_questions', 0);
-      await prefs.setInt('user_streak_days', 0);
-      await prefs.remove('user_last_active_date');
-    }
+    // Purge legacy hardcoded accumulator keys entirely (seeded with 328/7 in old builds)
+    // Real metrics are derived dynamically from genuine attempt and practice history.
+    await prefs.remove('user_total_questions');
+    await prefs.remove('user_streak_days');
+    await prefs.remove('user_last_active_date');
 
     await prefs.setInt('local_db_version', _kCurrentDbVersion);
     debugPrint('LocalDatabase: migration complete.');
@@ -225,7 +240,10 @@ class LocalDatabase {
         }
       } catch (e) {
         debugPrint('Error decoding attempts: $e');
+        _attempts.clear();
       }
+    } else {
+      _attempts.clear();
     }
   }
 
@@ -385,35 +403,96 @@ class LocalDatabase {
   Future<void> recordAttempt(StudentAttempt attempt) async {
     _attempts.add(attempt);
     await _persistAttempts();
+  }
 
-    // Increment overall practice stats
-    final totalAttempts = (_prefs?.getInt('user_total_questions') ?? 0) + attempt.correctCount + attempt.wrongCount;
-    await _prefs?.setInt('user_total_questions', totalAttempts);
-
-    // Update streak if applicable
-    final lastActiveDateStr = _prefs?.getString('user_last_active_date');
-    final todayStr = DateTime.now().toIso8601String().split('T').first;
-    int currentStreak = _prefs?.getInt('user_streak_days') ?? 0;
-
-    if (lastActiveDateStr != todayStr) {
-      currentStreak += 1;
-      await _prefs?.setInt('user_streak_days', currentStreak);
-      await _prefs?.setString('user_last_active_date', todayStr);
+  /// Records an individual question answered in practice mode (outside mock tests)
+  Future<void> recordPracticeAnswer({required bool isCorrect}) async {
+    final now = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final practiceDates = _prefs?.getStringList('user_practice_dates') ?? [];
+    if (!practiceDates.contains(todayStr)) {
+      practiceDates.add(todayStr);
+      await _prefs?.setStringList('user_practice_dates', practiceDates);
+    }
+    final count = (_prefs?.getInt('user_practice_questions_count') ?? 0) + 1;
+    await _prefs?.setInt('user_practice_questions_count', count);
+    if (isCorrect) {
+      final correctCount = (_prefs?.getInt('user_practice_correct_count') ?? 0) + 1;
+      await _prefs?.setInt('user_practice_correct_count', correctCount);
     }
   }
 
-  int getStreakDays() => _prefs?.getInt('user_streak_days') ?? 0;
-  int getTotalQuestionsCount() => _prefs?.getInt('user_total_questions') ?? 0;
+  /// Calculates total questions answered across all genuine attempts + practice sessions
+  int getTotalQuestionsCount() {
+    int attemptsQuestions = 0;
+    for (final a in _attempts) {
+      attemptsQuestions += (a.correctCount + a.wrongCount);
+    }
+    final practiceQuestions = _prefs?.getInt('user_practice_questions_count') ?? 0;
+    return attemptsQuestions + practiceQuestions;
+  }
+
+  /// Calculates real accuracy percentage across genuine attempts + practice sessions
   int getAccuracyPercentage() {
-    if (_attempts.isEmpty) return 0;
     int totalQuestions = 0;
     int totalCorrect = 0;
     for (final a in _attempts) {
       totalQuestions += (a.correctCount + a.wrongCount);
       totalCorrect += a.correctCount;
     }
+    totalQuestions += (_prefs?.getInt('user_practice_questions_count') ?? 0);
+    totalCorrect += (_prefs?.getInt('user_practice_correct_count') ?? 0);
+
     if (totalQuestions == 0) return 0;
     return ((totalCorrect / totalQuestions) * 100).round();
+  }
+
+  /// Calculates genuine consecutive day streak based on student attempt/practice timestamps
+  int getStreakDays() {
+    final activeDates = <DateTime>{};
+
+    // Dates from genuine student attempts
+    for (final a in _attempts) {
+      activeDates.add(DateTime(a.timestamp.year, a.timestamp.month, a.timestamp.day));
+    }
+
+    // Dates from genuine practice sessions
+    final practiceDates = _prefs?.getStringList('user_practice_dates') ?? [];
+    for (final d in practiceDates) {
+      final parts = d.split('-');
+      if (parts.length == 3) {
+        final y = int.tryParse(parts[0]);
+        final m = int.tryParse(parts[1]);
+        final day = int.tryParse(parts[2]);
+        if (y != null && m != null && day != null) {
+          activeDates.add(DateTime(y, m, day));
+        }
+      }
+    }
+
+    if (activeDates.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // A streak is alive only if the student was active today or yesterday
+    DateTime currentCheck;
+    if (activeDates.contains(today)) {
+      currentCheck = today;
+    } else if (activeDates.contains(yesterday)) {
+      currentCheck = yesterday;
+    } else {
+      return 0;
+    }
+
+    int streak = 0;
+    while (activeDates.contains(currentCheck)) {
+      streak++;
+      currentCheck = currentCheck.subtract(const Duration(days: 1));
+    }
+
+    return streak;
   }
 
   // User Preferred Exam & Language

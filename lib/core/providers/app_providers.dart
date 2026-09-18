@@ -193,3 +193,14 @@ class QuestionsListNotifier extends Notifier<List<Question>> {
 
 final questionsListProvider =
     NotifierProvider<QuestionsListNotifier, List<Question>>(QuestionsListNotifier.new);
+
+// ---------------------------------------------------------------------------
+// Question of the Day (Live Firestore provider)
+// ---------------------------------------------------------------------------
+
+final todayQotdProvider = FutureProvider<QuestionOfTheDay?>((ref) async {
+  final now = DateTime.now();
+  final dateStr =
+      "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+  return FirestoreService.instance.fetchQOTD(dateStr);
+});

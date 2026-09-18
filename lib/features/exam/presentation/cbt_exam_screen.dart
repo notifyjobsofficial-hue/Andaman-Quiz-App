@@ -688,25 +688,16 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                 ),
               ),
 
-              // Question & Options in Scrollable Area
+              // Question & Options in Scrollable Area (Instantaneous switching - no decorative animation)
               Expanded(
                 child: currentQ == null
                     ? const Center(child: CircularProgressIndicator())
-                    : AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 150),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) {
-                          final disable = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-                          if (disable) return child;
-                          return FadeTransition(opacity: animation, child: child);
-                        },
-                        child: SingleChildScrollView(
-                          key: ValueKey<String>('q_${_test.id}_${_currentSectionIndex}_$_currentQuestionIndex'),
-                          padding: const EdgeInsets.all(AppDimens.space16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                    : SingleChildScrollView(
+                        key: ValueKey<String>('q_${_test.id}_${_currentSectionIndex}_$_currentQuestionIndex'),
+                        padding: const EdgeInsets.all(AppDimens.space16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                               // Question Box
                               AppCard(
                                 child: Column(
@@ -865,7 +856,6 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                             ],
                           ),
                         ),
-                      ),
               ),
 
               // SSC CBT Bottom Control Bar
