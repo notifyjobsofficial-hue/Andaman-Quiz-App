@@ -88,6 +88,13 @@ export async function safeSetDoc<T>(
   options?: SetOptions
 ): Promise<void> {
   const cleanData: any = sanitizeForFirestore(data);
+  if (cleanData && typeof cleanData === 'object') {
+    for (const key of Object.keys(cleanData)) {
+      if (cleanData[key] === undefined) {
+        delete cleanData[key];
+      }
+    }
+  }
   return options ? setDoc(docRef, cleanData, options) : setDoc(docRef, cleanData);
 }
 
@@ -99,6 +106,13 @@ export async function safeAddDoc<T>(
   data: T
 ): Promise<DocumentReference> {
   const cleanData: any = sanitizeForFirestore(data);
+  if (cleanData && typeof cleanData === 'object') {
+    for (const key of Object.keys(cleanData)) {
+      if (cleanData[key] === undefined) {
+        delete cleanData[key];
+      }
+    }
+  }
   return addDoc(collRef, cleanData);
 }
 
@@ -285,14 +299,21 @@ export async function fetchMockTests(): Promise<MockTest[]> {
 }
 
 export async function saveMockTest(test: MockTest): Promise<void> {
-  const payload: any = sanitizeForFirestore({ ...test });
+  const payload: any = { ...test };
 
-  // For FREE tests: productId, price, originalPrice, offerPrice must be completely omitted from Firestore
+  // For FREE mocks: isFree is true, price is 0, paid fields are omitted
   if (payload.isFree) {
-    delete payload.price;
+    payload.isFree = true;
+    payload.price = 0;
+    delete payload.productId;
     delete payload.originalPrice;
     delete payload.offerPrice;
-    delete payload.productId;
+  } else {
+    payload.isFree = false;
+    payload.price = Number(payload.price) || 0;
+    if (payload.productId) {
+      payload.productId = String(payload.productId).trim();
+    }
   }
 
   // If not scheduled / live, clean up start/end dates
@@ -301,7 +322,7 @@ export async function saveMockTest(test: MockTest): Promise<void> {
     delete payload.endDate;
   }
 
-  // Final defensive sanitization immediately before write
+  // Before the FINAL setDoc() call, sanitize the complete mock object using the existing centralized sanitizeForFirestore()
   const cleanPayload = sanitizeForFirestore(payload);
 
   // Save to BOTH 'mock_tests' and 'mocks' collections for complete project-wide compatibility

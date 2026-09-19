@@ -167,14 +167,14 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
 
     // 7. Access Type & Pricing validation
     let cleanProductId: string | undefined = undefined;
-    let cleanPrice: number | undefined = undefined;
+    let cleanPrice: number = 0;
     let cleanOriginalPrice: number | undefined = undefined;
     let cleanOfferPrice: number | undefined = undefined;
 
     if (isFree) {
-      // For FREE tests: productId, selling price, original price and offer price must not be required and should be omitted/null
+      // For FREE tests: isFree is true, price is 0, paid fields omitted
+      cleanPrice = 0;
       cleanProductId = undefined;
-      cleanPrice = undefined;
       cleanOriginalPrice = undefined;
       cleanOfferPrice = undefined;
     } else {
@@ -256,6 +256,7 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
         negativeMarks: negativeMarksNum,
         attemptsCount: editingTest ? editingTest.attemptsCount : 0,
         isFree,
+        price: isFree ? 0 : cleanPrice,
         status,
         language: 'both',
         displayOrder: editingTest ? editingTest.displayOrder : mockTests.length + 1,
@@ -276,7 +277,6 @@ export const MockTests: React.FC<MockTestsProps> = ({ onNavigateToBuilder }) => 
       // For PAID tests: add validated pricing and Google Play Product ID (SKU)
       if (!isFree) {
         test.productId = cleanProductId;
-        test.price = cleanPrice;
         if (cleanOriginalPrice !== undefined) test.originalPrice = cleanOriginalPrice;
         if (cleanOfferPrice !== undefined) test.offerPrice = cleanOfferPrice;
       }
