@@ -6,6 +6,7 @@ import '../../../core/database/local_database.dart';
 import '../../../core/models/models.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/services/firestore_service.dart';
 
 class TestInstructionsScreen extends StatefulWidget {
   final String testId;
@@ -19,6 +20,35 @@ class TestInstructionsScreen extends StatefulWidget {
 class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   bool _agreedToTerms = true;
   bool _isStarting = false;
+  bool _isLoading = false;
+  MockTest? _fetchedTest;
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureTestLoaded();
+  }
+
+  Future<void> _ensureTestLoaded() async {
+    final local = LocalDatabase.instance.getMockTestById(widget.testId);
+    if (local != null) return;
+
+    if (mounted) setState(() => _isLoading = true);
+    try {
+      final remote = await FirestoreService.instance.fetchMockTest(widget.testId);
+      if (remote != null) {
+        await LocalDatabase.instance.syncMockTestsFromFirestore([remote]);
+        if (mounted) {
+          setState(() {
+            _fetchedTest = remote;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
 
   void _onStartTest(MockTest test) {
     if (_isStarting) return;
@@ -29,12 +59,57 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final test = LocalDatabase.instance.getMockTestById(widget.testId);
+    final test = LocalDatabase.instance.getMockTestById(widget.testId) ?? _fetchedTest;
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Test Instructions')),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 14),
+              Text('Loading test details...', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+      );
+    }
 
     if (test == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Test Instructions')),
-        body: const Center(child: Text('Test not found.')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.info_outline, size: 48, color: AppColors.textMutedLight),
+                const SizedBox(height: 16),
+                const Text(
+                  'Test Unavailable',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This test is no longer active or could not be loaded.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () => context.go('/tests'),
+                  child: const Text('Browse Available Tests'),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 

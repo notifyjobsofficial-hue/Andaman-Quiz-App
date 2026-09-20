@@ -146,7 +146,8 @@ export interface AppNotice {
 
 export interface LiveTestItem {
   id: string;
-  mockTestId: string;
+  testId: string;
+  mockTestId?: string;
   title: string;
   startAt: string;
   endAt: string;

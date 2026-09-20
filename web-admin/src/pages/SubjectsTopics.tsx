@@ -70,7 +70,7 @@ export const SubjectsTopics: React.FC = () => {
       setEditingSub(null);
       setSubName('');
       setSubHindi('');
-      setSubExams(['CGL', 'CHSL', 'POLICE', 'MTS']);
+      setSubExams(exams.length > 0 ? exams.map((ex) => ex.code) : ['CGL', 'CHSL', 'POLICE', 'MTS']);
       setIsAndamanSpecial(false);
     }
     setIsSubModalOpen(true);
@@ -357,6 +357,33 @@ export const SubjectsTopics: React.FC = () => {
               onChange={(e) => setSubExams(e.target.value.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))}
               className="w-full text-xs p-2.5 border border-slate-200 rounded-xl outline-none"
             />
+            {exams.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {exams.map((ex) => {
+                  const isChecked = subExams.includes(ex.code);
+                  return (
+                    <button
+                      type="button"
+                      key={ex.id}
+                      onClick={() => {
+                        if (isChecked) {
+                          setSubExams(subExams.filter((c) => c !== ex.code));
+                        } else {
+                          setSubExams([...subExams, ex.code]);
+                        }
+                      }}
+                      className={`text-[11px] font-bold px-2 py-1 rounded-lg border transition ${
+                        isChecked
+                          ? 'bg-brand-50 border-brand-500 text-brand-700'
+                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      {isChecked ? '✓ ' : '+ '}{ex.name} ({ex.code})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer pt-2">

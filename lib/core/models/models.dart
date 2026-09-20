@@ -126,6 +126,20 @@ class Subject {
     examCodes: List<String>.from(map['examCodes'] ?? []),
     isAndamanSpecial: map['isAndamanSpecial'] ?? false,
   );
+
+  /// Flexible exam matcher: handles exact match, substring match, case-insensitivity,
+  /// alphanumeric normalization (e.g. "CGL" matches "AN CGL"), and global subjects.
+  bool matchesExam(String targetExam) {
+    if (targetExam.toUpperCase() == 'ALL') return true;
+    if (examCodes.isEmpty) return true; // Global subject if not restricted
+    final normTarget = targetExam.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    return examCodes.any((code) {
+      final normCode = code.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      return normCode == normTarget ||
+          normTarget.contains(normCode) ||
+          normCode.contains(normTarget);
+    });
+  }
 }
 
 class Topic {
@@ -945,7 +959,8 @@ enum LiveTestStatus {
 
 class LiveTestItem {
   final String id;
-  final String mockTestId;
+  final String testId; // Canonical linked mock test ID
+  String get mockTestId => testId; // Backward-compatible alias
   final String title;
   final DateTime startAt;
   final DateTime endAt;
@@ -958,7 +973,8 @@ class LiveTestItem {
 
   const LiveTestItem({
     required this.id,
-    required this.mockTestId,
+    String? testId,
+    String? mockTestId,
     required this.title,
     required this.startAt,
     required this.endAt,
@@ -968,10 +984,13 @@ class LiveTestItem {
     this.allowEarlyJoin = false,
     this.createdAt,
     this.updatedAt,
-  });
+  }) : testId = testId ?? mockTestId ?? '';
 
   LiveTestStatus get status {
     final now = DateTime.now();
+    if (endAt.isBefore(startAt) || endAt.isAtSameMomentAs(startAt)) {
+      return LiveTestStatus.ended;
+    }
     if (now.isBefore(startAt)) {
       return LiveTestStatus.upcoming;
     } else if (now.isBefore(endAt)) {
@@ -993,7 +1012,8 @@ class LiveTestItem {
 
   Map<String, dynamic> toMap() => {
     'id': id,
-    'mockTestId': mockTestId,
+    'testId': testId,
+    'mockTestId': testId, // Dual-write for backward compatibility
     'title': title,
     'startAt': startAt.toIso8601String(),
     'endAt': endAt.toIso8601String(),
@@ -1017,9 +1037,12 @@ class LiveTestItem {
       return DateTime.now();
     }
 
+    final linkedTestId = (map['testId'] ?? map['mockTestId'] ?? map['mockId'] ?? '').toString();
+
     return LiveTestItem(
       id: map['id'] ?? '',
-      mockTestId: map['mockTestId'] ?? map['testId'] ?? '',
+      testId: linkedTestId,
+      mockTestId: linkedTestId,
       title: map['title'] ?? '',
       startAt: parseDate(map['startAt'] ?? map['startDate']),
       endAt: parseDate(map['endAt'] ?? map['endDate']),

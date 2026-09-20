@@ -52,11 +52,20 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
   }
 
   Future<void> _initExam() async {
-    final mock = LocalDatabase.instance.getMockTestById(widget.testId);
+    MockTest? mock = LocalDatabase.instance.getMockTestById(widget.testId);
+    if (mock == null) {
+      try {
+        mock = await FirestoreService.instance.fetchMockTest(widget.testId);
+        if (mock != null) {
+          await LocalDatabase.instance.syncMockTestsFromFirestore([mock]);
+        }
+      } catch (_) {}
+    }
+
     if (mock == null) {
       if (mounted) {
         setState(() {
-          _loadError = 'Test not found. Please try again.';
+          _loadError = 'The requested examination could not be loaded. Please return to tests.';
           _isLoadingQuestions = false;
         });
       }

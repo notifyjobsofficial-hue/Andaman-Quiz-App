@@ -292,7 +292,7 @@ class LocalDatabase {
     if (examCode == null || examCode == 'ALL') {
       return List.unmodifiable(_subjects);
     }
-    return _subjects.where((s) => s.examCodes.contains(examCode)).toList();
+    return _subjects.where((s) => s.matchesExam(examCode)).toList();
   }
 
   Subject? getSubjectById(String id) {

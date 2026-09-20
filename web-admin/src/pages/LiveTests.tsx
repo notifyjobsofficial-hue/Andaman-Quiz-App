@@ -92,7 +92,7 @@ export const LiveTests: React.FC = () => {
   const handleOpenEditModal = (t: LiveTestItem) => {
     setEditingTest(t);
     setFormError(null);
-    setSelectedMockId(t.mockTestId);
+    setSelectedMockId(t.testId || t.mockTestId || '');
     setTitle(t.title);
 
     const s = new Date(t.startAt);
@@ -122,8 +122,8 @@ export const LiveTests: React.FC = () => {
     e.preventDefault();
     setFormError(null);
 
-    if (!selectedMockId) {
-      setFormError('Please select an existing Mock Test.');
+    if (!selectedMockId || !mockTests.some((m) => m.id === selectedMockId)) {
+      setFormError('Please select a valid existing Mock Test from the list.');
       return;
     }
     if (!title.trim()) {
@@ -156,7 +156,8 @@ export const LiveTests: React.FC = () => {
 
       const payload: LiveTestItem = {
         id: liveTestId,
-        mockTestId: selectedMockId,
+        testId: selectedMockId, // Canonical linked mock test ID
+        mockTestId: selectedMockId, // Dual-write for backward compatibility
         title: title.trim(),
         startAt: startDateTime.toISOString(),
         endAt: endDateTime.toISOString(),
@@ -275,7 +276,8 @@ export const LiveTests: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {liveTests.map((t) => {
                   const status = calculateStatus(t.startAt, t.endAt);
-                  const linkedMock = mockTests.find((m) => m.id === t.mockTestId);
+                  const canonicalTestId = t.testId || t.mockTestId || '';
+                  const linkedMock = mockTests.find((m) => m.id === canonicalTestId);
 
                   return (
                     <tr key={t.id} className="hover:bg-slate-50 transition">
@@ -294,7 +296,9 @@ export const LiveTests: React.FC = () => {
                             <span className="text-xs text-slate-400 ml-1">({linkedMock.examCode})</span>
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400 font-mono">{t.mockTestId}</span>
+                          <span className="text-xs text-rose-600 font-mono font-bold flex items-center gap-1">
+                            <AlertCircle size={12} /> Test Missing ({canonicalTestId || 'None'})
+                          </span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap text-slate-600">

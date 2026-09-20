@@ -41,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
         : LocalDatabase.instance.getSubjects();
     final subjects = selectedExam == 'ALL'
         ? allSubjects
-        : allSubjects.where((s) => s.examCodes.contains(selectedExam)).toList();
+        : allSubjects.where((s) => s.matchesExam(selectedExam)).toList();
 
     final streamMocks = ref.watch(mockTestsStreamProvider).value;
     final allMocks = (streamMocks != null && streamMocks.isNotEmpty)
@@ -212,7 +212,6 @@ class HomeScreen extends ConsumerWidget {
 
                 // Dynamic Live Test Card (Conditioned on active LIVE or scheduled UPCOMING)
                 const LiveTestHomeCard(),
-                const SizedBox(height: 20),
 
                 // Practice by Subject
                 Row(

@@ -36,7 +36,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         : LocalDatabase.instance.getSubjects();
     final subjects = _activeExam == 'ALL'
         ? allSubjects
-        : allSubjects.where((s) => s.examCodes.contains(_activeExam)).toList();
+        : allSubjects.where((s) => s.matchesExam(_activeExam)).toList();
 
     return Scaffold(
       appBar: AppBar(

@@ -142,13 +142,17 @@ class StatusBadge extends StatelessWidget {
             Icon(icon, size: fontSize + 2, color: textColor),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w700,
-              color: textColor,
-              letterSpacing: 0.2,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ],

@@ -92,12 +92,33 @@ class FirestoreService {
   }
 
   // --- Mock Tests ---
+  Future<MockTest?> fetchMockTest(String testId) async {
+    if (testId.trim().isEmpty) return null;
+    try {
+      final docMocks = await _firestore.collection(colMocks).doc(testId).get();
+      if (docMocks.exists && docMocks.data() != null) {
+        final data = docMocks.data()!;
+        data['id'] = docMocks.id;
+        return MockTest.fromMap(data);
+      }
+      final docMockTests = await _firestore.collection('mock_tests').doc(testId).get();
+      if (docMockTests.exists && docMockTests.data() != null) {
+        final data = docMockTests.data()!;
+        data['id'] = docMockTests.id;
+        return MockTest.fromMap(data);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching mock test $testId: $e');
+      return null;
+    }
+  }
+
   Future<void> saveMockTest(MockTest mockTest) async {
     try {
-      await _firestore
-          .collection(colMocks)
-          .doc(mockTest.id)
-          .set(mockTest.toMap(), SetOptions(merge: true));
+      final map = mockTest.toMap();
+      await _firestore.collection(colMocks).doc(mockTest.id).set(map, SetOptions(merge: true));
+      await _firestore.collection('mock_tests').doc(mockTest.id).set(map, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Error saving mock test to Firestore: $e');
       rethrow;
@@ -206,20 +227,46 @@ class FirestoreService {
   }
 
   void _subscribeToMockTests() {
-    final sub = _firestore
-        .collection(colMocks)
-        .where('status', isEqualTo: 'published')
-        .snapshots()
-        .listen((snapshot) async {
+    final Map<String, MockTest> mergedMocks = {};
+
+    void updateAndSync() async {
+      final list = mergedMocks.values
+          .where((m) => m.status.toLowerCase() == 'published')
+          .toList()
+        ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+      await LocalDatabase.instance.syncMockTestsFromFirestore(list);
+      _mockTestsController.add(list);
+    }
+
+    final sub1 = _firestore.collection(colMocks).snapshots().listen((snapshot) {
       try {
-        final mocks = snapshot.docs.map((d) => MockTest.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncMockTestsFromFirestore(mocks);
-        _mockTestsController.add(mocks);
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          mergedMocks[doc.id] = MockTest.fromMap(data);
+        }
+        updateAndSync();
       } catch (e) {
-        debugPrint('MockTests sync error: $e');
+        debugPrint('Mocks sync error: $e');
       }
-    }, onError: (e) => debugPrint('MockTests stream error: $e'));
-    _subscriptions.add(sub);
+    }, onError: (e) => debugPrint('Mocks stream error: $e'));
+    _subscriptions.add(sub1);
+
+    final sub2 = _firestore.collection('mock_tests').snapshots().listen((snapshot) {
+      try {
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          if (!mergedMocks.containsKey(doc.id)) {
+            mergedMocks[doc.id] = MockTest.fromMap(data);
+          }
+        }
+        updateAndSync();
+      } catch (e) {
+        debugPrint('Mock_tests sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Mock_tests stream error: $e'));
+    _subscriptions.add(sub2);
   }
 
   void _subscribeToBanners() {

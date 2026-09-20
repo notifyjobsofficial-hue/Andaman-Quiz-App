@@ -8,6 +8,7 @@ import '../../../../core/database/local_database.dart';
 import '../../../../core/models/models.dart';
 import '../../../../core/providers/app_providers.dart';
 import '../../../../core/widgets/animated_pressable.dart';
+import '../../../../core/services/firestore_service.dart';
 
 class LiveTestHomeCard extends ConsumerStatefulWidget {
   const LiveTestHomeCard({super.key});
@@ -18,6 +19,27 @@ class LiveTestHomeCard extends ConsumerStatefulWidget {
 
 class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
   Timer? _countdownTimer;
+  final Set<String> _resolvingTestIds = {};
+  final Set<String> _failedTestIds = {};
+
+  void _resolveLinkedTest(String testId) async {
+    if (testId.isEmpty || _resolvingTestIds.contains(testId) || _failedTestIds.contains(testId)) return;
+    _resolvingTestIds.add(testId);
+    try {
+      final mock = await FirestoreService.instance.fetchMockTest(testId);
+      if (mock != null) {
+        await LocalDatabase.instance.syncMockTestsFromFirestore([mock]);
+        if (mounted) setState(() {});
+      } else {
+        _failedTestIds.add(testId);
+        if (mounted) setState(() {});
+      }
+    } catch (_) {
+      _failedTestIds.add(testId);
+    } finally {
+      _resolvingTestIds.remove(testId);
+    }
+  }
 
   @override
   void initState() {
@@ -113,7 +135,7 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
-                context.push('/tests/instructions/${liveTest.mockTestId}');
+                context.push('/tests/instructions/${liveTest.testId}');
               },
               child: const Text('Join Early'),
             ),
@@ -133,7 +155,9 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
     // Filter valid published tests whose status is either LIVE or UPCOMING
     final candidateTests = allTests.where((t) {
       if (!t.isPublished) return false;
-      return t.status == LiveTestStatus.live || t.status == LiveTestStatus.upcoming;
+      if (t.status != LiveTestStatus.live && t.status != LiveTestStatus.upcoming) return false;
+      if (t.testId.trim().isEmpty) return false;
+      return true;
     }).toList();
 
     if (candidateTests.isEmpty) {
@@ -150,18 +174,32 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
 
     final liveTest = candidateTests.first;
     final isLive = liveTest.status == LiveTestStatus.live;
-    final linkedMock = LocalDatabase.instance.getMockTestById(liveTest.mockTestId);
+    final linkedMock = LocalDatabase.instance.getMockTestById(liveTest.testId);
 
-    final questionsCount = linkedMock?.totalQuestions ?? 100;
-    final durationMins = linkedMock?.durationMinutes ?? 120;
+    if (linkedMock == null) {
+      _resolveLinkedTest(liveTest.testId);
+      // If referenced test resolution failed, card will be hidden via _failedTestIds
+    }
+
+    final detailText = (linkedMock != null && linkedMock.totalQuestions > 0 && linkedMock.durationMinutes > 0)
+        ? '${linkedMock.totalQuestions} Questions • ${linkedMock.durationMinutes} Minutes'
+        : (linkedMock != null && linkedMock.totalQuestions > 0
+            ? '${linkedMock.totalQuestions} Questions'
+            : 'Live Examination');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Section Typography Heading
+        Text(
+          'Live Tests',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 10),
         AnimatedPressable(
           onTap: () {
             if (isLive) {
-              context.push('/tests/instructions/${liveTest.mockTestId}');
+              context.push('/tests/instructions/${liveTest.testId}');
             } else {
               _showUpcomingDetails(context, liveTest, linkedMock);
             }
@@ -267,7 +305,7 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
 
                 // Details: Questions & Duration
                 Text(
-                  '$questionsCount Questions • $durationMins Minutes',
+                  detailText,
                   style: const TextStyle(
                     color: Colors.white70,
                     fontSize: 12,
@@ -321,6 +359,7 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
             ),
           ),
         ),
+        const SizedBox(height: 20),
       ],
     );
   }
