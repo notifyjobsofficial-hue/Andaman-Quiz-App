@@ -66,8 +66,35 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
     ? Math.round((job.progress.processedPages / job.progress.totalPages) * 100)
     : 0;
 
+  const firstIncompleteBatch = batches.find((b) => b.status !== 'completed');
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 text-slate-200 py-4">
+      {/* Resumable Checkpoint Alert if Interrupted or Paused */}
+      {firstIncompleteBatch && job.status !== 'completed' && (
+        <div className="p-4 bg-amber-950/40 border border-amber-700/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+            <div>
+              <span className="font-bold text-amber-300 text-sm block">Resumable Processing Checkpoint</span>
+              <span className="text-[11px] text-amber-300/80">
+                Processing interrupted at Batch #{firstIncompleteBatch.batchIndex + 1} (Pages {firstIncompleteBatch.startPage}–{firstIncompleteBatch.endPage}).
+                Completed batches remain 100% safely persisted in Firestore.
+              </span>
+            </div>
+          </div>
+          {onResumeJob && (
+            <button
+              onClick={onResumeJob}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs whitespace-nowrap transition flex items-center gap-1.5 shadow-md"
+            >
+              <Play size={14} />
+              Resume Processing From Checkpoint
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Top Active Job Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
@@ -90,7 +117,7 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
             </div>
             <p className="text-xs text-slate-400 mt-1">
               Job ID: <span className="font-mono text-slate-300">{job.id}</span> • Started by{' '}
-              <span className="text-slate-300">{job.createdBy}</span>
+              <span className="text-slate-300">{job.createdBy}</span> • Mode: <span className="text-brand-400 font-semibold">Resumable Checkpoints</span>
             </p>
           </div>
 
@@ -106,7 +133,7 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
               </button>
             )}
 
-            {job.status === 'paused' && onResumeJob && (
+            {(job.status === 'paused' || (job.status === 'processing' && firstIncompleteBatch)) && onResumeJob && (
               <button
                 onClick={onResumeJob}
                 className="px-3.5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white transition flex items-center gap-1.5 shadow-md"

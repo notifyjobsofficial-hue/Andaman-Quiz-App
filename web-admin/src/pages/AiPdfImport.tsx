@@ -32,6 +32,8 @@ import {
 } from '../services/aiImportService';
 import { AiBatchProcessor } from '../services/aiBatchProcessor';
 import { loadPdfDocument } from '../utils/pdfParser';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { storage } from '../firebase/config';
 
 // Subcomponents
 import { PdfUploadTab } from '../components/ai-import/PdfUploadTab';
@@ -87,10 +89,32 @@ export const AiPdfImport: React.FC = () => {
           const recent = jobs[0];
           setActiveJob(recent);
           loadStagedForJob(recent.id);
+          loadPdfFromStorage(recent);
         }
       })
       .catch((err) => console.error('Initial data load error:', err));
   }, []);
+
+  const loadPdfFromStorage = async (job: PdfImportJob): Promise<PDFDocumentProxy | null> => {
+    if (!job.storagePath) return null;
+    try {
+      let downloadUrl = job.storagePath;
+      if (!downloadUrl.startsWith('http://') && !downloadUrl.startsWith('https://')) {
+        const storageRef = ref(storage, job.storagePath);
+        downloadUrl = await getDownloadURL(storageRef);
+      }
+
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status} loading PDF from storage`);
+      const buffer = await response.arrayBuffer();
+      const doc = await loadPdfDocument(buffer);
+      setPdfDoc(doc);
+      return doc;
+    } catch (err) {
+      console.warn(`Could not reload PDF from storage (${job.storagePath}):`, err);
+      return null;
+    }
+  };
 
   const loadStagedForJob = async (jobId: string) => {
     setLoadingStaged(true);
@@ -118,7 +142,7 @@ export const AiPdfImport: React.FC = () => {
       const doc = await loadPdfDocument(file);
       setPdfDoc(doc);
 
-      // 2. Start Background Batch Processing
+      // 2. Start Resumable Batch Processing
       processorRef.current.processJob(job, doc, existingQuestions, {
         onProgress: () => {
           loadStagedForJob(job.id);
@@ -135,7 +159,10 @@ export const AiPdfImport: React.FC = () => {
   // Handle job selection from history
   const handleSelectJobFromHistory = async (selected: PdfImportJob) => {
     setActiveJob(selected);
-    await loadStagedForJob(selected.id);
+    await Promise.all([
+      loadStagedForJob(selected.id),
+      loadPdfFromStorage(selected),
+    ]);
     setCurrentSubTab('review');
   };
 
@@ -145,9 +172,23 @@ export const AiPdfImport: React.FC = () => {
     if (activeJob) setActiveJob({ ...activeJob, status: 'paused' });
   };
 
-  const handleResume = () => {
+  const handleResume = async () => {
+    if (!activeJob) return;
+    let doc = pdfDoc;
+    if (!doc) {
+      doc = await loadPdfFromStorage(activeJob);
+    }
+    if (!doc) {
+      alert('Could not load source PDF to resume. Please check network connection or re-upload.');
+      return;
+    }
+
     processorRef.current.resume();
-    if (activeJob) setActiveJob({ ...activeJob, status: 'processing' });
+    setActiveJob({ ...activeJob, status: 'processing' });
+    processorRef.current.resumeFromCheckpoint(activeJob, doc, existingQuestions, {
+      onProgress: () => loadStagedForJob(activeJob.id),
+      onBatchComplete: () => loadStagedForJob(activeJob.id),
+    });
   };
 
   const handleCancel = () => {
