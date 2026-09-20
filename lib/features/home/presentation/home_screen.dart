@@ -805,7 +805,7 @@ class _ContinuePracticeCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Score: ${latestAttempt.score.toStringAsFixed(1)} / ${latestAttempt.maxScore.toStringAsFixed(0)} • ${latestAttempt.correctCount}/$totalQuestions correct',
+            'Score: ${latestAttempt.score.toStringAsFixed(2)} / ${latestAttempt.maxScore.toStringAsFixed(2)} • ${latestAttempt.correctCount}/$totalQuestions correct',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,

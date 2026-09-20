@@ -144,7 +144,7 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          analytics.score.toStringAsFixed(1),
+                          analytics.score.toStringAsFixed(2),
                           style: TextStyle(
                             fontSize: 44,
                             fontWeight: FontWeight.w900,
@@ -154,7 +154,7 @@ class _ResultsScreenState extends ConsumerState<ResultsScreen> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '/ ${analytics.maxScore.toInt()}',
+                          '/ ${analytics.maxScore.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w600,

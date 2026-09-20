@@ -361,19 +361,23 @@ class _PreviousAttemptsTab extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 50,
+                  width: 58,
                   height: 50,
                   decoration: BoxDecoration(
                     color: isPassed ? AppColors.successLight : AppColors.errorLight,
                     borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    a.score.toStringAsFixed(0),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: isPassed ? AppColors.success : AppColors.error,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      a.score.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: isPassed ? AppColors.success : AppColors.error,
+                      ),
                     ),
                   ),
                 ),

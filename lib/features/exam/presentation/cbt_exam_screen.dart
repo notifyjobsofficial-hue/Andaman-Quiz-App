@@ -707,7 +707,7 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          '+${(_test.totalMarks / _test.totalQuestions).toStringAsFixed(1)} / -${_test.negativeMarks.toStringAsFixed(2)} Marks',
+                                          '+${(_test.totalMarks / _test.totalQuestions).toStringAsFixed(2)} / -${_test.negativeMarks.toStringAsFixed(2)} Marks',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
