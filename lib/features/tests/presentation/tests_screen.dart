@@ -418,7 +418,7 @@ class _MockTestListCardState extends State<_MockTestListCard> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes\n${mockTest.totalMarks.toInt()} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
+                  '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes\n${mockTest.totalMarks.toStringAsFixed(2)} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,

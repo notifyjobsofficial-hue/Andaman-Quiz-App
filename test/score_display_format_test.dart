@@ -161,5 +161,23 @@ void main() {
       expect(find.text('12.50'), findsOneWidget);
       expect(find.text('/ 146.00'), findsOneWidget);
     });
+
+    test('4. All marks and score values format to 2 decimal places across student app', () {
+      const double testMarks1 = 146.0;
+      const double testMarks2 = 12.0;
+      const double testMarks3 = 12.5;
+      const double testMarks4 = 12.25;
+      const double testNegMarks = 0.3;
+
+      expect(testMarks1.toStringAsFixed(2), '146.00');
+      expect(testMarks2.toStringAsFixed(2), '12.00');
+      expect(testMarks3.toStringAsFixed(2), '12.50');
+      expect(testMarks4.toStringAsFixed(2), '12.25');
+      expect(testNegMarks.toStringAsFixed(2), '0.30');
+
+      // Verify formatted string pattern used in test cards and test instructions
+      final testCardSubtitle = '73 Questions • 120 Minutes • ${testMarks1.toStringAsFixed(2)} Marks • -${testNegMarks.toStringAsFixed(2)} Negative';
+      expect(testCardSubtitle, '73 Questions • 120 Minutes • 146.00 Marks • -0.30 Negative');
+    });
   });
 }

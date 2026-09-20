@@ -970,7 +970,7 @@ class _LatestMockTestCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes • ${mockTest.totalMarks.toInt()} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
+            '${mockTest.totalQuestions} Questions • ${mockTest.durationMinutes} Minutes • ${mockTest.totalMarks.toStringAsFixed(2)} Marks • -${mockTest.negativeMarks.toStringAsFixed(2)} Negative',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,

@@ -90,7 +90,7 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                               children: [
                                 _TestStatCol(title: 'Questions', value: '${test.totalQuestions}'),
                                 _TestStatCol(title: 'Time', value: '${test.durationMinutes} Mins'),
-                                _TestStatCol(title: 'Marks', value: '${test.totalMarks.toInt()}'),
+                                _TestStatCol(title: 'Marks', value: test.totalMarks.toStringAsFixed(2)),
                                 _TestStatCol(title: 'Negative', value: '-${test.negativeMarks.toStringAsFixed(2)}'),
                               ],
                             ),
