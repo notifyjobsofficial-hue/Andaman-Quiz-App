@@ -18,7 +18,10 @@ import {
   AlertTriangle,
   Loader2,
   ChevronRight,
-  Eye
+  Eye,
+  FileText,
+  Cloud,
+  Database
 } from 'lucide-react';
 
 interface ProcessingJobsTabProps {
@@ -172,6 +175,28 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
               <Eye size={15} />
               Open Review Queue ({job.metrics.detectedQuestions})
             </button>
+          </div>
+        </div>
+
+        {/* Pipeline Stage Feedback Breakdown */}
+        <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="flex items-center gap-2 text-slate-300">
+            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+            <span className="truncate">PDF Selected & Loaded</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-300">
+            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+            <span className="truncate">{job.progress.totalPages} Pages Detected</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-300">
+            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+            <span className="truncate">
+              {job.storagePath.startsWith('http') ? 'Cloud Stored' : 'Local In-Memory'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-300">
+            <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+            <span className="truncate">Staging Job Created</span>
           </div>
         </div>
 

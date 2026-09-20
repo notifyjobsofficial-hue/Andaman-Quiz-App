@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs"
+    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs && node test_timeout_resilience.mjs"
   },
   "dependencies": {
     "firebase": "^10.13.2",

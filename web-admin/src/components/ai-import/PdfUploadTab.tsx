@@ -12,9 +12,15 @@ import {
 } from 'lucide-react';
 import { Exam, Subject, Topic, ImportMode, PdfImportJob } from '../../types';
 import { inspectPdf } from '../../utils/pdfParser';
-import { uploadImage } from '../../firebase/storage';
+import { uploadPdfFile, UploadProgress } from '../../firebase/storage';
 import { createImportJob } from '../../services/aiImportService';
 import { auth } from '../../firebase/config';
+
+export type InitStage =
+  | 'IDLE'
+  | 'UPLOADING_STORAGE'
+  | 'CREATING_FIRESTORE_JOB'
+  | 'STARTING_PROCESSOR';
 
 interface PdfUploadTabProps {
   exams: Exam[];
@@ -55,6 +61,9 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
   const [extractImages, setExtractImages] = useState(true);
 
   const [isCreating, setIsCreating] = useState(false);
+  const [initStage, setInitStage] = useState<InitStage>('IDLE');
+  const [uploadPercent, setUploadPercent] = useState<number>(0);
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = async (selected: File) => {
@@ -64,6 +73,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
     }
 
     setError(null);
+    setStorageWarning(null);
     setFile(selected);
     setIsInspecting(true);
 
@@ -83,19 +93,37 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
 
     setIsCreating(true);
     setError(null);
+    setStorageWarning(null);
+    setInitStage('UPLOADING_STORAGE');
+    setUploadPercent(0);
 
     try {
       const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-      
-      // Upload PDF to Firebase Storage
-      const storagePath = `admin_pdf_uploads/${jobId}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      let uploadedUrl = '';
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `admin_pdf_uploads/${jobId}_${cleanName}`;
+      let uploadedUrl = storagePath;
+
+      // 1. Storage Upload attempt with 15-second timeout and live progress reporting
       try {
-        uploadedUrl = await uploadImage(file, 'admin_pdf_uploads');
-      } catch {
-        // If storage upload encounters rules in development, proceed with storagePath reference
+        const uploadResult = await uploadPdfFile(
+          file,
+          'admin_pdf_uploads',
+          (prog: UploadProgress) => setUploadPercent(prog.percent),
+          15000 // 15s max timeout to prevent any infinite stall
+        );
+        uploadedUrl = uploadResult.downloadUrl || uploadResult.storagePath;
+      } catch (storageErr: any) {
+        // In Free Local mode, client-side extraction uses in-memory PDF buffer.
+        // If Cloud Storage upload encounters CORS or network timeout, proceed locally without blocking!
+        console.warn('Storage upload bypassed / timed out:', storageErr);
+        setStorageWarning(
+          'Cloud Storage backup upload was bypassed (CORS / network timeout). Free Local extraction is proceeding using in-browser memory.'
+        );
         uploadedUrl = storagePath;
       }
+
+      // 2. Create Firestore Import Job (with 15s timeout guard)
+      setInitStage('CREATING_FIRESTORE_JOB');
 
       const newJob: Omit<PdfImportJob, 'createdAt' | 'updatedAt'> = {
         id: jobId,
@@ -142,13 +170,19 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
         createdBy: auth.currentUser?.email || 'admin',
       };
 
-      const created = await createImportJob(newJob);
+      const created = await createImportJob(newJob, 15000);
+
+      // 3. Start batch processing & transition tab
+      setInitStage('STARTING_PROCESSOR');
       onJobCreated(created, file);
     } catch (err: any) {
       console.error('Job creation failed:', err);
-      setError(err.message || 'Failed to initialize import job');
+      setError(
+        err.message || 'Failed to initialize import job. Please check your network connection or permissions and retry.'
+      );
     } finally {
       setIsCreating(false);
+      setInitStage('IDLE');
     }
   };
 
@@ -478,6 +512,119 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
           </label>
         </div>
 
+        {/* Storage Warning Banner */}
+        {storageWarning && (
+          <div className="p-3 bg-amber-950/40 border border-amber-700/80 rounded-xl text-amber-300 text-xs flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0 text-amber-400" />
+            <span>{storageWarning}</span>
+          </div>
+        )}
+
+        {/* Actionable Error Banner */}
+        {error && (
+          <div className="p-4 bg-red-950/50 border border-red-800 rounded-xl text-xs space-y-2">
+            <div className="flex items-center gap-2 text-red-300 font-semibold">
+              <AlertCircle size={16} className="shrink-0 text-red-400" />
+              <span>Import Initialization Failed</span>
+            </div>
+            <p className="text-red-200/80 pl-6">{error}</p>
+            <div className="pl-6 pt-1">
+              <button
+                type="button"
+                onClick={handleStartImport}
+                className="px-3 py-1.5 bg-red-800 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition"
+              >
+                Retry Initialization
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Live Stage Progress Indicator during Initialization */}
+        {isCreating && (
+          <div className="p-4 bg-slate-950/80 border border-brand-800/60 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-white flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin text-brand-400" />
+                Pipeline Initialization In Progress
+              </span>
+              <span className="text-slate-400 text-[11px]">Free Local Mode (₹0 API Cost)</span>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              {/* Step A: In-memory verification */}
+              <div className="flex items-center gap-2 text-emerald-400">
+                <CheckCircle2 size={14} className="shrink-0" />
+                <span>PDF selected & loaded in memory ({inspection?.totalPages} pages detected)</span>
+              </div>
+
+              {/* Step B: Storage upload */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {initStage === 'UPLOADING_STORAGE' ? (
+                    <Loader2 size={14} className="animate-spin text-brand-400 shrink-0" />
+                  ) : (
+                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                  )}
+                  <span className={initStage === 'UPLOADING_STORAGE' ? 'text-brand-300 font-semibold' : 'text-slate-400'}>
+                    Uploading PDF to cloud storage archive
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-slate-400">
+                  {initStage === 'UPLOADING_STORAGE' ? `${uploadPercent}%` : '✓ Done / Cached'}
+                </span>
+              </div>
+
+              {initStage === 'UPLOADING_STORAGE' && (
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden ml-6 max-w-xs">
+                  <div
+                    className="bg-brand-500 h-1.5 transition-all duration-300 rounded-full"
+                    style={{ width: `${uploadPercent}%` }}
+                  />
+                </div>
+              )}
+
+              {/* Step C: Firestore Staging Job */}
+              <div className="flex items-center gap-2">
+                {initStage === 'CREATING_FIRESTORE_JOB' ? (
+                  <Loader2 size={14} className="animate-spin text-brand-400 shrink-0" />
+                ) : initStage === 'STARTING_PROCESSOR' ? (
+                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-slate-700 inline-block shrink-0" />
+                )}
+                <span
+                  className={
+                    initStage === 'CREATING_FIRESTORE_JOB'
+                      ? 'text-brand-300 font-semibold'
+                      : initStage === 'STARTING_PROCESSOR'
+                      ? 'text-slate-400'
+                      : 'text-slate-500'
+                  }
+                >
+                  Creating Firestore staging job record
+                </span>
+              </div>
+
+              {/* Step D: Processor Start */}
+              <div className="flex items-center gap-2">
+                {initStage === 'STARTING_PROCESSOR' ? (
+                  <Loader2 size={14} className="animate-spin text-brand-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-slate-700 inline-block shrink-0" />
+                )}
+                <span
+                  className={
+                    initStage === 'STARTING_PROCESSOR' ? 'text-brand-300 font-semibold' : 'text-slate-500'
+                  }
+                >
+                  Starting Free Local extraction engine & batches...
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* CTA Button */}
         <div className="pt-4 flex justify-end">
           <button
@@ -489,7 +636,10 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
             {isCreating ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                Initializing Staging Job...
+                {initStage === 'UPLOADING_STORAGE' && `Uploading PDF (${uploadPercent}%)...`}
+                {initStage === 'CREATING_FIRESTORE_JOB' && 'Creating Staging Job...'}
+                {initStage === 'STARTING_PROCESSOR' && 'Starting Batches...'}
+                {initStage === 'IDLE' && 'Initializing Staging Job...'}
               </>
             ) : (
               <>

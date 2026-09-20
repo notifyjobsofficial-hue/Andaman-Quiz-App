@@ -115,10 +115,11 @@ export class AiBatchProcessor {
     this.isPaused = false;
     this.isCancelled = false;
 
-    await updateJobState(job.id, { status: 'processing' });
+    try {
+      await updateJobState(job.id, { status: 'processing' });
 
-    // 1. Get or create batches
-    const batches = await this.initializeBatches(job.id, job.totalPages, 5);
+      // 1. Get or create batches
+      const batches = await this.initializeBatches(job.id, job.totalPages, 5);
 
     // 2. Pre-scan document for potential Answer Key pages (usually in trailing pages or answer sections)
     const answerKeyMap = new Map<number, 'A' | 'B' | 'C' | 'D'>();
@@ -282,6 +283,11 @@ export class AiBatchProcessor {
     });
 
     await terminateOcrWorker();
+    } catch (fatalErr: any) {
+      console.error('Fatal error during processJob:', fatalErr);
+      await updateJobState(job.id, { status: 'failed' }).catch(() => {});
+      callbacks?.onError?.('job_init', fatalErr.message || 'Fatal error during PDF processing');
+    }
   }
 
   /**

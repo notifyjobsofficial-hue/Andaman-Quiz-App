@@ -150,9 +150,14 @@ export const AiPdfImport: React.FC = () => {
         onBatchComplete: () => {
           loadStagedForJob(job.id);
         },
+        onError: (batchId, errorMsg) => {
+          console.error(`Batch ${batchId} error:`, errorMsg);
+          loadStagedForJob(job.id);
+        },
       }, subjects, topics);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error starting batch processor:', err);
+      alert(`Could not start batch processing: ${err?.message || 'Unknown error'}`);
     }
   };
 

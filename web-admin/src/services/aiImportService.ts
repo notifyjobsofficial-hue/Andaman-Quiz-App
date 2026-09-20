@@ -37,7 +37,10 @@ const JOBS_COLLECTION = 'pdf_import_jobs';
 // 1. Job Management
 // -------------------------------------------------------------
 
-export async function createImportJob(job: Omit<PdfImportJob, 'createdAt' | 'updatedAt'>): Promise<PdfImportJob> {
+export async function createImportJob(
+  job: Omit<PdfImportJob, 'createdAt' | 'updatedAt'>,
+  timeoutMs: number = 15000
+): Promise<PdfImportJob> {
   const now = new Date().toISOString();
   const fullJob: PdfImportJob = {
     ...job,
@@ -46,9 +49,20 @@ export async function createImportJob(job: Omit<PdfImportJob, 'createdAt' | 'upd
   };
 
   const ref = doc(db, JOBS_COLLECTION, fullJob.id);
-  await safeSetDoc(ref, fullJob);
-  await logActivity('Create PDF Import Job', `Job ${fullJob.id} created for ${fullJob.fileName}`);
-  return fullJob;
+  const writePromise = (async () => {
+    await safeSetDoc(ref, fullJob);
+    await logActivity('Create PDF Import Job', `Job ${fullJob.id} created for ${fullJob.fileName}`);
+    return fullJob;
+  })();
+
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Firestore job creation timed out after ${Math.round(timeoutMs / 1000)}s`)),
+      timeoutMs
+    )
+  );
+
+  return Promise.race([writePromise, timeoutPromise]);
 }
 
 export async function getImportJob(jobId: string): Promise<PdfImportJob | null> {
@@ -116,12 +130,16 @@ export async function deleteImportJob(jobId: string): Promise<void> {
 // -------------------------------------------------------------
 
 export async function saveBatches(jobId: string, batches: PdfBatch[]): Promise<void> {
-  const batch = writeBatch(db);
-  for (const b of batches) {
-    const ref = doc(db, JOBS_COLLECTION, jobId, 'batches', b.id);
-    batch.set(ref, sanitizeForFirestore({ ...b, updatedAt: new Date().toISOString() }));
+  const chunkSize = 400;
+  for (let i = 0; i < batches.length; i += chunkSize) {
+    const chunk = batches.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    for (const b of chunk) {
+      const ref = doc(db, JOBS_COLLECTION, jobId, 'batches', b.id);
+      batch.set(ref, sanitizeForFirestore({ ...b, updatedAt: new Date().toISOString() }));
+    }
+    await batch.commit();
   }
-  await batch.commit();
 }
 
 export async function getBatches(jobId: string): Promise<PdfBatch[]> {
