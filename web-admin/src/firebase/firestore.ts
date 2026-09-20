@@ -412,7 +412,16 @@ export async function saveAppConfig(config: AppConfig): Promise<void> {
 export async function fetchQOTDList(): Promise<any[]> {
   try {
     const snap = await getDocs(query(collection(db, 'qotd'), orderBy('date', 'desc'), limit(30)));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const map = new Map<string, any>();
+    for (const d of snap.docs) {
+      if (d.id === 'current') continue; // Don't list 'current' pointer as a separate entry
+      const data = d.data();
+      const dateKey = data.date || d.id;
+      if (!map.has(dateKey)) {
+        map.set(dateKey, { id: d.id, ...data });
+      }
+    }
+    return Array.from(map.values());
   } catch (err) {
     console.warn('Failed to fetch QOTD list:', err);
     return [];
@@ -429,15 +438,48 @@ export async function saveQOTD(qotd: {
   explanation?: string;
   active?: boolean;
 }): Promise<void> {
-  await safeSetDoc(doc(db, 'qotd', qotd.id), qotd, { merge: true });
+  const docId = qotd.date || qotd.id;
+  const payload = { ...qotd, id: docId, active: true };
+  await safeSetDoc(doc(db, 'qotd', docId), payload, { merge: true });
   // Also update 'current' doc for easy student app access
-  await safeSetDoc(doc(db, 'qotd', 'current'), qotd, { merge: true });
-  await logActivity('Save QOTD', `Question of the Day set for date ${qotd.date}`);
+  await safeSetDoc(doc(db, 'qotd', 'current'), payload, { merge: true });
+  await logActivity('Save QOTD', `Question of the Day set for date ${payload.date}`);
 }
 
-export async function deleteQOTD(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'qotd', id));
-  await logActivity('Delete QOTD', `Deleted QOTD ID: ${id}`);
+export async function deleteQOTD(idOrDate: string): Promise<void> {
+  // 1. Delete document by ID / date
+  try {
+    await deleteDoc(doc(db, 'qotd', idOrDate));
+  } catch (err) {
+    console.warn(`Could not delete doc qotd/${idOrDate}:`, err);
+  }
+
+  // 2. Also check if 'current' document matches this date or ID, and delete it
+  try {
+    const currentRef = doc(db, 'qotd', 'current');
+    const currentSnap = await getDoc(currentRef);
+    if (currentSnap.exists()) {
+      const data = currentSnap.data();
+      if (data.date === idOrDate || data.id === idOrDate || idOrDate === 'current') {
+        await deleteDoc(currentRef);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not check/delete qotd/current:', err);
+  }
+
+  // 3. Delete any other documents with matching date field to prevent duplicates
+  try {
+    const q = query(collection(db, 'qotd'), where('date', '==', idOrDate));
+    const snap = await getDocs(q);
+    for (const d of snap.docs) {
+      await deleteDoc(d.ref);
+    }
+  } catch (err) {
+    console.warn('Could not query matching date docs in qotd:', err);
+  }
+
+  await logActivity('Delete QOTD', `Deleted QOTD for date/ID: ${idOrDate}`);
 }
 
 export async function fetchRecentActivities(count: number = 10): Promise<AdminActivity[]> {

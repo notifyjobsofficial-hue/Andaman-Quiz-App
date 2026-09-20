@@ -90,7 +90,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            todayQotdProvider.overrideWith((ref) async => null),
+            todayQotdProvider.overrideWith((ref) => Stream.value(null)),
           ],
           child: const MaterialApp(
             home: HomeScreen(),
@@ -126,7 +126,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            todayQotdProvider.overrideWith((ref) async => testQotd),
+            todayQotdProvider.overrideWith((ref) => Stream.value(testQotd)),
           ],
           child: const MaterialApp(
             home: HomeScreen(),
@@ -470,7 +470,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              todayQotdProvider.overrideWith((ref) async => testQotd),
+              todayQotdProvider.overrideWith((ref) => Stream.value(testQotd)),
               noticesStreamProvider.overrideWith((ref) => Stream<List<AppNotice>>.value(testNotices)),
             ],
             child: const MaterialApp(

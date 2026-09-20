@@ -168,11 +168,14 @@ export const AppContent: React.FC = () => {
   const handleDeleteQOTD = async (date: string) => {
     if (!confirm(`Remove Question of the Day for ${date}?`)) return;
     try {
+      // Optimistically remove from local state immediately
+      setQotdList((prev) => prev.filter((item) => item.date !== date && item.id !== date));
       await deleteQOTD(date);
       setActionFeedback({ type: 'success', message: `QOTD for ${date} removed.` });
-      loadData();
+      await loadData();
     } catch (err: any) {
       setActionFeedback({ type: 'error', message: err.message || 'Failed to delete QOTD.' });
+      await loadData();
     }
   };
 
@@ -243,7 +246,7 @@ export const AppContent: React.FC = () => {
 
         <div className="divide-y divide-slate-100">
           {qotdList.map((item) => (
-            <div key={item.date} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50">
+            <div key={item.id || item.date} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="px-2.5 py-0.5 bg-brand-50 text-brand-700 font-bold text-xs rounded-full border border-brand-200 flex items-center gap-1">
@@ -257,7 +260,7 @@ export const AppContent: React.FC = () => {
               </div>
 
               <button
-                onClick={() => handleDeleteQOTD(item.date)}
+                onClick={() => handleDeleteQOTD(item.date || item.id)}
                 className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition shrink-0"
                 title="Remove QOTD"
               >

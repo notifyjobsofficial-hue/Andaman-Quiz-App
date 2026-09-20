@@ -13,7 +13,7 @@ import {
 import { Exam, Subject, Topic, ImportMode, PdfImportJob } from '../../types';
 import { inspectPdf } from '../../utils/pdfParser';
 import { uploadPdfFile, UploadProgress } from '../../firebase/storage';
-import { createImportJob } from '../../services/aiImportService';
+import { createImportJob, updateJobState } from '../../services/aiImportService';
 import { auth } from '../../firebase/config';
 
 export type InitStage =
@@ -103,26 +103,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
       const storagePath = `admin_pdf_uploads/${jobId}_${cleanName}`;
       let uploadedUrl = storagePath;
 
-      // 1. Storage Upload attempt with 15-second timeout and live progress reporting
-      try {
-        const uploadResult = await uploadPdfFile(
-          file,
-          'admin_pdf_uploads',
-          (prog: UploadProgress) => setUploadPercent(prog.percent),
-          15000 // 15s max timeout to prevent any infinite stall
-        );
-        uploadedUrl = uploadResult.downloadUrl || uploadResult.storagePath;
-      } catch (storageErr: any) {
-        // In Free Local mode, client-side extraction uses in-memory PDF buffer.
-        // If Cloud Storage upload encounters CORS or network timeout, proceed locally without blocking!
-        console.warn('Storage upload bypassed / timed out:', storageErr);
-        setStorageWarning(
-          'Cloud Storage backup upload was bypassed (CORS / network timeout). Free Local extraction is proceeding using in-browser memory.'
-        );
-        uploadedUrl = storagePath;
-      }
-
-      // 2. Create Firestore Import Job (with 15s timeout guard)
+      // 1. Create Firestore Import Job first (timeout guard 10s)
       setInitStage('CREATING_FIRESTORE_JOB');
 
       const newJob: Omit<PdfImportJob, 'createdAt' | 'updatedAt'> = {
@@ -170,9 +151,41 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
         createdBy: auth.currentUser?.email || 'admin',
       };
 
-      const created = await createImportJob(newJob, 15000);
+      const created = await createImportJob(newJob, 10000);
 
-      // 3. Start batch processing & transition tab
+      // 2. Storage Upload:
+      // For Free Local Mode: client extraction uses in-browser memory buffer with ₹0 API cost.
+      // Launch storage backup asynchronously in the background so local processing starts with zero delay!
+      if (extractionMode === 'ai_assisted') {
+        setInitStage('UPLOADING_STORAGE');
+        try {
+          const uploadResult = await uploadPdfFile(
+            file,
+            'admin_pdf_uploads',
+            (prog: UploadProgress) => setUploadPercent(prog.percent),
+            20000
+          );
+          if (uploadResult.downloadUrl) {
+            created.storagePath = uploadResult.downloadUrl;
+            await updateJobState(jobId, { storagePath: uploadResult.downloadUrl }).catch(() => {});
+          }
+        } catch (storageErr: any) {
+          console.warn('Storage upload encountered error in AI mode:', storageErr);
+        }
+      } else {
+        // Non-blocking background archival upload for Free Local mode
+        uploadPdfFile(file, 'admin_pdf_uploads', undefined, 30000)
+          .then((res) => {
+            if (res.downloadUrl) {
+              updateJobState(jobId, { storagePath: res.downloadUrl }).catch(() => {});
+            }
+          })
+          .catch((storageErr) => {
+            console.warn('Background storage backup deferred / bypassed:', storageErr);
+          });
+      }
+
+      // 3. Start batch processing & transition tab immediately
       setInitStage('STARTING_PROCESSOR');
       onJobCreated(created, file);
     } catch (err: any) {
@@ -639,7 +652,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
                 {initStage === 'UPLOADING_STORAGE' && `Uploading PDF (${uploadPercent}%)...`}
                 {initStage === 'CREATING_FIRESTORE_JOB' && 'Creating Staging Job...'}
                 {initStage === 'STARTING_PROCESSOR' && 'Starting Batches...'}
-                {initStage === 'IDLE' && 'Initializing Staging Job...'}
+                {initStage === 'IDLE' && 'Launching Import Job...'}
               </>
             ) : (
               <>

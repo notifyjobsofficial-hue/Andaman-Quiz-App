@@ -203,9 +203,21 @@ final questionsListProvider =
 // Question of the Day (Live Firestore provider)
 // ---------------------------------------------------------------------------
 
-final todayQotdProvider = FutureProvider<QuestionOfTheDay?>((ref) async {
+final todayQotdProvider = StreamProvider<QuestionOfTheDay?>((ref) async* {
   final now = DateTime.now();
   final dateStr =
       "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-  return FirestoreService.instance.fetchQOTD(dateStr);
+
+  // 1. Immediate initial local cache if available (for instant 0ms offline rendering)
+  final cached = LocalDatabase.instance.getCachedQotd(dateStr);
+  if (cached != null) {
+    yield cached;
+  }
+
+  // 2. Fetch fresh from Firestore
+  final fetched = await FirestoreService.instance.fetchQOTD(dateStr);
+  yield fetched;
+
+  // 3. Yield all real-time Firestore stream updates (instant update on deletion)
+  yield* FirestoreService.instance.qotdStream;
 });

@@ -24,6 +24,7 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   String _sourceInfo = '';
   int _secondsRemaining = 60;
   Timer? _timer;
+  StreamSubscription? _qotdSub;
   int? _selectedOption;
   bool _isSubmitted = false;
 
@@ -31,6 +32,9 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   void initState() {
     super.initState();
     _loadQotd();
+    _qotdSub = FirestoreService.instance.qotdStream.listen((_) {
+      if (mounted) _loadQotd();
+    });
   }
 
   Future<void> _loadQotd() async {
@@ -123,6 +127,7 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _qotdSub?.cancel();
     super.dispose();
   }
 

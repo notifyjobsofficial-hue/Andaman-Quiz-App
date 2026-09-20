@@ -23,6 +23,7 @@ class LocalDatabase {
   final List<HomeBanner> _banners = [];
   final List<AppNotice> _notices = [];
   final List<LiveTestItem> _liveTests = [];
+  final Map<String, QuestionOfTheDay> _cachedQotdByDate = {};
   RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
   bool _isInitialized = false;
@@ -49,6 +50,7 @@ class LocalDatabase {
     _banners.clear();
     _notices.clear();
     _liveTests.clear();
+    _cachedQotdByDate.clear();
     _questions.clear();
     _categories.clear();
     _exams.clear();
@@ -706,6 +708,33 @@ class LocalDatabase {
     } catch (_) {
       return null;
     }
+  }
+
+  // --- Question of the Day (QOTD) Cache & Sync ---
+  QuestionOfTheDay? getCachedQotd(String date) {
+    if (_cachedQotdByDate.containsKey(date)) {
+      return _cachedQotdByDate[date];
+    }
+    final raw = _prefs?.getString('cached_qotd_$date');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final qotd = QuestionOfTheDay.fromMap(map);
+      _cachedQotdByDate[date] = qotd;
+      return qotd;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> syncQotdFromFirestore(QuestionOfTheDay qotd) async {
+    _cachedQotdByDate[qotd.date] = qotd;
+    await _prefs?.setString('cached_qotd_${qotd.date}', jsonEncode(qotd.toMap()));
+  }
+
+  Future<void> clearCachedQotd(String date) async {
+    _cachedQotdByDate.remove(date);
+    await _prefs?.remove('cached_qotd_$date');
   }
 
   // --- Active Exam State Preservation ---

@@ -33,6 +33,7 @@ class FirestoreService {
   final _noticesController = StreamController<List<AppNotice>>.broadcast();
   final _liveTestsController = StreamController<List<LiveTestItem>>.broadcast();
   final _remoteConfigController = StreamController<RemoteAppConfig>.broadcast();
+  final _qotdController = StreamController<QuestionOfTheDay?>.broadcast();
 
   // Public streams for Riverpod providers to subscribe to
   Stream<List<ExamCategory>> get categoriesStream => _categoriesController.stream;
@@ -44,6 +45,7 @@ class FirestoreService {
   Stream<List<AppNotice>> get noticesStream => _noticesController.stream;
   Stream<List<LiveTestItem>> get liveTestsStream => _liveTestsController.stream;
   Stream<RemoteAppConfig> get remoteConfigStream => _remoteConfigController.stream;
+  Stream<QuestionOfTheDay?> get qotdStream => _qotdController.stream;
 
   // Active subscriptions
   final List<StreamSubscription> _subscriptions = [];
@@ -139,6 +141,7 @@ class FirestoreService {
     _subscribeToNotices();
     _subscribeToLiveTests();
     _subscribeToAppConfig();
+    _subscribeToQotd();
 
     debugPrint('FirestoreService: real-time listeners started for all collections.');
   }
@@ -292,24 +295,79 @@ class FirestoreService {
     _subscriptions.add(sub);
   }
 
+  void _subscribeToQotd() {
+    final now = DateTime.now();
+    final today =
+        "${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    final sub = _firestore.collection(colQotd).snapshots().listen((snapshot) async {
+      try {
+        QuestionOfTheDay? found;
+        // 1. Check for specific document for today
+        for (final d in snapshot.docs) {
+          if (d.id == today && d.data().isNotEmpty) {
+            final q = QuestionOfTheDay.fromMap(d.data());
+            if (q.active) {
+              found = q;
+              break;
+            }
+          }
+        }
+        // 2. Check 'current' document if today doc not found
+        if (found == null) {
+          for (final d in snapshot.docs) {
+            if (d.id == 'current' && d.data().isNotEmpty) {
+              final q = QuestionOfTheDay.fromMap(d.data());
+              if (q.active && (q.date == today || q.date.isEmpty)) {
+                found = q;
+                break;
+              }
+            }
+          }
+        }
+
+        // Cache or clear in LocalDatabase
+        if (found != null) {
+          await LocalDatabase.instance.syncQotdFromFirestore(found);
+        } else {
+          await LocalDatabase.instance.clearCachedQotd(today);
+        }
+
+        _qotdController.add(found);
+      } catch (e) {
+        debugPrint('QOTD sync error: $e');
+      }
+    }, onError: (e) => debugPrint('QOTD stream error: $e'));
+
+    _subscriptions.add(sub);
+  }
+
   // --- Question of the Day ---
   Future<QuestionOfTheDay?> fetchQOTD(String dateStr) async {
     try {
       final doc = await _firestore.collection(colQotd).doc(dateStr).get();
       if (doc.exists && doc.data() != null) {
-        return QuestionOfTheDay.fromMap(doc.data()!);
+        final qotd = QuestionOfTheDay.fromMap(doc.data()!);
+        if (qotd.active) {
+          await LocalDatabase.instance.syncQotdFromFirestore(qotd);
+          return qotd;
+        }
       }
       final currentDoc = await _firestore.collection(colQotd).doc('current').get();
       if (currentDoc.exists && currentDoc.data() != null) {
         final qotd = QuestionOfTheDay.fromMap(currentDoc.data()!);
-        if (qotd.active) {
+        if (qotd.active && (qotd.date == dateStr || qotd.date.isEmpty)) {
+          await LocalDatabase.instance.syncQotdFromFirestore(qotd);
           return qotd;
         }
       }
+      // If neither exists remotely, remote deletion confirmed -> purge local cache
+      await LocalDatabase.instance.clearCachedQotd(dateStr);
       return null;
     } catch (e) {
-      debugPrint('Notice fetching QOTD: $e');
-      return null;
+      debugPrint('Notice fetching QOTD (offline fallback): $e');
+      // On genuine offline network error, fall back to offline cache
+      return LocalDatabase.instance.getCachedQotd(dateStr);
     }
   }
 
