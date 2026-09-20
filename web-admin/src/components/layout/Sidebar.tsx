@@ -11,7 +11,8 @@ import {
   Settings,
   X,
   Radio,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'questions', label: 'Question Bank', icon: HelpCircle },
     { id: 'import', label: 'Bulk Question Import', icon: UploadCloud, badge: 'Core' },
+    { id: 'ai-pdf-import', label: 'AI PDF Import', icon: Sparkles, badge: 'AI' },
     { id: 'tests', label: 'Mock Tests & Pricing', icon: FileCheck },
     { id: 'live-tests', label: 'Live Tests', icon: Radio },
     { id: 'test-builder', label: 'Test Question Builder', icon: Layers },

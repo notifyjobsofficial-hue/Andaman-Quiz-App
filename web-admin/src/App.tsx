@@ -5,6 +5,7 @@ import { AdminLayout } from './components/layout/AdminLayout';
 import { Dashboard } from './pages/Dashboard';
 import { QuestionBank } from './pages/QuestionBank';
 import { BulkImport } from './pages/BulkImport';
+import { AiPdfImport } from './pages/AiPdfImport';
 import { MockTests } from './pages/MockTests';
 import { TestBuilder } from './pages/TestBuilder';
 import { CategoriesExams } from './pages/CategoriesExams';
@@ -56,6 +57,7 @@ export function App() {
       {currentTab === 'dashboard' && <Dashboard onNavigate={setCurrentTab} />}
       {currentTab === 'questions' && <QuestionBank />}
       {currentTab === 'import' && <BulkImport />}
+      {currentTab === 'ai-pdf-import' && <AiPdfImport />}
       {currentTab === 'tests' && (
         <MockTests
           onNavigateToBuilder={(testId) => {

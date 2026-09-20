@@ -213,3 +213,157 @@ export interface AdminUser {
   role: 'superadmin' | 'editor';
   createdAt: string;
 }
+
+// ==========================================
+// AI PDF Import & Human Review System Types
+// ==========================================
+
+export type ImportMode =
+  | 'questions_key'
+  | 'questions_answers_explanations'
+  | 'previous_year'
+  | 'question_bank';
+
+export type JobStatus =
+  | 'pending'
+  | 'processing'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type AnswerSource = 'SOURCE_ANSWER' | 'AI_INFERRED' | 'UNRESOLVED';
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
+
+export interface JobDefaults {
+  exam?: string;
+  category?: string;
+  subject?: string;
+  chapter?: string;
+  topic?: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  language?: 'en' | 'hi' | 'both';
+  positiveMarks?: number;
+  negativeMarks?: number;
+  year?: string;
+}
+
+export interface JobConfig {
+  autoDetectTaxonomy: boolean;
+  autoDetectDifficulty: boolean;
+  extractImages: boolean;
+  ocrEnabled?: boolean;
+}
+
+export interface JobProgress {
+  currentBatch: number;
+  totalBatches: number;
+  processedPages: number;
+  totalPages: number;
+}
+
+export interface JobMetrics {
+  detectedQuestions: number;
+  highConfidence: number;
+  needsReview: number;
+  errors: number;
+  approved: number;
+  rejected: number;
+  pendingReview: number;
+  duplicates: number;
+}
+
+export interface PdfImportJob {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  fileSize: number;
+  totalPages: number;
+  status: JobStatus;
+  importMode: ImportMode;
+  defaults: JobDefaults;
+  config: JobConfig;
+  progress: JobProgress;
+  metrics: JobMetrics;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  error?: string;
+  aiUsage?: {
+    totalTokens: number;
+    estimatedCostUsd: number;
+    modelUsed: string;
+  };
+}
+
+export interface PdfBatch {
+  id: string;
+  jobId: string;
+  batchIndex: number;
+  startPage: number;
+  endPage: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  questionsDetected: number;
+  error?: string;
+  retries: number;
+  updatedAt?: string;
+}
+
+export interface StagedQuestion {
+  id: string;
+  jobId: string;
+  batchId: string;
+  question_text: string;
+  question_image_url?: string;
+  option_a_text: string;
+  option_a_image_url?: string;
+  option_b_text: string;
+  option_b_image_url?: string;
+  option_c_text: string;
+  option_c_image_url?: string;
+  option_d_text: string;
+  option_d_image_url?: string;
+  correct_answer: 'A' | 'B' | 'C' | 'D' | '';
+  explanation_text: string;
+  explanation_image_url?: string;
+  exam: string;
+  category?: string;
+  subject: string;
+  chapter?: string;
+  topic: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  positive_marks: number;
+  negative_marks: number;
+  language: 'en' | 'hi' | 'both';
+  year?: string;
+
+  // Source Traceability
+  source_pdf: string;
+  source_page: number;
+  source_question_number: number | string;
+  page_image_url?: string;
+  bounding_box?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+
+  // Confidence & Verification Engine
+  confidence_score: number; // 0 to 100
+  confidence_level: ConfidenceLevel;
+  review_status: ReviewStatus;
+  answer_source: AnswerSource;
+  validation_warnings: string[];
+  is_duplicate: boolean;
+  duplicate_of_id?: string;
+  duplicate_type?: 'EXACT' | 'NORMALIZED' | 'SIMILAR';
+  admin_notes?: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  published_question_id?: string;
+}
+

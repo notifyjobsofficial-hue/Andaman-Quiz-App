@@ -93,7 +93,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 11. Admin Activity Logs: Admin only read/write
+    // 11. PDF AI Import Jobs & Staging Queue: Admin only read/write
+    match /pdf_import_jobs/{jobId} {
+      allow read, write: if isAdmin();
+      match /{allSubcollections=**} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    // 12. Admin Activity Logs: Admin only read/write
     match /admin_activity/{activityId} {
       allow read, write: if isAdmin();
     }
