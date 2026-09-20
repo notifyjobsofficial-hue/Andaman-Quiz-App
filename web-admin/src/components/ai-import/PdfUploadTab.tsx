@@ -22,12 +22,21 @@ export type InitStage =
   | 'CREATING_FIRESTORE_JOB'
   | 'STARTING_PROCESSOR';
 
+// Human-readable labels for each stage (used in error display)
+const STAGE_LABELS: Record<InitStage, string> = {
+  IDLE: 'Pre-flight',
+  UPLOADING_STORAGE: 'Firebase Storage — PDF Upload (admin_pdf_uploads/)',
+  CREATING_FIRESTORE_JOB: 'Firestore — Create Import Job (pdf_import_jobs/{jobId})',
+  STARTING_PROCESSOR: 'Firestore — Initialize Batch Queue',
+};
+
 interface PdfUploadTabProps {
   exams: Exam[];
   subjects: Subject[];
   topics: Topic[];
   onJobCreated: (job: PdfImportJob, file: File) => void;
 }
+
 
 export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
   exams,
@@ -65,6 +74,8 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
   const [uploadPercent, setUploadPercent] = useState<number>(0);
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failedStage, setFailedStage] = useState<InitStage | null>(null);
+  const [failedCode, setFailedCode] = useState<string | null>(null);
 
   const handleFileChange = async (selected: File) => {
     if (!selected.name.toLowerCase().endsWith('.pdf')) {
@@ -93,9 +104,13 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
 
     setIsCreating(true);
     setError(null);
+    setFailedStage(null);
+    setFailedCode(null);
     setStorageWarning(null);
     setInitStage('UPLOADING_STORAGE');
     setUploadPercent(0);
+
+    let currentStage: InitStage = 'IDLE';
 
     try {
       const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
@@ -104,6 +119,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
       let uploadedUrl = storagePath;
 
       // 1. Create Firestore Import Job first (timeout guard 10s)
+      currentStage = 'CREATING_FIRESTORE_JOB';
       setInitStage('CREATING_FIRESTORE_JOB');
 
       const newJob: Omit<PdfImportJob, 'createdAt' | 'updatedAt'> = {
@@ -157,6 +173,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
       // For Free Local Mode: client extraction uses in-browser memory buffer with ₹0 API cost.
       // Launch storage backup asynchronously in the background so local processing starts with zero delay!
       if (extractionMode === 'ai_assisted') {
+        currentStage = 'UPLOADING_STORAGE';
         setInitStage('UPLOADING_STORAGE');
         try {
           const uploadResult = await uploadPdfFile(
@@ -186,10 +203,15 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
       }
 
       // 3. Start batch processing & transition tab immediately
+      currentStage = 'STARTING_PROCESSOR';
       setInitStage('STARTING_PROCESSOR');
       onJobCreated(created, file);
     } catch (err: any) {
-      console.error('Job creation failed:', err);
+      console.error(`[AI Import] Failed at stage "${currentStage}":`, err);
+      // Extract Firebase error code if available (e.g. "permission-denied", "storage/unauthorized")
+      const firebaseCode: string = err?.code || err?.serverResponse?.error?.status || '';
+      setFailedStage(currentStage);
+      setFailedCode(firebaseCode || null);
       setError(
         err.message || 'Failed to initialize import job. Please check your network connection or permissions and retry.'
       );
@@ -540,6 +562,20 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
               <AlertCircle size={16} className="shrink-0 text-red-400" />
               <span>Import Initialization Failed</span>
             </div>
+            {failedStage && failedStage !== 'IDLE' && (
+              <div className="pl-6 space-y-0.5">
+                <p className="text-slate-400">
+                  <span className="text-slate-300 font-semibold">Stage: </span>
+                  {STAGE_LABELS[failedStage]}
+                </p>
+                {failedCode && (
+                  <p className="text-slate-400">
+                    <span className="text-slate-300 font-semibold">Error Code: </span>
+                    <code className="text-red-300">{failedCode}</code>
+                  </p>
+                )}
+              </div>
+            )}
             <p className="text-red-200/80 pl-6">{error}</p>
             <div className="pl-6 pt-1">
               <button
@@ -551,6 +587,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
               </button>
             </div>
           </div>
+
         )}
 
         {/* Live Stage Progress Indicator during Initialization */}
