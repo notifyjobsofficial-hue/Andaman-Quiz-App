@@ -79,8 +79,8 @@ export const ReviewQueueTab: React.FC<ReviewQueueTabProps> = ({
 
       // 2. Category Filter Pills
       if (categoryFilter === 'HIGH' && q.confidence_level !== 'HIGH') return false;
-      if (categoryFilter === 'NEEDS_REVIEW' && q.confidence_level !== 'MEDIUM') return false;
-      if (categoryFilter === 'ERRORS' && q.confidence_level !== 'LOW') return false;
+      if (categoryFilter === 'NEEDS_REVIEW' && q.confidence_level !== 'REVIEW' && q.confidence_level !== 'MEDIUM') return false;
+      if (categoryFilter === 'ERRORS' && q.confidence_level !== 'ERROR' && q.confidence_level !== 'LOW') return false;
       if (categoryFilter === 'MISSING_ANSWER' && q.correct_answer) return false;
       if (
         categoryFilter === 'MISSING_OPTION' &&
@@ -273,8 +273,8 @@ export const ReviewQueueTab: React.FC<ReviewQueueTabProps> = ({
           {[
             { id: 'ALL', label: 'All Pending', count: stagedQuestions.filter((q) => q.review_status === 'pending').length },
             { id: 'HIGH', label: 'High Confidence', count: stagedQuestions.filter((q) => q.review_status === 'pending' && q.confidence_level === 'HIGH').length },
-            { id: 'NEEDS_REVIEW', label: 'Needs Review', count: stagedQuestions.filter((q) => q.review_status === 'pending' && q.confidence_level === 'MEDIUM').length },
-            { id: 'ERRORS', label: 'Errors / Low', count: stagedQuestions.filter((q) => q.review_status === 'pending' && q.confidence_level === 'LOW').length },
+            { id: 'NEEDS_REVIEW', label: 'Needs Review', count: stagedQuestions.filter((q) => q.review_status === 'pending' && (q.confidence_level === 'REVIEW' || q.confidence_level === 'MEDIUM')).length },
+            { id: 'ERRORS', label: 'Errors / Incomplete', count: stagedQuestions.filter((q) => q.review_status === 'pending' && (q.confidence_level === 'ERROR' || q.confidence_level === 'LOW')).length },
             { id: 'MISSING_ANSWER', label: 'Missing Answer', count: stagedQuestions.filter((q) => q.review_status === 'pending' && !q.correct_answer).length },
             { id: 'MISSING_OPTION', label: 'Missing Option', count: stagedQuestions.filter((q) => q.review_status === 'pending' && (!q.option_a_text || !q.option_b_text || !q.option_c_text || !q.option_d_text)).length },
             { id: 'IMAGES', label: 'Images', count: stagedQuestions.filter((q) => q.review_status === 'pending' && q.question_image_url).length },

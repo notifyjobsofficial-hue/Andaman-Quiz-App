@@ -114,10 +114,22 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
               >
                 {job.status}
               </span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                  job.config?.extractionMode === 'ai_assisted'
+                    ? 'bg-purple-950 text-purple-300 border border-purple-800'
+                    : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                }`}
+              >
+                {job.config?.extractionMode === 'ai_assisted' ? 'AI Assisted (Gemini)' : 'Free Local (₹0 API)'}
+              </span>
             </div>
             <p className="text-xs text-slate-400 mt-1">
               Job ID: <span className="font-mono text-slate-300">{job.id}</span> • Started by{' '}
-              <span className="text-slate-300">{job.createdBy}</span> • Mode: <span className="text-brand-400 font-semibold">Resumable Checkpoints</span>
+              <span className="text-slate-300">{job.createdBy}</span> • Engine:{' '}
+              <span className="text-emerald-400 font-semibold">
+                {job.config?.extractionMode === 'ai_assisted' ? 'Gemini 1.5 Cloud' : 'Free Local (PDF.js + Tesseract)'}
+              </span>
             </p>
           </div>
 
@@ -178,6 +190,25 @@ export const ProcessingJobsTab: React.FC<ProcessingJobsTabProps> = ({
             />
           </div>
         </div>
+
+        {/* Live Tesseract OCR Progress Indicator if Active */}
+        {job.progress.ocrProgress !== undefined && job.progress.ocrProgress > 0 && job.status === 'processing' && (
+          <div className="p-3.5 bg-brand-950/30 border border-brand-800/60 rounded-xl space-y-1.5 shadow-xs">
+            <div className="flex items-center justify-between text-xs text-brand-300">
+              <span className="font-semibold flex items-center gap-2">
+                <Loader2 size={13} className="animate-spin text-brand-400" />
+                Local Tesseract.js OCR Recognition (Client-side ₹0 Processing)
+              </span>
+              <span className="font-mono font-bold text-brand-200">{job.progress.ocrProgress}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-brand-500 rounded-full transition-all duration-200"
+                style={{ width: `${job.progress.ocrProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Real-time Counters Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">

@@ -150,7 +150,7 @@ export const AiPdfImport: React.FC = () => {
         onBatchComplete: () => {
           loadStagedForJob(job.id);
         },
-      });
+      }, subjects, topics);
     } catch (err) {
       console.error('Error starting batch processor:', err);
     }
@@ -188,7 +188,7 @@ export const AiPdfImport: React.FC = () => {
     processorRef.current.resumeFromCheckpoint(activeJob, doc, existingQuestions, {
       onProgress: () => loadStagedForJob(activeJob.id),
       onBatchComplete: () => loadStagedForJob(activeJob.id),
-    });
+    }, subjects, topics);
   };
 
   const handleCancel = () => {

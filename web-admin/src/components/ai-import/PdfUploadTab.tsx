@@ -46,6 +46,9 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
   const [language, setLanguage] = useState<'en' | 'hi' | 'both'>('both');
   const [importMode, setImportMode] = useState<ImportMode>('questions_key');
 
+  // Extraction Engine Mode (Free Local by default, ₹0 API usage)
+  const [extractionMode, setExtractionMode] = useState<'free_local' | 'ai_assisted'>('free_local');
+
   // Feature Toggles
   const [autoDetectTaxonomy, setAutoDetectTaxonomy] = useState(true);
   const [autoDetectDifficulty, setAutoDetectDifficulty] = useState(true);
@@ -114,6 +117,7 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
           negativeMarks: 0.5,
         },
         config: {
+          extractionMode,
           autoDetectTaxonomy,
           autoDetectDifficulty,
           extractImages,
@@ -355,6 +359,89 @@ export const PdfUploadTab: React.FC<PdfUploadTabProps> = ({
               <option value="en">English Only</option>
               <option value="hi">Hindi Only</option>
             </select>
+          </div>
+        </div>
+
+        {/* Extraction Engine Mode Setting */}
+        <div className="pt-4 border-t border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5 uppercase tracking-wider">
+              <Sparkles size={14} className="text-brand-400" />
+              Extraction Engine Mode
+            </label>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold">
+              ₹0 Cost-First Architecture
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label
+              className={`p-3.5 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                extractionMode === 'free_local'
+                  ? 'bg-brand-950/30 border-brand-500/80 shadow-xs'
+                  : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs text-white">Free Local</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                      Recommended
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    PDF.js text parsing + Tesseract.js client OCR. 100% private, runs directly in browser.
+                  </p>
+                </div>
+                <input
+                  type="radio"
+                  name="extractionMode"
+                  value="free_local"
+                  checked={extractionMode === 'free_local'}
+                  onChange={() => setExtractionMode('free_local')}
+                  className="mt-0.5 accent-brand-500"
+                />
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-emerald-400 font-medium">
+                <span>₹0 API Usage</span>
+                <span>No API Key Required</span>
+              </div>
+            </label>
+
+            <label
+              className={`p-3.5 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                extractionMode === 'ai_assisted'
+                  ? 'bg-brand-950/30 border-brand-500/80 shadow-xs'
+                  : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-xs text-white">AI Assisted</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold">
+                      Optional
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Google Gemini cloud model enhancement. Requires server-side GEMINI_API_KEY.
+                  </p>
+                </div>
+                <input
+                  type="radio"
+                  name="extractionMode"
+                  value="ai_assisted"
+                  checked={extractionMode === 'ai_assisted'}
+                  onChange={() => setExtractionMode('ai_assisted')}
+                  className="mt-0.5 accent-brand-500"
+                />
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-purple-400 font-medium">
+                <span>External Cloud AI</span>
+                <span>Optional Key Required</span>
+              </div>
+            </label>
           </div>
         </div>
 

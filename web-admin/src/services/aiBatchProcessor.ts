@@ -1,24 +1,30 @@
 /**
- * AI Batch Processor
+ * AI & Zero-Cost Batch Processor
  * Orchestrates resumable batch execution for large PDFs (3,000-5,000 questions).
  * Features:
- * - Server-side Gemini AI extraction via authenticated /api/pdf-process
- * - Multimodal Scanned PDF OCR using page image rendering
- * - Small page batches (5 pages per batch)
- * - Checkpoint persistence in Firestore (never reprocesses successful pages)
- * - Deterministic answer key matching, confidence scoring, and duplicate detection
+ * - Zero-Cost-First Architecture: Free Local Mode by default (PDF.js + Tesseract.js client OCR)
+ * - Optional AI Enhancement: Server-side Gemini AI extraction via authenticated /api/pdf-process
+ * - Multi-Column layout detection and reading-order reconstruction
+ * - Local Tesseract.js client OCR with live progress reporting for scanned pages
+ * - Small page batches (3-5 pages per batch) with persistent Firestore checkpoints
+ * - Deterministic taxonomy mapping against existing Exams, Subjects, and Topics
+ * - Deterministic answer key matching, confidence scoring (HIGH, REVIEW, ERROR), and duplicate detection
  * - Pause, resume from checkpoint, retry failed batches, and cancel support
  */
 
 import { PDFDocumentProxy } from 'pdfjs-dist';
-import { extractPageText, renderPdfPageToDataUrl } from '../utils/pdfParser';
+import { extractPageText, renderPdfPageToDataUrl, renderPdfPageToCanvas } from '../utils/pdfParser';
 import { parseAnswerKeyText, matchQuestionAnswer } from '../utils/answerKeyMatcher';
 import { checkDuplicate } from '../utils/duplicateDetector';
+import { recognizePageImage, terminateOcrWorker } from '../utils/localOcr';
+import { matchDeterministicTaxonomy } from '../utils/taxonomyMatcher';
 import {
   PdfImportJob,
   PdfBatch,
   StagedQuestion,
   Question,
+  Subject,
+  Topic,
 } from '../types';
 import {
   saveBatches,
@@ -37,9 +43,11 @@ export interface BatchProcessingCallbacks {
     processedPages: number;
     totalPages: number;
     detectedQuestions: number;
+    ocrProgress?: number;
   }) => void;
   onError?: (batchId: string, error: string) => void;
   onBatchComplete?: (batchId: string, questionsCount: number) => void;
+  onOcrProgress?: (percent: number, page: number) => void;
 }
 
 export class AiBatchProcessor {
@@ -48,6 +56,7 @@ export class AiBatchProcessor {
 
   public pause() {
     this.isPaused = true;
+    terminateOcrWorker().catch(() => {});
   }
 
   public resume() {
@@ -56,6 +65,7 @@ export class AiBatchProcessor {
 
   public cancel() {
     this.isCancelled = true;
+    terminateOcrWorker().catch(() => {});
   }
 
   /**
@@ -98,7 +108,9 @@ export class AiBatchProcessor {
     job: PdfImportJob,
     pdfDoc: PDFDocumentProxy,
     existingQuestions: Question[] = [],
-    callbacks?: BatchProcessingCallbacks
+    callbacks?: BatchProcessingCallbacks,
+    subjects: Subject[] = [],
+    topics: Topic[] = []
   ): Promise<void> {
     this.isPaused = false;
     this.isCancelled = false;
@@ -108,7 +120,7 @@ export class AiBatchProcessor {
     // 1. Get or create batches
     const batches = await this.initializeBatches(job.id, job.totalPages, 5);
 
-    // 2. Pre-scan document for potential Answer Key pages (usually in last 10% of PDF)
+    // 2. Pre-scan document for potential Answer Key pages (usually in trailing pages or answer sections)
     const answerKeyMap = new Map<number, 'A' | 'B' | 'C' | 'D'>();
     const answerKeyStart = Math.max(1, job.totalPages - 20);
 
@@ -139,6 +151,7 @@ export class AiBatchProcessor {
     for (let i = 0; i < batches.length; i++) {
       if (this.isCancelled) {
         await updateJobState(job.id, { status: 'cancelled' });
+        await terminateOcrWorker();
         return;
       }
 
@@ -147,6 +160,7 @@ export class AiBatchProcessor {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         if (this.isCancelled) {
           await updateJobState(job.id, { status: 'cancelled' });
+          await terminateOcrWorker();
           return;
         }
       }
@@ -173,14 +187,17 @@ export class AiBatchProcessor {
             job,
             currentBatch.id,
             answerKeyMap,
-            existingQuestions
+            existingQuestions,
+            subjects,
+            topics,
+            callbacks
           );
 
           for (const sq of pageQuestions) {
             stagedQuestionsForBatch.push(sq);
 
             if (sq.confidence_level === 'HIGH') highConfCount++;
-            else if (sq.confidence_level === 'MEDIUM') needsReviewCount++;
+            else if (sq.confidence_level === 'REVIEW' || sq.confidence_level === 'MEDIUM') needsReviewCount++;
             else errorCount++;
 
             if (sq.is_duplicate) dupCount++;
@@ -231,12 +248,11 @@ export class AiBatchProcessor {
           totalPages: job.totalPages,
           detectedQuestions: totalDetectedQuestions,
         });
-
       } catch (batchErr: any) {
-        console.error(`Batch ${currentBatch.id} error:`, batchErr);
+        console.error(`Error in batch ${currentBatch.id}:`, batchErr);
         await updateBatch(job.id, currentBatch.id, {
           status: 'failed',
-          error: batchErr.message || 'Batch extraction failure',
+          error: batchErr.message,
           retries: (currentBatch.retries || 0) + 1,
         });
         errorCount++;
@@ -264,6 +280,8 @@ export class AiBatchProcessor {
         duplicates: dupCount,
       },
     });
+
+    await terminateOcrWorker();
   }
 
   /**
@@ -273,14 +291,17 @@ export class AiBatchProcessor {
     job: PdfImportJob,
     pdfDoc: PDFDocumentProxy,
     existingQuestions: Question[] = [],
-    callbacks?: BatchProcessingCallbacks
+    callbacks?: BatchProcessingCallbacks,
+    subjects: Subject[] = [],
+    topics: Topic[] = []
   ): Promise<void> {
-    return this.processJob(job, pdfDoc, existingQuestions, callbacks);
+    return this.processJob(job, pdfDoc, existingQuestions, callbacks, subjects, topics);
   }
 
   /**
-   * Extracts questions from a page using the authenticated server-side AI endpoint
-   * with multimodal OCR for scanned pages and deterministic fallback when offline.
+   * Extracts questions from a single page according to the configured extractionMode.
+   * Free Local Mode (Default): Uses PDF.js for digital text and Tesseract.js client OCR for scanned pages. ₹0 API usage.
+   * AI Assisted Mode (Optional): Uses authenticated /api/pdf-process endpoint with Gemini.
    */
   private async extractPageQuestions(
     pageNumber: number,
@@ -288,13 +309,80 @@ export class AiBatchProcessor {
     job: PdfImportJob,
     batchId: string,
     answerKeyMap: Map<number, 'A' | 'B' | 'C' | 'D'>,
-    existingQuestions: Question[]
+    existingQuestions: Question[],
+    subjects: Subject[] = [],
+    topics: Topic[] = [],
+    callbacks?: BatchProcessingCallbacks
   ): Promise<StagedQuestion[]> {
-    const pageText = await extractPageText(pdfDoc, pageNumber);
-    const isScanned = !!job.config.ocrEnabled || pageText.trim().length < 50;
+    const isAiMode = job.config?.extractionMode === 'ai_assisted';
 
+    // 1. Extract digital text with multi-column reading order reconstruction
+    const pageText = await extractPageText(pdfDoc, pageNumber);
+    const isScanned = !!job.config?.ocrEnabled || pageText.trim().length < 50;
+
+    // -------------------------------------------------------------
+    // Path A: Free Local Mode (Default, ₹0 API usage)
+    // -------------------------------------------------------------
+    if (!isAiMode) {
+      if (isScanned) {
+        // Scanned page: perform browser-side Tesseract.js OCR
+        try {
+          const canvas = document.createElement('canvas');
+          await renderPdfPageToCanvas(pdfDoc, pageNumber, canvas, 2.0);
+
+          const ocrText = await recognizePageImage(canvas, (progressPercent) => {
+            callbacks?.onOcrProgress?.(progressPercent, pageNumber);
+            callbacks?.onProgress?.({
+              currentBatch: 0,
+              totalBatches: 0,
+              processedPages: pageNumber,
+              totalPages: job.totalPages,
+              detectedQuestions: 0,
+              ocrProgress: progressPercent,
+            });
+          });
+
+          if (ocrText && ocrText.trim().length >= 30) {
+            return this.extractQuestionsFromText(
+              ocrText,
+              job,
+              batchId,
+              pageNumber,
+              answerKeyMap,
+              existingQuestions,
+              subjects,
+              topics,
+              'OCR_AI'
+            );
+          }
+        } catch (ocrErr) {
+          console.warn(`Local OCR processing failed for page ${pageNumber}:`, ocrErr);
+        }
+      }
+
+      // Digital page: deterministic extraction
+      if (pageText.length >= 30) {
+        return this.extractQuestionsFromText(
+          pageText,
+          job,
+          batchId,
+          pageNumber,
+          answerKeyMap,
+          existingQuestions,
+          subjects,
+          topics,
+          'DIGITAL_TEXT'
+        );
+      }
+
+      return [];
+    }
+
+    // -------------------------------------------------------------
+    // Path B: AI-Assisted Mode (Optional Gemini Enhancement)
+    // -------------------------------------------------------------
     let pageImage = '';
-    if (isScanned || job.config.extractImages) {
+    if (isScanned || job.config?.extractImages) {
       try {
         pageImage = await renderPdfPageToDataUrl(pdfDoc, pageNumber, 1.5);
       } catch (imgErr) {
@@ -302,7 +390,6 @@ export class AiBatchProcessor {
       }
     }
 
-    // Attempt Server-Side AI Extraction
     let aiSuccess = false;
     let rawAiQuestions: any[] = [];
 
@@ -338,7 +425,6 @@ export class AiBatchProcessor {
       console.warn(`Server AI endpoint call failed for page ${pageNumber}:`, apiErr);
     }
 
-    // Process AI Results
     if (aiSuccess && rawAiQuestions.length > 0) {
       const results: StagedQuestion[] = [];
 
@@ -355,7 +441,7 @@ export class AiBatchProcessor {
           answerKeyMap
         );
 
-        // Visual diagram requirement detection (Phase 6)
+        // Visual diagram requirement detection
         const isVisualRequired = !!raw.questionImageRequired || /figure|diagram|chart|table-image|geometry|map/i.test(qText);
         const warnings = [...(raw.warnings || [])];
         if (isVisualRequired) {
@@ -363,6 +449,18 @@ export class AiBatchProcessor {
         }
         if (ansResolution.warning) {
           warnings.push(ansResolution.warning);
+        }
+
+        // Deterministic taxonomy classification
+        const taxonomy = matchDeterministicTaxonomy(
+          qText,
+          raw.explanation || '',
+          subjects,
+          topics,
+          { subject: raw.subject || job.defaults.subject, topic: raw.topic || job.defaults.topic }
+        );
+        if (taxonomy.warning) {
+          warnings.push(taxonomy.warning);
         }
 
         const dupCheck = checkDuplicate(qText, existingQuestions);
@@ -379,11 +477,11 @@ export class AiBatchProcessor {
           option_d_text: raw.options?.D || '',
           correct_answer: ansResolution.finalAnswer,
           explanation_text: raw.explanation || '',
-          exam: raw.subject ? job.defaults.exam || 'ANCHSL' : 'ANCHSL',
+          exam: job.defaults.exam || 'ANCHSL',
           category: job.defaults.category,
-          subject: raw.subject || job.defaults.subject || 'General Awareness',
+          subject: taxonomy.subject,
           chapter: raw.chapter || job.defaults.chapter,
-          topic: raw.topic || job.defaults.topic || 'General',
+          topic: taxonomy.topic,
           difficulty: raw.difficulty || job.defaults.difficulty || 'Medium',
           positive_marks: job.defaults.positiveMarks ?? 2.0,
           negative_marks: job.defaults.negativeMarks ?? 0.5,
@@ -418,20 +516,22 @@ export class AiBatchProcessor {
       return results;
     }
 
-    // Fallback: If AI endpoint was unavailable and digital text is present
-    if (pageText.length >= 50) {
+    // Fallback if AI was requested but failed: extract locally
+    if (pageText.length >= 30) {
       const fallbackQuestions = this.extractQuestionsFromText(
         pageText,
         job,
         batchId,
         pageNumber,
         answerKeyMap,
-        existingQuestions
+        existingQuestions,
+        subjects,
+        topics,
+        'DIGITAL_TEXT'
       );
 
-      // Add notice that questions were extracted via deterministic fallback
       for (const q of fallbackQuestions) {
-        q.validation_warnings.push('⚠️ Extracted via deterministic fallback parser (Server AI endpoint was unreachable)');
+        q.validation_warnings.push('⚠️ Processed via deterministic parser (AI endpoint was unreachable)');
       }
 
       return fallbackQuestions;
@@ -441,19 +541,24 @@ export class AiBatchProcessor {
   }
 
   /**
-   * Deterministic pattern extractor fallback for clean digital exam text.
+   * Deterministic pattern extractor for clean digital exam text and local OCR output.
+   * Extracts MCQs, options (A-D or 1-4), answer keys, explanations, diagrams, and taxonomies.
    */
-  private extractQuestionsFromText(
+  public extractQuestionsFromText(
     pageText: string,
     job: PdfImportJob,
     batchId: string,
     pageNumber: number,
     answerKeyMap: Map<number, 'A' | 'B' | 'C' | 'D'>,
-    existingQuestions: Question[]
+    existingQuestions: Question[],
+    subjects: Subject[] = [],
+    topics: Topic[] = [],
+    extractionType: 'DIGITAL_TEXT' | 'OCR_AI' = 'DIGITAL_TEXT'
   ): StagedQuestion[] {
     const results: StagedQuestion[] = [];
-    if (!pageText || pageText.trim().length < 30) return results;
+    if (!pageText || pageText.trim().length < 20) return results;
 
+    // Pattern to identify question starters: e.g. "\n1. ", "\nQ.1 ", "\nQuestion 1:"
     const questionSplitRegex = /(?:^|\n)(?:Q\.?|Que\.?|Question)?\s*(\d{1,4})[\s.:\-–)]+/gi;
     const matches: { index: number; qNum: number; fullMatch: string }[] = [];
 
@@ -474,42 +579,59 @@ export class AiBatchProcessor {
       const nextIndex = i + 1 < matches.length ? matches[i + 1].index : pageText.length;
       const questionBlock = pageText.slice(current.index, nextIndex).trim();
 
-      const optRegex = /(?:\n|^|\s)[\(\[]?([A-Da-d])[\)\]\.:\-]\s*([^\n\(\[]+)/g;
+      // Extract options: (A), (B), (C), (D) or (1), (2), (3), (4) or A., B., C., D.
+      const optRegex = /(?:\n|^|\s)(?:[\(\[]([A-Da-d1-4])[\)\]]|([A-Da-d])[\)\]\.:\-])\s*([^\n\(\[]+)/g;
       const optionsMap: Record<string, string> = { A: '', B: '', C: '', D: '' };
+
+      const mapOptionLetter = (raw: string): 'A' | 'B' | 'C' | 'D' | null => {
+        const u = raw.toUpperCase();
+        if (u === 'A' || u === '1') return 'A';
+        if (u === 'B' || u === '2') return 'B';
+        if (u === 'C' || u === '3') return 'C';
+        if (u === 'D' || u === '4') return 'D';
+        return null;
+      };
 
       let optMatch: RegExpExecArray | null;
       let firstOptIndex = questionBlock.length;
 
       while ((optMatch = optRegex.exec(questionBlock)) !== null) {
-        const optLetter = optMatch[1].toUpperCase();
-        const optVal = optMatch[2].trim();
-        if (['A', 'B', 'C', 'D'].includes(optLetter)) {
-          optionsMap[optLetter] = optVal;
+        const rawLetter = optMatch[1] || optMatch[2];
+        const mappedLetter = mapOptionLetter(rawLetter);
+        const optVal = optMatch[3].trim();
+        if (mappedLetter && !optionsMap[mappedLetter]) {
+          optionsMap[mappedLetter] = optVal;
           if (optMatch.index < firstOptIndex) {
             firstOptIndex = optMatch.index;
           }
         }
       }
 
+      // Question body is text before the first option
       let qText = questionBlock.slice(0, firstOptIndex).trim();
       qText = qText.replace(/^(?:Q\.?|Que\.?|Question)?\s*\d{1,4}[\s.:\-–)]+/, '').trim();
       if (!qText || qText.length < 5) continue;
 
-      const inlineAnsMatch = questionBlock.match(/(?:Ans|Answer)[\s.:\-–—]*\(?([A-Da-d])\)?/i);
-      const inlineAns = inlineAnsMatch ? inlineAnsMatch[1].toUpperCase() : undefined;
+      // Extract inline answer if present
+      const inlineAnsMatch = questionBlock.match(/(?:Ans|Answer)[\s.:\-–—]*\(?([A-Da-d1-4])\)?/i);
+      const rawInline = inlineAnsMatch ? inlineAnsMatch[1] : undefined;
+      const inlineAns = rawInline ? mapOptionLetter(rawInline) || undefined : undefined;
 
+      // Match answer with official answer key
       const ansResolution = matchQuestionAnswer(
         current.qNum,
         inlineAns,
         answerKeyMap
       );
 
+      // Extract inline explanation if present
       let explanation = '';
       const expMatch = questionBlock.match(/(?:Exp|Explanation|Solution)[\s.:\-–—]+([\s\S]+)$/i);
       if (expMatch) {
         explanation = expMatch[1].trim();
       }
 
+      // Visual diagram detection
       const isVisualRequired = /figure|diagram|chart|map|geometry|table/i.test(qText);
       const warnings: string[] = [];
       if (isVisualRequired) {
@@ -517,6 +639,18 @@ export class AiBatchProcessor {
       }
       if (ansResolution.warning) {
         warnings.push(ansResolution.warning);
+      }
+
+      // Deterministic taxonomy classification
+      const taxonomy = matchDeterministicTaxonomy(
+        qText,
+        explanation,
+        subjects,
+        topics,
+        { subject: job.defaults.subject, topic: job.defaults.topic }
+      );
+      if (taxonomy.warning) {
+        warnings.push(taxonomy.warning);
       }
 
       const dupCheck = checkDuplicate(qText, existingQuestions);
@@ -535,9 +669,9 @@ export class AiBatchProcessor {
         explanation_text: explanation,
         exam: job.defaults.exam || 'ANCHSL',
         category: job.defaults.category,
-        subject: job.defaults.subject || 'General Awareness',
+        subject: taxonomy.subject,
         chapter: job.defaults.chapter,
-        topic: job.defaults.topic || 'General',
+        topic: taxonomy.topic,
         difficulty: job.defaults.difficulty || 'Medium',
         positive_marks: job.defaults.positiveMarks ?? 2.0,
         negative_marks: job.defaults.negativeMarks ?? 0.5,
@@ -572,3 +706,4 @@ export class AiBatchProcessor {
     return results;
   }
 }
+export const aiBatchProcessor = new AiBatchProcessor();

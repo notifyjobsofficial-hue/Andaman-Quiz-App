@@ -276,14 +276,27 @@ export function calculateDeterministicConfidence(q: Partial<StagedQuestion>): {
     score -= 25;
   }
 
-  // Clamp score
   const finalScore = Math.max(0, Math.min(100, score));
 
+  // Zero-Cost-First confidence semantics:
+  // HIGH: structurally valid question + A-D options + source answer matched
+  // REVIEW: ambiguous formatting / unclassified taxonomy / unresolved answer / duplicate
+  // ERROR: extraction incomplete (missing question text, fewer than 2 options)
   let level: ConfidenceLevel = 'HIGH';
-  if (finalScore < 60 || missingOptsCount > 0 || !q.correct_answer) {
-    level = 'LOW';
-  } else if (finalScore < 85 || q.answer_source === 'AI_INFERRED') {
-    level = 'MEDIUM';
+  if (!hasText || missingOptsCount >= 3) {
+    level = 'ERROR';
+  } else if (
+    missingOptsCount > 0 ||
+    !q.correct_answer ||
+    q.answer_source === 'UNRESOLVED' ||
+    q.answer_source === 'AI_INFERRED' ||
+    q.is_duplicate ||
+    warnings.some((w) => w.toLowerCase().includes('unclassified') || w.toLowerCase().includes('visual')) ||
+    finalScore < 80
+  ) {
+    level = 'REVIEW';
+  } else {
+    level = 'HIGH';
   }
 
   return {

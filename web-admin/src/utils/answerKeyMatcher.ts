@@ -61,10 +61,6 @@ export function parseAnswerKeyText(text: string): ParsedAnswerKey {
         }
       }
     }
-    // If pattern yielded a good set of contiguous answers, we don't need to overmatch noise
-    if (answers.size >= 10) {
-      break;
-    }
   }
 
   return {

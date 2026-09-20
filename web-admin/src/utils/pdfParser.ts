@@ -64,8 +64,98 @@ export async function inspectPdf(file: File): Promise<PdfInspectionResult> {
   };
 }
 
+interface TextItemWithCoords {
+  str: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
- * Extracts raw text lines from a specific page.
+ * Reconstructs natural human reading order from PDF text item coordinates.
+ * Handles single-column and two-column competitive exam question formats.
+ */
+export function reconstructReadingOrderText(
+  items: any[],
+  pageWidth: number = 600
+): string {
+  if (!items || items.length === 0) return '';
+
+  const parsedItems: TextItemWithCoords[] = items
+    .filter((item: any) => item && typeof item.str === 'string' && item.str.trim().length > 0)
+    .map((item: any) => {
+      const transform = item.transform || [1, 0, 0, 1, 0, 0];
+      return {
+        str: item.str,
+        x: transform[4] || 0,
+        y: transform[5] || 0, // in PDF coordinate space, higher is top of page
+        width: item.width || 0,
+        height: item.height || 10,
+      };
+    });
+
+  if (parsedItems.length === 0) return '';
+
+  // Detect 2-column layout: items concentrated on left (x < midX) and right (x > midX)
+  const midX = pageWidth / 2;
+  const leftColItems = parsedItems.filter((it) => it.x < midX * 0.95);
+  const rightColItems = parsedItems.filter((it) => it.x > midX * 0.95);
+
+  const isTwoColumn =
+    leftColItems.length > 5 &&
+    rightColItems.length > 5 &&
+    leftColItems.length / parsedItems.length > 0.25 &&
+    rightColItems.length / parsedItems.length > 0.25;
+
+  const processColumn = (colItems: TextItemWithCoords[]): string => {
+    if (colItems.length === 0) return '';
+
+    // Sort by y descending (top to bottom), then x ascending (left to right)
+    colItems.sort((a, b) => {
+      const yDiff = b.y - a.y;
+      if (Math.abs(yDiff) > 4) {
+        return yDiff;
+      }
+      return a.x - b.x;
+    });
+
+    // Group items into lines
+    const lines: string[] = [];
+    let currentLine: TextItemWithCoords[] = [];
+    let currentY: number | null = null;
+
+    for (const item of colItems) {
+      if (currentY === null || Math.abs(item.y - currentY) <= 4) {
+        currentLine.push(item);
+        if (currentY === null) currentY = item.y;
+      } else {
+        currentLine.sort((a, b) => a.x - b.x);
+        lines.push(currentLine.map((it) => it.str).join(' '));
+        currentLine = [item];
+        currentY = item.y;
+      }
+    }
+
+    if (currentLine.length > 0) {
+      currentLine.sort((a, b) => a.x - b.x);
+      lines.push(currentLine.map((it) => it.str).join(' '));
+    }
+
+    return lines.join('\n');
+  };
+
+  if (isTwoColumn) {
+    const leftText = processColumn(leftColItems);
+    const rightText = processColumn(rightColItems);
+    return `${leftText}\n\n${rightText}`.trim();
+  }
+
+  return processColumn(parsedItems).trim();
+}
+
+/**
+ * Extracts raw text lines from a specific page with reading-order reconstruction.
  */
 export async function extractPageText(
   doc: pdfjsLib.PDFDocumentProxy,
@@ -73,7 +163,13 @@ export async function extractPageText(
 ): Promise<string> {
   if (pageNumber < 1 || pageNumber > doc.numPages) return '';
   const page = await doc.getPage(pageNumber);
+  const viewport = page.getViewport({ scale: 1.0 });
   const textContent = await page.getTextContent();
+
+  const reconstructed = reconstructReadingOrderText(textContent.items, viewport.width);
+  if (reconstructed.length > 0) {
+    return reconstructed;
+  }
 
   return textContent.items
     .map((item: any) => item.str || '')

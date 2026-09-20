@@ -232,11 +232,13 @@ export type JobStatus =
   | 'failed'
   | 'cancelled';
 
-export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type ConfidenceLevel = 'HIGH' | 'REVIEW' | 'ERROR' | 'MEDIUM' | 'LOW';
 
 export type AnswerSource = 'SOURCE_ANSWER' | 'AI_INFERRED' | 'UNRESOLVED';
 
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
+
+export type ExtractionMode = 'free_local' | 'ai_assisted';
 
 export interface JobDefaults {
   exam?: string;
@@ -252,6 +254,7 @@ export interface JobDefaults {
 }
 
 export interface JobConfig {
+  extractionMode?: ExtractionMode; // 'free_local' (default, ₹0 API usage) or 'ai_assisted'
   autoDetectTaxonomy: boolean;
   autoDetectDifficulty: boolean;
   extractImages: boolean;
@@ -263,6 +266,7 @@ export interface JobProgress {
   totalBatches: number;
   processedPages: number;
   totalPages: number;
+  ocrProgress?: number;
 }
 
 export interface JobMetrics {
