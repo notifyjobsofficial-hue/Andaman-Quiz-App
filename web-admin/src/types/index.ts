@@ -123,6 +123,35 @@ export interface AppNotice {
   date: string;
   active: boolean;
   isPinned: boolean;
+  type?: 'JOB' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY' | 'EXAM_DATE' | 'NOTICE';
+  shortDescription?: string;
+  content?: string;
+  organization?: string;
+  exam?: string;
+  imageUrl?: string;
+  pdfUrl?: string;
+  officialUrl?: string;
+  applyUrl?: string;
+  externalUrl?: string;
+  publishAt?: string;
+  expiresAt?: string;
+  status?: 'published' | 'draft' | 'scheduled';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LiveTestItem {
+  id: string;
+  mockTestId: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  instructions?: string;
+  featured: boolean;
+  isPublished: boolean;
+  allowEarlyJoin: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface QuestionOfTheDay {
@@ -130,9 +159,23 @@ export interface QuestionOfTheDay {
   date: string; // YYYY-MM-DD
   questionId: string;
   questionText?: string;
+  questionImageUrl?: string;
   options?: string[];
+  optionImages?: string[];
   correctAnswer?: string;
+  correctIndex?: number;
   explanation?: string;
+  explanationImageUrl?: string;
+  exam?: string;
+  examName?: string;
+  source?: string;
+  year?: string;
+  shift?: string;
+  examDate?: string;
+  topic?: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  durationSeconds?: number;
+  publishedDate?: string;
   active?: boolean;
 }
 

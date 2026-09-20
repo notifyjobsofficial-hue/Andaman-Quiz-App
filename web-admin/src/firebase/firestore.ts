@@ -25,6 +25,7 @@ import {
   MockTest,
   HomeBanner,
   AppNotice,
+  LiveTestItem,
   AppConfig,
   AdminActivity
 } from '../types';
@@ -352,16 +353,46 @@ export async function deleteBanner(id: string): Promise<void> {
 }
 
 export async function fetchNotices(): Promise<AppNotice[]> {
-  const snap = await getDocs(query(collection(db, 'notices'), orderBy('date', 'desc')));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotice));
+  try {
+    const snap = await getDocs(query(collection(db, 'notices'), orderBy('date', 'desc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotice));
+  } catch (err) {
+    console.warn('Failed to fetch notices:', err);
+    return [];
+  }
 }
 
 export async function saveNotice(notice: AppNotice): Promise<void> {
-  await safeSetDoc(doc(db, 'notices', notice.id), notice, { merge: true });
+  const sanitized = sanitizeForFirestore(notice);
+  await safeSetDoc(doc(db, 'notices', notice.id), sanitized, { merge: true });
+  await logActivity('Save Notice', `Notice "${notice.title}" updated/created`);
 }
 
 export async function deleteNotice(id: string): Promise<void> {
   await deleteDoc(doc(db, 'notices', id));
+  await logActivity('Delete Notice', `Deleted notice ID: ${id}`);
+}
+
+// 6.5 Live Tests
+export async function fetchLiveTests(): Promise<LiveTestItem[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'live_tests'), orderBy('startAt', 'desc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LiveTestItem));
+  } catch (err) {
+    console.warn('Failed to fetch live tests:', err);
+    return [];
+  }
+}
+
+export async function saveLiveTest(test: LiveTestItem): Promise<void> {
+  const sanitized = sanitizeForFirestore(test);
+  await safeSetDoc(doc(db, 'live_tests', test.id), sanitized, { merge: true });
+  await logActivity('Save Live Test', `Live test "${test.title}" scheduled/updated`);
+}
+
+export async function deleteLiveTest(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'live_tests', id));
+  await logActivity('Delete Live Test', `Deleted live test ID: ${id}`);
 }
 
 export async function fetchAppConfig(): Promise<AppConfig | null> {

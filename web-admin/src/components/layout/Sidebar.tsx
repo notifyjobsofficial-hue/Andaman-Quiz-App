@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   LayoutDashboard,
   HelpCircle,
@@ -9,7 +9,9 @@ import {
   FolderTree,
   Bell,
   Settings,
-  X
+  X,
+  Radio,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -30,10 +32,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'questions', label: 'Question Bank', icon: HelpCircle },
     { id: 'import', label: 'Bulk Question Import', icon: UploadCloud, badge: 'Core' },
     { id: 'tests', label: 'Mock Tests & Pricing', icon: FileCheck },
+    { id: 'live-tests', label: 'Live Tests', icon: Radio },
     { id: 'test-builder', label: 'Test Question Builder', icon: Layers },
+    { id: 'notices', label: 'Notice Board', icon: Bell },
     { id: 'categories-exams', label: 'Categories & Exams', icon: FolderTree },
     { id: 'subjects', label: 'Subjects & Topics', icon: BookOpen },
-    { id: 'content', label: 'Banners & Notices', icon: Bell },
+    { id: 'content', label: 'Banners & Config', icon: ImageIcon },
     { id: 'settings', label: 'System & Audit', icon: Settings },
   ];
 

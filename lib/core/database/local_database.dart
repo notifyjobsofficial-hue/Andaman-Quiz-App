@@ -22,6 +22,7 @@ class LocalDatabase {
   final Set<String> _purchasedProductIds = {};
   final List<HomeBanner> _banners = [];
   final List<AppNotice> _notices = [];
+  final List<LiveTestItem> _liveTests = [];
   RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
   bool _isInitialized = false;
@@ -47,6 +48,7 @@ class LocalDatabase {
     _purchasedProductIds.clear();
     _banners.clear();
     _notices.clear();
+    _liveTests.clear();
     _questions.clear();
     _categories.clear();
     _exams.clear();
@@ -120,6 +122,17 @@ class LocalDatabase {
         _notices.clear();
         for (final item in list) {
           _notices.add(AppNotice.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {}
+    }
+
+    final liveTestsRaw = prefs.getString('db_live_tests');
+    if (liveTestsRaw != null && liveTestsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(liveTestsRaw) as List;
+        _liveTests.clear();
+        for (final item in list) {
+          _liveTests.add(LiveTestItem.fromMap(Map<String, dynamic>.from(item)));
         }
       } catch (_) {}
     }
@@ -606,10 +619,39 @@ class LocalDatabase {
 
   Set<String> getPurchasedProductIds() => Set.unmodifiable(_purchasedProductIds);
 
-  // --- Banners, Notices, Remote Config ---
+  // --- Banners, Notices, Live Tests, Remote Config ---
   List<HomeBanner> getBanners() => List.unmodifiable(_banners);
   List<AppNotice> getNotices() => List.unmodifiable(_notices);
+  List<LiveTestItem> getLiveTests() => List.unmodifiable(_liveTests);
   RemoteAppConfig getRemoteConfig() => _remoteConfig;
+
+  List<AppNotice> getActiveNotices() {
+    final active = _notices.where((n) => n.isCurrentlyActive).toList();
+    active.sort((a, b) {
+      if (a.isPinned != b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
+      final aDate = a.publishAt ?? DateTime.tryParse(a.date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.publishAt ?? DateTime.tryParse(b.date) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+    return List.unmodifiable(active);
+  }
+
+  LiveTestItem? getActiveOrUpcomingLiveTest() {
+    final valid = _liveTests.where((t) => t.isPublished && t.status != LiveTestStatus.ended).toList();
+    if (valid.isEmpty) return null;
+    valid.sort((a, b) {
+      // Live tests take precedence over upcoming tests
+      if (a.status == LiveTestStatus.live && b.status != LiveTestStatus.live) return -1;
+      if (b.status == LiveTestStatus.live && a.status != LiveTestStatus.live) return 1;
+      // Featured tests come before non-featured
+      if (a.featured != b.featured) return a.featured ? -1 : 1;
+      // Earlier start time first
+      return a.startAt.compareTo(b.startAt);
+    });
+    return valid.first;
+  }
 
   Future<void> syncBannersFromFirestore(List<HomeBanner> banners) async {
     _banners.clear();
@@ -625,10 +667,45 @@ class LocalDatabase {
     await _prefs?.setString('db_notices', raw);
   }
 
+  Future<void> syncLiveTestsFromFirestore(List<LiveTestItem> liveTests) async {
+    _liveTests.clear();
+    _liveTests.addAll(liveTests);
+    final raw = jsonEncode(_liveTests.map((t) => t.toMap()).toList());
+    await _prefs?.setString('db_live_tests', raw);
+  }
+
   Future<void> syncRemoteConfigFromFirestore(RemoteAppConfig config) async {
     _remoteConfig = config;
     final raw = jsonEncode(_remoteConfig.toMap());
     await _prefs?.setString('db_app_config', raw);
+  }
+
+  // --- QOTD Local Attempt Persistence ---
+  Future<void> saveQotdAttempt({
+    required String date,
+    required String questionId,
+    required int selectedOption,
+    required bool isCorrect,
+  }) async {
+    final key = 'qotd_attempt_$date';
+    final data = {
+      'date': date,
+      'questionId': questionId,
+      'selectedOption': selectedOption,
+      'isCorrect': isCorrect,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    await _prefs?.setString(key, jsonEncode(data));
+  }
+
+  Map<String, dynamic>? getQotdAttempt(String date) {
+    final raw = _prefs?.getString('qotd_attempt_$date');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   // --- Active Exam State Preservation ---

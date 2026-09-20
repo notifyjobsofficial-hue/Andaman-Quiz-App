@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/app_card.dart';
 
 class SolutionsReviewScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,77 @@ class SolutionsReviewScreen extends ConsumerStatefulWidget {
 
 class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
   String _activeFilter = 'All'; // All, Correct, Incorrect, Unattempted
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureQuestionsLoaded();
+  }
+
+  Future<void> _ensureQuestionsLoaded() async {
+    final attempt = LocalDatabase.instance.getAttemptById(widget.attemptId) ??
+        (LocalDatabase.instance.getAttempts().isNotEmpty
+            ? LocalDatabase.instance.getAttempts().first
+            : null);
+    if (attempt == null) return;
+
+    final mock = LocalDatabase.instance.getMockTestById(attempt.testId);
+    final allQuestionIds = <String>[];
+    if (mock != null && mock.sections.isNotEmpty) {
+      for (final sec in mock.sections) {
+        allQuestionIds.addAll(sec.questionIds);
+      }
+    } else {
+      allQuestionIds.addAll(attempt.selectedAnswers.keys);
+    }
+
+    if (allQuestionIds.isEmpty) return;
+
+    final cachedQuestions = LocalDatabase.instance.getQuestionsByIds(allQuestionIds);
+    if (cachedQuestions.length < allQuestionIds.length) {
+      try {
+        await FirestoreService.instance.fetchQuestionsForTest(allQuestionIds);
+        if (mounted) setState(() {});
+      } catch (_) {
+        // Fallback to local cache
+      }
+    }
+  }
+
+  Widget _buildNetworkImage(String url, {double? height}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Image.network(
+        url,
+        height: height,
+        fit: BoxFit.contain,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) => Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withAlpha(25),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.broken_image_outlined, size: 16, color: Colors.grey),
+              SizedBox(width: 6),
+              Text('Image unavailable', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +107,7 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
 
     final mock = LocalDatabase.instance.getMockTestById(attempt.testId);
     final allQuestionIds = <String>[];
-    if (mock != null) {
+    if (mock != null && mock.sections.isNotEmpty) {
       for (final sec in mock.sections) {
         allQuestionIds.addAll(sec.questionIds);
       }
@@ -162,6 +234,11 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                 '${index + 1}. ${q.questionEn}',
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
                               ),
+                              // Question image if available
+                              if (q.questionImageUrl != null && q.questionImageUrl!.trim().isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                _buildNetworkImage(q.questionImageUrl!.trim()),
+                              ],
                               const SizedBox(height: 14),
 
                               // Options
@@ -182,6 +259,10 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                   bgColor = isDark ? AppColors.surfaceDark : Colors.white;
                                 }
 
+                                final hasOptionImg = q.optionImages != null &&
+                                    optIdx < q.optionImages!.length &&
+                                    q.optionImages![optIdx].trim().isNotEmpty;
+
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -190,28 +271,57 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                     borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
                                     border: Border.all(color: borderColor, width: (isThisCorrect || isThisUserSelected) ? 1.8 : 1.0),
                                   ),
-                                  child: Row(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        '${String.fromCharCode(65 + optIdx)}. ',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          color: isThisCorrect ? AppColors.success : (isThisUserSelected ? AppColors.error : null),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          q.optionsEn[optIdx],
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: (isThisCorrect || isThisUserSelected) ? FontWeight.w600 : FontWeight.w400,
+                                      Row(
+                                        children: [
+                                          Text(
+                                            '${String.fromCharCode(65 + optIdx)}. ',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: isThisCorrect ? AppColors.success : (isThisUserSelected ? AppColors.error : null),
+                                            ),
                                           ),
-                                        ),
+                                          Expanded(
+                                            child: Text(
+                                              q.optionsEn[optIdx],
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: (isThisCorrect || isThisUserSelected) ? FontWeight.w600 : FontWeight.w400,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isThisCorrect)
+                                            const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.check_circle, color: AppColors.success, size: 16),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  'Correct',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.success),
+                                                ),
+                                              ],
+                                            ),
+                                          if (isThisUserSelected && !isThisCorrect)
+                                            const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.cancel, color: AppColors.error, size: 16),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  'Your Choice',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.error),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
                                       ),
-                                      if (isThisCorrect)
-                                        const Icon(Icons.check_circle, color: AppColors.success, size: 16),
-                                      if (isThisUserSelected && !isThisCorrect)
-                                        const Icon(Icons.cancel, color: AppColors.error, size: 16),
+                                      if (hasOptionImg) ...[
+                                        const SizedBox(height: 6),
+                                        _buildNetworkImage(q.optionImages![optIdx].trim(), height: 90),
+                                      ],
                                     ],
                                   ),
                                 );
@@ -235,13 +345,18 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      q.explanationEn,
+                                      q.explanationEn.isNotEmpty ? q.explanationEn : 'No detailed explanation provided for this question.',
                                       style: TextStyle(
                                         fontSize: 13,
                                         height: 1.45,
                                         color: isDark ? AppColors.textDark : AppColors.textLight,
                                       ),
                                     ),
+                                    // Explanation image if available
+                                    if (q.explanationImageUrl != null && q.explanationImageUrl!.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      _buildNetworkImage(q.explanationImageUrl!.trim()),
+                                    ],
                                   ],
                                 ),
                               ),

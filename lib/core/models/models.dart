@@ -643,6 +643,21 @@ class AppNotice {
   final String date;
   final bool active;
   final bool isPinned;
+  final String type; // JOB, ADMIT_CARD, RESULT, ANSWER_KEY, EXAM_DATE, NOTICE
+  final String? shortDescription;
+  final String? content;
+  final String? organization;
+  final String? exam;
+  final String? imageUrl;
+  final String? pdfUrl;
+  final String? officialUrl;
+  final String? applyUrl;
+  final String? externalUrl;
+  final DateTime? publishAt;
+  final DateTime? expiresAt;
+  final String status; // published, draft, scheduled
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const AppNotice({
     required this.id,
@@ -651,7 +666,60 @@ class AppNotice {
     required this.date,
     this.active = true,
     this.isPinned = false,
+    this.type = 'NOTICE',
+    this.shortDescription,
+    this.content,
+    this.organization,
+    this.exam,
+    this.imageUrl,
+    this.pdfUrl,
+    this.officialUrl,
+    this.applyUrl,
+    this.externalUrl,
+    this.publishAt,
+    this.expiresAt,
+    this.status = 'published',
+    this.createdAt,
+    this.updatedAt,
   });
+
+  bool get isNew {
+    final pub = publishAt ?? DateTime.tryParse(date);
+    if (pub == null) return false;
+    final diff = DateTime.now().difference(pub);
+    return !diff.isNegative && diff.inHours <= 48;
+  }
+
+  String get typeDisplayName {
+    switch (type.toUpperCase().replaceAll(' ', '_')) {
+      case 'JOB':
+        return 'JOB';
+      case 'ADMIT_CARD':
+        return 'ADMIT CARD';
+      case 'RESULT':
+        return 'RESULT';
+      case 'ANSWER_KEY':
+        return 'ANSWER KEY';
+      case 'EXAM_DATE':
+        return 'EXAM DATE';
+      case 'NOTICE':
+      default:
+        return 'NOTICE';
+    }
+  }
+
+  bool get isCurrentlyActive {
+    if (!active || status == 'draft') return false;
+    final now = DateTime.now();
+    if (publishAt != null && now.isBefore(publishAt!)) return false;
+    if (expiresAt != null && now.isAfter(expiresAt!)) return false;
+    return true;
+  }
+
+  String get displayDescription =>
+      (shortDescription != null && shortDescription!.trim().isNotEmpty)
+          ? shortDescription!.trim()
+          : (body.trim().isNotEmpty ? body.trim() : (content ?? ''));
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -660,16 +728,64 @@ class AppNotice {
     'date': date,
     'active': active,
     'isPinned': isPinned,
+    'type': type,
+    if (shortDescription != null) 'shortDescription': shortDescription,
+    if (content != null) 'content': content,
+    if (organization != null) 'organization': organization,
+    if (exam != null) 'exam': exam,
+    if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
+    if (pdfUrl != null && pdfUrl!.isNotEmpty) 'pdfUrl': pdfUrl,
+    if (officialUrl != null && officialUrl!.isNotEmpty) 'officialUrl': officialUrl,
+    if (applyUrl != null && applyUrl!.isNotEmpty) 'applyUrl': applyUrl,
+    if (externalUrl != null && externalUrl!.isNotEmpty) 'externalUrl': externalUrl,
+    if (publishAt != null) 'publishAt': publishAt!.toIso8601String(),
+    if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
+    'status': status,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
   };
 
-  factory AppNotice.fromMap(Map<String, dynamic> map) => AppNotice(
-    id: map['id'] ?? '',
-    title: map['title'] ?? '',
-    body: map['body'] ?? '',
-    date: map['date'] ?? '',
-    active: map['active'] ?? true,
-    isPinned: map['isPinned'] ?? false,
-  );
+  factory AppNotice.fromMap(Map<String, dynamic> map) {
+    DateTime? parseDate(dynamic val) {
+      if (val == null) return null;
+      if (val is DateTime) return val;
+      if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      if (val is String) return DateTime.tryParse(val);
+      try {
+        final toDate = (val as dynamic).toDate();
+        if (toDate is DateTime) return toDate;
+      } catch (_) {}
+      return null;
+    }
+
+    final pAt = parseDate(map['publishAt']);
+    final dateStr = map['date'] ?? (pAt != null ? pAt.toIso8601String().split('T').first : '');
+    final b = map['body'] ?? map['shortDescription'] ?? map['content'] ?? '';
+
+    return AppNotice(
+      id: map['id'] ?? '',
+      title: map['title'] ?? '',
+      body: b,
+      date: dateStr,
+      active: map['active'] ?? true,
+      isPinned: map['isPinned'] ?? map['pinned'] ?? false,
+      type: map['type'] ?? 'NOTICE',
+      shortDescription: map['shortDescription'] ?? b,
+      content: map['content'] ?? map['body'],
+      organization: map['organization'],
+      exam: map['exam'],
+      imageUrl: map['imageUrl'],
+      pdfUrl: map['pdfUrl'],
+      officialUrl: map['officialUrl'],
+      applyUrl: map['applyUrl'],
+      externalUrl: map['externalUrl'],
+      publishAt: pAt ?? DateTime.tryParse(dateStr),
+      expiresAt: parseDate(map['expiresAt']),
+      status: map['status'] ?? 'published',
+      createdAt: parseDate(map['createdAt']),
+      updatedAt: parseDate(map['updatedAt']),
+    );
+  }
 }
 
 class QuestionOfTheDay {
@@ -677,9 +793,23 @@ class QuestionOfTheDay {
   final String date; // YYYY-MM-DD
   final String questionId;
   final String? questionText;
+  final String? questionImageUrl;
   final List<String>? options;
+  final List<String>? optionImages;
   final String? correctAnswer;
+  final int correctIndex;
   final String? explanation;
+  final String? explanationImageUrl;
+  final String? exam;
+  final String? examName;
+  final String? source;
+  final String? year;
+  final String? shift;
+  final String? examDate;
+  final String? topic;
+  final String difficulty;
+  final int durationSeconds;
+  final String? publishedDate;
   final bool active;
 
   const QuestionOfTheDay({
@@ -687,33 +817,214 @@ class QuestionOfTheDay {
     required this.date,
     required this.questionId,
     this.questionText,
+    this.questionImageUrl,
     this.options,
+    this.optionImages,
     this.correctAnswer,
+    this.correctIndex = 0,
     this.explanation,
+    this.explanationImageUrl,
+    this.exam,
+    this.examName,
+    this.source,
+    this.year,
+    this.shift,
+    this.examDate,
+    this.topic,
+    this.difficulty = 'Medium',
+    this.durationSeconds = 60,
+    this.publishedDate,
     this.active = true,
   });
+
+  String get formattedSourceInfo {
+    final parts = <String>[];
+    if (examName != null && examName!.trim().isNotEmpty) {
+      parts.add(examName!.trim());
+    } else if (exam != null && exam!.trim().isNotEmpty) {
+      parts.add(exam!.trim());
+    } else if (source != null && source!.trim().isNotEmpty) {
+      parts.add(source!.trim());
+    }
+    if (examDate != null && examDate!.trim().isNotEmpty) {
+      parts.add(examDate!.trim());
+    } else if (year != null && year!.trim().isNotEmpty) {
+      parts.add(year!.trim());
+    }
+    if (shift != null && shift!.trim().isNotEmpty) {
+      parts.add(shift!.trim());
+    }
+    if (parts.isEmpty) {
+      return 'Previous Year Question';
+    }
+    return parts.join(' • ');
+  }
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'date': date,
     'questionId': questionId,
     if (questionText != null) 'questionText': questionText,
+    if (questionImageUrl != null && questionImageUrl!.isNotEmpty) 'questionImageUrl': questionImageUrl,
     if (options != null) 'options': options,
+    if (optionImages != null && optionImages!.isNotEmpty) 'optionImages': optionImages,
     if (correctAnswer != null) 'correctAnswer': correctAnswer,
+    'correctIndex': correctIndex,
     if (explanation != null) 'explanation': explanation,
+    if (explanationImageUrl != null && explanationImageUrl!.isNotEmpty) 'explanationImageUrl': explanationImageUrl,
+    if (exam != null) 'exam': exam,
+    if (examName != null) 'examName': examName,
+    if (source != null) 'source': source,
+    if (year != null) 'year': year,
+    if (shift != null) 'shift': shift,
+    if (examDate != null) 'examDate': examDate,
+    if (topic != null) 'topic': topic,
+    'difficulty': difficulty,
+    'durationSeconds': durationSeconds,
+    if (publishedDate != null) 'publishedDate': publishedDate,
     'active': active,
   };
 
-  factory QuestionOfTheDay.fromMap(Map<String, dynamic> map) => QuestionOfTheDay(
-    id: map['id'] ?? '',
-    date: map['date'] ?? '',
-    questionId: map['questionId'] ?? '',
-    questionText: map['questionText'],
-    options: map['options'] != null ? List<String>.from(map['options']) : null,
-    correctAnswer: map['correctAnswer'],
-    explanation: map['explanation'],
-    active: map['active'] ?? true,
-  );
+  factory QuestionOfTheDay.fromMap(Map<String, dynamic> map) {
+    int cIdx = 0;
+    if (map['correctIndex'] != null) {
+      cIdx = (map['correctIndex'] as num).toInt();
+    } else if (map['correctAnswer'] != null) {
+      final ans = map['correctAnswer'].toString().trim().toUpperCase();
+      if (ans == 'A' || ans == '1') {
+        cIdx = 0;
+      } else if (ans == 'B' || ans == '2') {
+        cIdx = 1;
+      } else if (ans == 'C' || ans == '3') {
+        cIdx = 2;
+      } else if (ans == 'D' || ans == '4') {
+        cIdx = 3;
+      }
+    }
+
+    return QuestionOfTheDay(
+      id: map['id'] ?? '',
+      date: map['date'] ?? '',
+      questionId: map['questionId'] ?? '',
+      questionText: map['questionText'] ?? map['question_text'],
+      questionImageUrl: map['questionImageUrl'] ?? map['question_image_url'],
+      options: map['options'] != null ? List<String>.from(map['options']) : null,
+      optionImages: map['optionImages'] != null
+          ? List<String>.from(map['optionImages'])
+          : (map['option_images'] != null ? List<String>.from(map['option_images']) : null),
+      correctAnswer: map['correctAnswer'] ?? map['correct_answer'],
+      correctIndex: cIdx,
+      explanation: map['explanation'] ?? map['explanation_text'],
+      explanationImageUrl: map['explanationImageUrl'] ?? map['explanation_image_url'],
+      exam: map['exam'],
+      examName: map['examName'],
+      source: map['source'],
+      year: map['year']?.toString(),
+      shift: map['shift']?.toString(),
+      examDate: map['examDate']?.toString(),
+      topic: map['topic'],
+      difficulty: map['difficulty'] ?? 'Medium',
+      durationSeconds: (map['durationSeconds'] as num?)?.toInt() ?? 60,
+      publishedDate: map['publishedDate'],
+      active: map['active'] ?? true,
+    );
+  }
+}
+
+enum LiveTestStatus {
+  upcoming,
+  live,
+  ended,
+}
+
+class LiveTestItem {
+  final String id;
+  final String mockTestId;
+  final String title;
+  final DateTime startAt;
+  final DateTime endAt;
+  final String? instructions;
+  final bool featured;
+  final bool isPublished;
+  final bool allowEarlyJoin;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  const LiveTestItem({
+    required this.id,
+    required this.mockTestId,
+    required this.title,
+    required this.startAt,
+    required this.endAt,
+    this.instructions,
+    this.featured = false,
+    this.isPublished = true,
+    this.allowEarlyJoin = false,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  LiveTestStatus get status {
+    final now = DateTime.now();
+    if (now.isBefore(startAt)) {
+      return LiveTestStatus.upcoming;
+    } else if (now.isBefore(endAt)) {
+      return LiveTestStatus.live;
+    } else {
+      return LiveTestStatus.ended;
+    }
+  }
+
+  Duration get remainingDuration {
+    final now = DateTime.now();
+    if (now.isBefore(startAt)) {
+      return startAt.difference(now);
+    } else if (now.isBefore(endAt)) {
+      return endAt.difference(now);
+    }
+    return Duration.zero;
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'mockTestId': mockTestId,
+    'title': title,
+    'startAt': startAt.toIso8601String(),
+    'endAt': endAt.toIso8601String(),
+    if (instructions != null) 'instructions': instructions,
+    'featured': featured,
+    'isPublished': isPublished,
+    'allowEarlyJoin': allowEarlyJoin,
+    if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+  };
+
+  factory LiveTestItem.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val is DateTime) return val;
+      if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      try {
+        final toDate = (val as dynamic).toDate();
+        if (toDate is DateTime) return toDate;
+      } catch (_) {}
+      return DateTime.now();
+    }
+
+    return LiveTestItem(
+      id: map['id'] ?? '',
+      mockTestId: map['mockTestId'] ?? map['testId'] ?? '',
+      title: map['title'] ?? '',
+      startAt: parseDate(map['startAt'] ?? map['startDate']),
+      endAt: parseDate(map['endAt'] ?? map['endDate']),
+      instructions: map['instructions'],
+      featured: map['featured'] ?? false,
+      isPublished: map['isPublished'] ?? true,
+      allowEarlyJoin: map['allowEarlyJoin'] ?? false,
+      createdAt: map['createdAt'] != null ? parseDate(map['createdAt']) : null,
+      updatedAt: map['updatedAt'] != null ? parseDate(map['updatedAt']) : null,
+    );
+  }
 }
 
 class RemoteAppConfig {

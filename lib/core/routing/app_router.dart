@@ -4,6 +4,7 @@ import '../../app/scaffold_with_nav_bar.dart';
 import '../../features/andaman_gk/presentation/andaman_gk_screen.dart';
 import '../../features/exam/presentation/cbt_exam_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/notices/presentation/notices_screen.dart';
 import '../../features/onboarding/presentation/choose_exam_screen.dart';
 import '../../features/onboarding/presentation/choose_language_screen.dart';
 import '../../features/onboarding/presentation/splash_screen.dart';
@@ -194,6 +195,15 @@ final GoRouter appRouter = GoRouter(
         context: context,
         state: state,
         child: const QotdScreen(),
+      ),
+    ),
+    GoRoute(
+      parentNavigatorKey: _rootNavigatorKey,
+      path: '/notices',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const NoticesScreen(),
       ),
     ),
     GoRoute(

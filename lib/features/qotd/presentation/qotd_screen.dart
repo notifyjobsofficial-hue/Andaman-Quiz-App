@@ -21,6 +21,7 @@ class QotdScreen extends ConsumerStatefulWidget {
 class _QotdScreenState extends ConsumerState<QotdScreen> {
   bool _isLoading = true;
   Question? _question;
+  String _sourceInfo = '';
   int _secondsRemaining = 60;
   Timer? _timer;
   int? _selectedOption;
@@ -35,36 +36,30 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   Future<void> _loadQotd() async {
     final today = DateTime.now().toIso8601String().split('T').first;
     Question? found;
+    String source = '';
 
     try {
       final qotdDoc = await FirestoreService.instance.fetchQOTD(today);
-      if (qotdDoc != null) {
+      if (qotdDoc != null && qotdDoc.active) {
+        source = qotdDoc.formattedSourceInfo;
         if (qotdDoc.questionText != null &&
             qotdDoc.options != null &&
             qotdDoc.options!.isNotEmpty) {
-          int correctIdx = 0;
-          if (qotdDoc.correctAnswer != null) {
-            final letter = qotdDoc.correctAnswer!.toUpperCase().trim();
-            if (letter == 'B' || letter == '1') {
-              correctIdx = 1;
-            } else if (letter == 'C' || letter == '2') {
-              correctIdx = 2;
-            } else if (letter == 'D' || letter == '3') {
-              correctIdx = 3;
-            }
-          }
           found = Question(
             id: qotdDoc.questionId.isNotEmpty ? qotdDoc.questionId : 'qotd_$today',
             subjectId: 'sub_general',
             topicId: 'top_daily',
-            examTags: const ['ALL'],
+            examTags: [source],
             questionEn: qotdDoc.questionText!,
             questionHi: '',
             optionsEn: qotdDoc.options!,
             optionsHi: const [],
-            correctIndex: correctIdx,
+            correctIndex: qotdDoc.correctIndex,
             explanationEn: qotdDoc.explanation ?? '',
             explanationHi: '',
+            questionImageUrl: qotdDoc.questionImageUrl,
+            optionImages: qotdDoc.optionImages,
+            explanationImageUrl: qotdDoc.explanationImageUrl,
           );
         } else if (qotdDoc.questionId.isNotEmpty) {
           found = LocalDatabase.instance.getQuestionById(qotdDoc.questionId);
@@ -74,31 +69,45 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
               found = remoteList.first;
             }
           }
+          if (found != null) {
+            found = found.copyWith(
+              questionImageUrl: qotdDoc.questionImageUrl ?? found.questionImageUrl,
+              optionImages: qotdDoc.optionImages ?? found.optionImages,
+              explanationImageUrl: qotdDoc.explanationImageUrl ?? found.explanationImageUrl,
+            );
+          }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error loading QOTD: $e');
+    }
 
-    // Fall back to an existing question from question bank if any
-    if (found == null) {
-      final allLocal = LocalDatabase.instance.getQuestions();
-      if (allLocal.isNotEmpty) {
-        final index = DateTime.now().day % allLocal.length;
-        found = allLocal[index];
-      }
+    // Check if user already attempted today's QOTD
+    final previousAttempt = LocalDatabase.instance.getQotdAttempt(today);
+    int? previousSelectedOption;
+    bool alreadySubmitted = false;
+
+    if (previousAttempt != null) {
+      previousSelectedOption = (previousAttempt['selectedOption'] as num?)?.toInt();
+      alreadySubmitted = true;
     }
 
     if (mounted) {
       setState(() {
         _question = found;
+        _sourceInfo = source;
+        _selectedOption = previousSelectedOption;
+        _isSubmitted = alreadySubmitted;
         _isLoading = false;
       });
-      if (_question != null) {
+      if (_question != null && !_isSubmitted) {
         _startTimer();
       }
     }
   }
 
   void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       if (_secondsRemaining > 0 && !_isSubmitted) {
@@ -125,18 +134,52 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
   }
 
   void _submit() {
-    if (_isSubmitted) return;
+    if (_isSubmitted || _question == null) return;
     _timer?.cancel();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final isCorrect = _selectedOption == _question!.correctIndex;
+
     setState(() {
       _isSubmitted = true;
     });
 
-    if (_selectedOption != null && _question != null) {
-      final isCorrect = _selectedOption == _question!.correctIndex;
+    LocalDatabase.instance.saveQotdAttempt(
+      date: today,
+      questionId: _question!.id,
+      selectedOption: _selectedOption ?? -1,
+      isCorrect: isCorrect,
+    );
+
+    if (_selectedOption != null) {
+      LocalDatabase.instance.recordPracticeAnswer(isCorrect: isCorrect);
       if (!isCorrect) {
         LocalDatabase.instance.recordWrongQuestion(_question!.id);
       }
     }
+  }
+
+  Widget _buildNetworkImage(String url, {double? maxHeight}) {
+    if (url.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          url,
+          fit: BoxFit.contain,
+          height: maxHeight,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              height: maxHeight ?? 140,
+              color: Colors.black12,
+              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+        ),
+      ),
+    );
   }
 
   @override
@@ -181,12 +224,13 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  'No Question of the Day',
+                  "Today's question will be available soon.",
+                  textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'There is no question scheduled for today yet. Please check back later or explore practice modules!',
+                  'The editorial team is preparing today\'s PYQ. Please check back shortly or explore practice modules below.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -266,32 +310,53 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                       ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      Icon(Icons.timer_outlined, size: 16, color: timerColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$_secondsRemaining sec remaining',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: timerColor,
+                  if (!_isSubmitted)
+                    Row(
+                      children: [
+                        Icon(Icons.timer_outlined, size: 16, color: timerColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$_secondsRemaining sec remaining',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: timerColor,
+                          ),
                         ),
+                      ],
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withAlpha(25),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusPill),
                       ),
-                    ],
-                  ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle, size: 14, color: AppColors.success),
+                          SizedBox(width: 4),
+                          Text(
+                            'Completed',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.success),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppDimens.radiusPill),
-                child: LinearProgressIndicator(
-                  value: progressRatio,
-                  minHeight: 4,
-                  backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                  valueColor: AlwaysStoppedAnimation<Color>(timerColor),
+              if (!_isSubmitted) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppDimens.radiusPill),
+                  child: LinearProgressIndicator(
+                    value: progressRatio,
+                    minHeight: 4,
+                    backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                    valueColor: AlwaysStoppedAnimation<Color>(timerColor),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 20),
 
               // Question Card
@@ -299,7 +364,24 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (question.year != null) ...[
+                    if (_sourceInfo.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _sourceInfo,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFF93C5FD) : AppColors.actionBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ] else if (question.year != null) ...[
                       Text(
                         question.year!,
                         style: TextStyle(
@@ -318,6 +400,8 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                         height: 1.45,
                       ),
                     ),
+                    if (question.questionImageUrl != null && question.questionImageUrl!.isNotEmpty)
+                      _buildNetworkImage(question.questionImageUrl!, maxHeight: 180),
                   ],
                 ),
               ),
@@ -329,6 +413,9 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                 final optionText = options[index];
                 final isSelected = _selectedOption == index;
                 final isCorrect = index == question.correctIndex;
+                final optImg = (question.optionImages != null && index < question.optionImages!.length)
+                    ? question.optionImages![index]
+                    : null;
 
                 Color borderColor;
                 Color bgColor;
@@ -393,12 +480,19 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                           ),
                           const SizedBox(width: 14),
                           Expanded(
-                            child: Text(
-                              optionText,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  optionText,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                  ),
+                                ),
+                                if (optImg != null && optImg.isNotEmpty)
+                                  _buildNetworkImage(optImg, maxHeight: 80),
+                              ],
                             ),
                           ),
                           ?trailingIcon,
@@ -441,8 +535,8 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                       Expanded(
                         child: Text(
                           _selectedOption == question.correctIndex
-                              ? 'Correct! +2 Marks credited to today\'s streak.'
-                              : 'Incorrect. Don\'t worry, review the explanation below!',
+                              ? 'Correct! Well done.'
+                              : 'Incorrect. Review the detailed explanation below.',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             color: _selectedOption == question.correctIndex ? AppColors.success : AppColors.error,
@@ -478,6 +572,8 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                         explanation,
                         style: const TextStyle(fontSize: 14, height: 1.5),
                       ),
+                      if (question.explanationImageUrl != null && question.explanationImageUrl!.isNotEmpty)
+                        _buildNetworkImage(question.explanationImageUrl!, maxHeight: 180),
                     ],
                   ),
                 ),

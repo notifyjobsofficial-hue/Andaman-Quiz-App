@@ -157,9 +157,9 @@ void main() {
         // Check for any yellow/black RenderFlex overflow bars
         expect(tester.takeException(), isNull);
 
-        // Verify Andaman & Nicobar GK card is displayed
-        expect(find.text('Andaman & Nicobar GK'), findsOneWidget);
-        expect(find.text('ESSENTIAL'), findsOneWidget);
+        // Verify ESSENTIAL promo card is removed per specification
+        expect(find.text('ESSENTIAL'), findsNothing);
+        expect(find.text('Choose Your Exam'), findsOneWidget);
 
         // Verify stat items are displayed
         expect(find.text('Streak'), findsOneWidget);

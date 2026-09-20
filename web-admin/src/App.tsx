@@ -10,6 +10,8 @@ import { TestBuilder } from './pages/TestBuilder';
 import { CategoriesExams } from './pages/CategoriesExams';
 import { SubjectsTopics } from './pages/SubjectsTopics';
 import { AppContent } from './pages/AppContent';
+import { NoticeBoard } from './pages/NoticeBoard';
+import { LiveTests } from './pages/LiveTests';
 import { Settings } from './pages/Settings';
 import { Loader2 } from 'lucide-react';
 
@@ -62,12 +64,14 @@ export function App() {
           }}
         />
       )}
+      {currentTab === 'live-tests' && <LiveTests />}
       {currentTab === 'test-builder' && (
         <TestBuilder
           initialTestId={builderTestId}
           onNavigate={setCurrentTab}
         />
       )}
+      {currentTab === 'notices' && <NoticeBoard />}
       {currentTab === 'categories-exams' && <CategoriesExams />}
       {currentTab === 'subjects' && <SubjectsTopics />}
       {currentTab === 'content' && <AppContent />}

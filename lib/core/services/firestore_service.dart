@@ -31,6 +31,7 @@ class FirestoreService {
   final _mockTestsController = StreamController<List<MockTest>>.broadcast();
   final _bannersController = StreamController<List<HomeBanner>>.broadcast();
   final _noticesController = StreamController<List<AppNotice>>.broadcast();
+  final _liveTestsController = StreamController<List<LiveTestItem>>.broadcast();
   final _remoteConfigController = StreamController<RemoteAppConfig>.broadcast();
 
   // Public streams for Riverpod providers to subscribe to
@@ -41,6 +42,7 @@ class FirestoreService {
   Stream<List<MockTest>> get mockTestsStream => _mockTestsController.stream;
   Stream<List<HomeBanner>> get bannersStream => _bannersController.stream;
   Stream<List<AppNotice>> get noticesStream => _noticesController.stream;
+  Stream<List<LiveTestItem>> get liveTestsStream => _liveTestsController.stream;
   Stream<RemoteAppConfig> get remoteConfigStream => _remoteConfigController.stream;
 
   // Active subscriptions
@@ -135,6 +137,7 @@ class FirestoreService {
     _subscribeToMockTests();
     _subscribeToBanners();
     _subscribeToNotices();
+    _subscribeToLiveTests();
     _subscribeToAppConfig();
 
     debugPrint('FirestoreService: real-time listeners started for all collections.');
@@ -253,6 +256,23 @@ class FirestoreService {
     _subscriptions.add(sub);
   }
 
+  void _subscribeToLiveTests() {
+    final sub = _firestore
+        .collection(colLiveTests)
+        .where('isPublished', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final tests = snapshot.docs.map((d) => LiveTestItem.fromMap(d.data())).toList();
+        await LocalDatabase.instance.syncLiveTestsFromFirestore(tests);
+        _liveTestsController.add(tests);
+      } catch (e) {
+        debugPrint('LiveTests sync error: $e');
+      }
+    }, onError: (e) => debugPrint('LiveTests stream error: $e'));
+    _subscriptions.add(sub);
+  }
+
   void _subscribeToAppConfig() {
     final sub = _firestore
         .collection('app_config')
@@ -278,6 +298,13 @@ class FirestoreService {
       final doc = await _firestore.collection(colQotd).doc(dateStr).get();
       if (doc.exists && doc.data() != null) {
         return QuestionOfTheDay.fromMap(doc.data()!);
+      }
+      final currentDoc = await _firestore.collection(colQotd).doc('current').get();
+      if (currentDoc.exists && currentDoc.data() != null) {
+        final qotd = QuestionOfTheDay.fromMap(currentDoc.data()!);
+        if (qotd.active) {
+          return qotd;
+        }
       }
       return null;
     } catch (e) {

@@ -9,6 +9,8 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import 'widgets/live_test_home_card.dart';
+import 'widgets/notice_board_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -204,87 +206,13 @@ class HomeScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                 ],
 
-                // Andaman & Nicobar GK Special Banner (Prominent & Responsive!)
-                AnimatedPressable(
-                  onTap: () => context.push('/andaman-gk'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimens.space16,
-                      vertical: AppDimens.space14,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF064E3B).withAlpha(76) : const Color(0xFFECFDF5),
-                      borderRadius: AppDimens.cardBorderRadius,
-                      border: Border.all(
-                        color: isDark ? const Color(0xFF059669).withAlpha(102) : const Color(0xFFA7F3D0),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.islandEmerald,
-                            borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
-                          ),
-                          child: const Icon(Icons.waves, color: Colors.white, size: 26),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 6,
-                                runSpacing: 3,
-                                children: [
-                                  Text(
-                                    'Andaman & Nicobar GK',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark ? Colors.white : const Color(0xFF065F46),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.islandEmerald,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      'ESSENTIAL',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                'History, Tribes, Geography, 10° Channel, Wildlife & PYQs',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(Icons.chevron_right, color: AppColors.islandEmerald, size: 22),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                // Dynamic Notice Board (Vertical auto-rotating loop)
+                const NoticeBoardCard(),
+                const SizedBox(height: 20),
+
+                // Dynamic Live Test Card (Conditioned on active LIVE or scheduled UPCOMING)
+                const LiveTestHomeCard(),
+                const SizedBox(height: 20),
 
                 // Practice by Subject
                 Row(
@@ -507,7 +435,10 @@ class _QotdHeroCard extends ConsumerWidget {
 
         final questionSnippet = (qotd.questionText != null && qotd.questionText!.trim().isNotEmpty)
             ? qotd.questionText!.trim()
-            : "Today's daily challenge is live! Test your knowledge and claim your rank.";
+            : "Today's daily question is active. Test your knowledge!";
+
+        final todayStr = DateTime.now().toIso8601String().split('T').first;
+        final isAttempted = LocalDatabase.instance.getQotdAttempt(todayStr) != null;
 
         return AnimatedPressable(
           onTap: () => context.push('/qotd'),
@@ -537,14 +468,15 @@ class _QotdHeroCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header row: ⚡ QUESTION OF THE DAY | PYQ | ⏱ 60s
                 Wrap(
                   alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
+                  spacing: 6,
                   runSpacing: 6,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.white.withAlpha(51),
                         borderRadius: BorderRadius.circular(AppDimens.radiusPill),
@@ -566,37 +498,90 @@ class _QotdHeroCard extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFDE047).withAlpha(40),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFFDE047).withAlpha(120), width: 0.8),
+                      ),
+                      child: const Text(
+                        'PYQ',
+                        style: TextStyle(
+                          color: Color(0xFFFDE047),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
                     const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.timer_outlined, color: Colors.white70, size: 14),
                         SizedBox(width: 4),
                         Text(
-                          '60s Challenge',
-                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                          '⏱ 60s',
+                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
+
+                // Question Text (max 3 lines) + clean image thumbnail if present
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        questionSnippet,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    if (qotd.questionImageUrl != null && qotd.questionImageUrl!.isNotEmpty) ...[
+                      const SizedBox(width: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          color: Colors.white12,
+                          child: Image.network(
+                            qotd.questionImageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Dedicated Separate Source Line
                 Text(
-                  questionSnippet,
-                  maxLines: 2,
+                  qotd.formattedSourceInfo,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    height: 1.38,
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(200),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 14),
-                Wrap(
-                  alignment: WrapAlignment.spaceBetween,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 6,
+
+                // Attempt CTA button (No fake Daily Rank or fake marks)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -604,26 +589,41 @@ class _QotdHeroCard extends ConsumerWidget {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Attempt Now',
-                            style: TextStyle(
+                            isAttempted ? 'Review Solution' : 'Attempt Now',
+                            style: const TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                             ),
                           ),
-                          SizedBox(width: 4),
-                          Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward, size: 14, color: AppColors.primary),
                         ],
                       ),
                     ),
-                    const Text(
-                      '+2 Marks • Daily Rank',
-                      style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
-                    ),
+                    if (isAttempted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(35),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle, size: 12, color: Color(0xFF86EFAC)),
+                            SizedBox(width: 4),
+                            Text(
+                              'Completed Today',
+                              style: TextStyle(color: Color(0xFF86EFAC), fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ],
@@ -666,7 +666,7 @@ class _QotdHeroCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  "Today's daily question is being curated by the editorial team. Check back shortly, or explore subject MCQs below!",
+                  "Today's question will be available soon.",
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,

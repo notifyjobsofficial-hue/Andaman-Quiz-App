@@ -46,6 +46,11 @@ final noticesStreamProvider = StreamProvider<List<AppNotice>>((ref) async* {
   yield* FirestoreService.instance.noticesStream;
 });
 
+final liveTestsStreamProvider = StreamProvider<List<LiveTestItem>>((ref) async* {
+  yield LocalDatabase.instance.getLiveTests();
+  yield* FirestoreService.instance.liveTestsStream;
+});
+
 final remoteConfigStreamProvider = StreamProvider<RemoteAppConfig>((ref) async* {
   yield LocalDatabase.instance.getRemoteConfig();
   yield* FirestoreService.instance.remoteConfigStream;
