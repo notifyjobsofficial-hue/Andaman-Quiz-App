@@ -333,7 +333,7 @@ void main() {
       // Verify action buttons
       expect(find.text('Apply Online'), findsOneWidget);
       expect(find.text('Official Website'), findsOneWidget);
-      expect(find.text('Download / View PDF'), findsOneWidget);
+      expect(find.text('View Notification'), findsOneWidget);
     });
   });
 

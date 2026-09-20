@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'notices', label: 'Notice Board', icon: Bell },
     { id: 'categories-exams', label: 'Categories & Exams', icon: FolderTree },
     { id: 'subjects', label: 'Subjects & Topics', icon: BookOpen },
-    { id: 'content', label: 'Banners & Config', icon: ImageIcon },
+    { id: 'content', label: 'Banners & Notices', icon: ImageIcon },
     { id: 'settings', label: 'System & Audit', icon: Settings },
   ];
 

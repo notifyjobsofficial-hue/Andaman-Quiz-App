@@ -17,10 +17,10 @@ import {
 import { HomeBanner, AppNotice, AppConfig, QuestionOfTheDay, Question } from '../types';
 import { ImageUploader } from '../components/common/ImageUploader';
 import { Modal } from '../components/common/Modal';
+import { NoticeManager } from '../components/notices/NoticeManager';
 
 export const AppContent: React.FC = () => {
   const [banners, setBanners] = useState<HomeBanner[]>([]);
-  const [notices, setNotices] = useState<AppNotice[]>([]);
   const [qotdList, setQotdList] = useState<QuestionOfTheDay[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [config, setConfig] = useState<AppConfig>({
@@ -50,12 +50,6 @@ export const AppContent: React.FC = () => {
   const [bannerRoute, setBannerRoute] = useState('/tests');
   const [isSavingBanner, setIsSavingBanner] = useState(false);
 
-  // Notice Modal
-  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
-  const [noticeTitle, setNoticeTitle] = useState('');
-  const [noticeBody, setNoticeBody] = useState('');
-  const [isSavingNotice, setIsSavingNotice] = useState(false);
-
   // QOTD Modal
   const [isQotdModalOpen, setIsQotdModalOpen] = useState(false);
   const [qotdDate, setQotdDate] = useState(new Date().toISOString().split('T')[0]);
@@ -70,15 +64,13 @@ export const AppContent: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [b, n, c, qList, allQ] = await Promise.all([
+      const [b, c, qList, allQ] = await Promise.all([
         fetchBanners(),
-        fetchNotices(),
         fetchAppConfig(),
         fetchQOTDList(),
         fetchQuestions(200)
       ]);
       setBanners(b);
-      setNotices(n);
       if (c) setConfig(c);
       setQotdList(qList);
       setQuestions(allQ);
@@ -133,46 +125,6 @@ export const AppContent: React.FC = () => {
       loadData();
     } catch (err: any) {
       setActionFeedback({ type: 'error', message: err.message || 'Failed to delete banner.' });
-    }
-  };
-
-  const handleSaveNotice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!noticeTitle.trim() || !noticeBody.trim()) return;
-
-    setIsSavingNotice(true);
-    try {
-      const newNotice: AppNotice = {
-        id: `notice_${Date.now()}`,
-        title: noticeTitle.trim(),
-        body: noticeBody.trim(),
-        date: new Date().toISOString().split('T')[0],
-        active: true,
-        isPinned: false,
-      };
-
-      await saveNotice(newNotice);
-      setIsNoticeModalOpen(false);
-      setNoticeTitle('');
-      setNoticeBody('');
-      setActionFeedback({ type: 'success', message: 'Announcement notice published!' });
-      loadData();
-    } catch (err: any) {
-      console.error(err);
-      setActionFeedback({ type: 'error', message: err.message || 'Failed to post notice.' });
-    } finally {
-      setIsSavingNotice(false);
-    }
-  };
-
-  const handleDeleteNotice = async (id: string) => {
-    if (!confirm('Delete this notice?')) return;
-    try {
-      await deleteNotice(id);
-      setActionFeedback({ type: 'success', message: 'Announcement deleted.' });
-      loadData();
-    } catch (err: any) {
-      setActionFeedback({ type: 'error', message: err.message || 'Failed to delete notice.' });
     }
   };
 
@@ -367,48 +319,7 @@ export const AppContent: React.FC = () => {
       </div>
 
       {/* 3. Announcements / Notices Section */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-              <Bell size={16} className="text-brand-600" /> Announcements & Exam Notices
-            </h2>
-            <p className="text-xs text-slate-500">Official notifications, exam date updates, and syllabus alerts</p>
-          </div>
-          <button
-            onClick={() => setIsNoticeModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition"
-          >
-            <Plus size={14} /> Post Notice
-          </button>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {notices.map((n) => (
-            <div key={n.id} className="p-4 flex items-start justify-between gap-4 hover:bg-slate-50">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-900">{n.title}</span>
-                  <span className="text-[10px] text-slate-400">{n.date}</span>
-                </div>
-                <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{n.body}</p>
-              </div>
-              <button
-                onClick={() => handleDeleteNotice(n.id)}
-                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition shrink-0"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-
-          {notices.length === 0 && (
-            <div className="p-8 text-center text-xs text-slate-400">
-              No active announcements posted.
-            </div>
-          )}
-        </div>
-      </div>
+      <NoticeManager />
 
       {/* 4. Application Remote Configuration & AdMob */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
@@ -720,51 +631,7 @@ export const AppContent: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Notice Modal */}
-      <Modal isOpen={isNoticeModalOpen} onClose={() => setIsNoticeModalOpen(false)} title="Post Announcement">
-        <form onSubmit={handleSaveNotice} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Notice Headline</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. A&N Administration MTS Exam Date Declared"
-              value={noticeTitle}
-              onChange={(e) => setNoticeTitle(e.target.value)}
-              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl outline-none"
-            />
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Notice Message</label>
-            <textarea
-              rows={4}
-              required
-              placeholder="Detailed announcement text..."
-              value={noticeBody}
-              onChange={(e) => setNoticeBody(e.target.value)}
-              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl outline-none"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsNoticeModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSavingNotice}
-              className="px-5 py-2 text-xs font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 disabled:opacity-50"
-            >
-              {isSavingNotice ? 'Publishing...' : 'Publish Notice'}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 };

@@ -136,6 +136,10 @@ export interface AppNotice {
   publishAt?: string;
   expiresAt?: string;
   status?: 'published' | 'draft' | 'scheduled';
+  pinned?: boolean;
+  primaryUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
   created_at?: string;
   updated_at?: string;
 }

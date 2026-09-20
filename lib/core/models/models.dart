@@ -652,6 +652,7 @@ class AppNotice {
   final String? pdfUrl;
   final String? officialUrl;
   final String? applyUrl;
+  final String? primaryUrl;
   final String? externalUrl;
   final DateTime? publishAt;
   final DateTime? expiresAt;
@@ -675,6 +676,7 @@ class AppNotice {
     this.pdfUrl,
     this.officialUrl,
     this.applyUrl,
+    this.primaryUrl,
     this.externalUrl,
     this.publishAt,
     this.expiresAt,
@@ -709,7 +711,8 @@ class AppNotice {
   }
 
   bool get isCurrentlyActive {
-    if (!active || status == 'draft') return false;
+    final s = status.toLowerCase();
+    if (!active || s == 'draft' || s == 'expired' || s == 'archived') return false;
     final now = DateTime.now();
     if (publishAt != null && now.isBefore(publishAt!)) return false;
     if (expiresAt != null && now.isAfter(expiresAt!)) return false;
@@ -728,6 +731,7 @@ class AppNotice {
     'date': date,
     'active': active,
     'isPinned': isPinned,
+    'pinned': isPinned,
     'type': type,
     if (shortDescription != null) 'shortDescription': shortDescription,
     if (content != null) 'content': content,
@@ -735,6 +739,7 @@ class AppNotice {
     if (exam != null) 'exam': exam,
     if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
     if (pdfUrl != null && pdfUrl!.isNotEmpty) 'pdfUrl': pdfUrl,
+    if (primaryUrl != null && primaryUrl!.isNotEmpty) 'primaryUrl': primaryUrl,
     if (officialUrl != null && officialUrl!.isNotEmpty) 'officialUrl': officialUrl,
     if (applyUrl != null && applyUrl!.isNotEmpty) 'applyUrl': applyUrl,
     if (externalUrl != null && externalUrl!.isNotEmpty) 'externalUrl': externalUrl,
@@ -776,6 +781,7 @@ class AppNotice {
       exam: map['exam'],
       imageUrl: map['imageUrl'],
       pdfUrl: map['pdfUrl'],
+      primaryUrl: map['primaryUrl'],
       officialUrl: map['officialUrl'],
       applyUrl: map['applyUrl'],
       externalUrl: map['externalUrl'],

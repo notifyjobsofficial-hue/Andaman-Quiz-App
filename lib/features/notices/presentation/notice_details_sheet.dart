@@ -242,44 +242,14 @@ class NoticeDetailsSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
 
-                  // Action Buttons (Only render if valid URL exists)
+                  // Action Buttons (Only render if valid non-empty URL exists)
                   if (_hasAnyActionUrls(notice)) ...[
                     const Text(
                       'Official Links & Actions',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        if (notice.applyUrl != null && notice.applyUrl!.trim().isNotEmpty)
-                          FilledButton.icon(
-                            onPressed: () => _openUrl(context, notice.applyUrl),
-                            icon: const Icon(Icons.open_in_browser, size: 16),
-                            label: const Text('Apply Online', style: TextStyle(fontWeight: FontWeight.w700)),
-                            style: FilledButton.styleFrom(backgroundColor: AppColors.actionBlue),
-                          ),
-                        if (notice.officialUrl != null && notice.officialUrl!.trim().isNotEmpty)
-                          OutlinedButton.icon(
-                            onPressed: () => _openUrl(context, notice.officialUrl),
-                            icon: const Icon(Icons.language, size: 16),
-                            label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                        if (notice.pdfUrl != null && notice.pdfUrl!.trim().isNotEmpty)
-                          OutlinedButton.icon(
-                            onPressed: () => _openUrl(context, notice.pdfUrl),
-                            icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                            label: const Text('Download / View PDF', style: TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                        if (notice.externalUrl != null && notice.externalUrl!.trim().isNotEmpty)
-                          OutlinedButton.icon(
-                            onPressed: () => _openUrl(context, notice.externalUrl),
-                            icon: const Icon(Icons.link, size: 16),
-                            label: const Text('Open External Link', style: TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                      ],
-                    ),
+                    _buildDynamicActionButtons(context, notice, typeColor),
                   ],
                 ],
               ),
@@ -290,10 +260,157 @@ class NoticeDetailsSheet extends StatelessWidget {
     );
   }
 
+  Widget _buildDynamicActionButtons(BuildContext context, AppNotice n, Color typeColor) {
+    final t = (n.type.isEmpty ? 'NOTICE' : n.type).toUpperCase().replaceAll(' ', '_');
+    final buttons = <Widget>[];
+
+    bool hasUrl(String? u) => u != null && u.trim().isNotEmpty;
+
+    if (t == 'JOB') {
+      if (hasUrl(n.applyUrl ?? n.primaryUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, n.applyUrl ?? n.primaryUrl),
+          icon: const Icon(Icons.open_in_browser, size: 16),
+          label: const Text('Apply Online', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: AppColors.actionBlue),
+        ));
+      }
+      if (hasUrl(n.pdfUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.pdfUrl),
+          icon: const Icon(Icons.description_outlined, size: 16),
+          label: const Text('View Notification', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+      if (hasUrl(n.officialUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+      if (hasUrl(n.externalUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.externalUrl),
+          icon: const Icon(Icons.link, size: 16),
+          label: const Text('External Link', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    } else if (t == 'ADMIT_CARD') {
+      final admitUrl = hasUrl(n.primaryUrl) ? n.primaryUrl : (hasUrl(n.applyUrl) ? n.applyUrl : n.pdfUrl);
+      if (hasUrl(admitUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, admitUrl),
+          icon: const Icon(Icons.assignment_ind_outlined, size: 16),
+          label: const Text('Download Admit Card', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
+        ));
+      }
+      if (hasUrl(n.officialUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+      if (hasUrl(n.pdfUrl) && n.pdfUrl != admitUrl) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.pdfUrl),
+          icon: const Icon(Icons.description_outlined, size: 16),
+          label: const Text('View Instructions', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    } else if (t == 'RESULT') {
+      final resultUrl = hasUrl(n.primaryUrl) ? n.primaryUrl : (hasUrl(n.pdfUrl) ? n.pdfUrl : n.applyUrl);
+      if (hasUrl(resultUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, resultUrl),
+          icon: const Icon(Icons.military_tech_outlined, size: 16),
+          label: const Text('View Result / Scorecard', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF16A34A)),
+        ));
+      }
+      if (hasUrl(n.officialUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    } else if (t == 'ANSWER_KEY') {
+      final keyUrl = hasUrl(n.primaryUrl) ? n.primaryUrl : (hasUrl(n.pdfUrl) ? n.pdfUrl : n.applyUrl);
+      if (hasUrl(keyUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, keyUrl),
+          icon: const Icon(Icons.fact_check_outlined, size: 16),
+          label: const Text('View Answer Key', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF9333EA)),
+        ));
+      }
+      if (hasUrl(n.officialUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    } else if (t == 'EXAM_DATE') {
+      final noticeUrl = hasUrl(n.pdfUrl) ? n.pdfUrl : (hasUrl(n.primaryUrl) ? n.primaryUrl : n.officialUrl);
+      if (hasUrl(noticeUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, noticeUrl),
+          icon: const Icon(Icons.event_note, size: 16),
+          label: const Text('View Official Notice', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEA580C)),
+        ));
+      }
+      if (hasUrl(n.officialUrl) && n.officialUrl != noticeUrl) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    } else {
+      // NOTICE / DEFAULT
+      if (hasUrl(n.pdfUrl)) {
+        buttons.add(FilledButton.icon(
+          onPressed: () => _openUrl(context, n.pdfUrl),
+          icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+          label: const Text('View PDF', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFF475569)),
+        ));
+      }
+      final openUrl = hasUrl(n.externalUrl) ? n.externalUrl : (hasUrl(n.primaryUrl) ? n.primaryUrl : n.officialUrl);
+      if (hasUrl(openUrl)) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, openUrl),
+          icon: const Icon(Icons.open_in_browser, size: 16),
+          label: const Text('Open Link', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+      if (hasUrl(n.officialUrl) && n.officialUrl != openUrl) {
+        buttons.add(OutlinedButton.icon(
+          onPressed: () => _openUrl(context, n.officialUrl),
+          icon: const Icon(Icons.language, size: 16),
+          label: const Text('Official Website', style: TextStyle(fontWeight: FontWeight.w600)),
+        ));
+      }
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: buttons,
+    );
+  }
+
   bool _hasAnyActionUrls(AppNotice n) {
-    return (n.applyUrl != null && n.applyUrl!.trim().isNotEmpty) ||
-        (n.officialUrl != null && n.officialUrl!.trim().isNotEmpty) ||
-        (n.pdfUrl != null && n.pdfUrl!.trim().isNotEmpty) ||
-        (n.externalUrl != null && n.externalUrl!.trim().isNotEmpty);
+    bool has(String? u) => u != null && u.trim().isNotEmpty;
+    return has(n.applyUrl) ||
+        has(n.primaryUrl) ||
+        has(n.officialUrl) ||
+        has(n.pdfUrl) ||
+        has(n.externalUrl);
   }
 }

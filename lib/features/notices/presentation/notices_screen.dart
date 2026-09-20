@@ -66,7 +66,8 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
 
   bool _matchesFilter(AppNotice notice) {
     if (_selectedFilter == 'All') return true;
-    final normalized = notice.type.toUpperCase().replaceAll(' ', '_');
+    final raw = notice.type.trim().isEmpty ? 'NOTICE' : notice.type.trim();
+    final normalized = raw.toUpperCase().replaceAll(' ', '_');
     switch (_selectedFilter) {
       case 'Jobs':
         return normalized == 'JOB';
