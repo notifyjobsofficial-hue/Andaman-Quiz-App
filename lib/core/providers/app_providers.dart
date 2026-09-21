@@ -221,3 +221,25 @@ final todayQotdProvider = StreamProvider<QuestionOfTheDay?>((ref) async* {
   // 3. Yield all real-time Firestore stream updates (instant update on deletion)
   yield* FirestoreService.instance.qotdStream;
 });
+
+// ---------------------------------------------------------------------------
+// Resumable Practice Session Provider (Context-aware for Selected Exam)
+// ---------------------------------------------------------------------------
+
+class ResumablePracticeSessionNotifier extends Notifier<TopicPracticeSession?> {
+  @override
+  TopicPracticeSession? build() {
+    final selectedExam = ref.watch(selectedExamProvider);
+    return LocalDatabase.instance.getResumablePracticeSession(selectedExam);
+  }
+
+  void refresh() {
+    final selectedExam = ref.read(selectedExamProvider);
+    state = LocalDatabase.instance.getResumablePracticeSession(selectedExam);
+  }
+}
+
+final resumablePracticeSessionProvider =
+    NotifierProvider<ResumablePracticeSessionNotifier, TopicPracticeSession?>(
+        ResumablePracticeSessionNotifier.new);
+

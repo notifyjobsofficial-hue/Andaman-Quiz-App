@@ -24,6 +24,7 @@ class LocalDatabase {
   final List<AppNotice> _notices = [];
   final List<LiveTestItem> _liveTests = [];
   final Map<String, QuestionOfTheDay> _cachedQotdByDate = {};
+  final Map<String, TopicPracticeSession> _practiceSessions = {};
   RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
   bool _isInitialized = false;
@@ -51,6 +52,7 @@ class LocalDatabase {
     _notices.clear();
     _liveTests.clear();
     _cachedQotdByDate.clear();
+    _practiceSessions.clear();
     _questions.clear();
     _categories.clear();
     _exams.clear();
@@ -260,6 +262,23 @@ class LocalDatabase {
     } else {
       _attempts.clear();
     }
+
+    // 9. Practice Sessions
+    final sessionsRaw = prefs.getString('db_practice_sessions');
+    if (sessionsRaw != null && sessionsRaw.isNotEmpty) {
+      try {
+        final map = jsonDecode(sessionsRaw) as Map<String, dynamic>;
+        _practiceSessions.clear();
+        for (final entry in map.entries) {
+          _practiceSessions[entry.key] = TopicPracticeSession.fromMap(Map<String, dynamic>.from(entry.value));
+        }
+      } catch (e) {
+        debugPrint('Error decoding practice sessions: $e');
+        _practiceSessions.clear();
+      }
+    } else {
+      _practiceSessions.clear();
+    }
   }
 
   Future<void> _persistQuestions() async {
@@ -275,6 +294,14 @@ class LocalDatabase {
   Future<void> _persistAttempts() async {
     final raw = jsonEncode(_attempts.map((a) => a.toMap()).toList());
     await _prefs?.setString('db_student_attempts', raw);
+  }
+
+  Future<void> _persistPracticeSessions() async {
+    final map = <String, dynamic>{};
+    for (final entry in _practiceSessions.entries) {
+      map[entry.key] = entry.value.toMap();
+    }
+    await _prefs?.setString('db_practice_sessions', jsonEncode(map));
   }
 
   // --- Exams ---
@@ -458,6 +485,10 @@ class LocalDatabase {
     required bool isCorrect,
     String? topicId,
     String? questionId,
+    int? selectedOptionIndex,
+    String? examCode,
+    int? totalQuestions,
+    int? currentQuestionIndex,
   }) async {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -476,13 +507,17 @@ class LocalDatabase {
     // Per-topic practice progress & accuracy tracking
     if (topicId != null && topicId.trim().isNotEmpty) {
       final tid = topicId.trim();
+      List<String> attemptedList = [];
       if (questionId != null && questionId.trim().isNotEmpty) {
         final qid = questionId.trim();
         final attemptedKey = 'user_topic_${tid}_attempted_qids';
-        final attemptedList = _prefs?.getStringList(attemptedKey) ?? [];
+        attemptedList = _prefs?.getStringList(attemptedKey) ?? [];
         if (!attemptedList.contains(qid)) {
           attemptedList.add(qid);
           await _prefs?.setStringList(attemptedKey, attemptedList);
+        }
+        if (selectedOptionIndex != null) {
+          await saveTopicAnswer(topicId: tid, questionId: qid, selectedIndex: selectedOptionIndex);
         }
       } else {
         final attemptsKey = 'user_topic_${tid}_attempts_count';
@@ -490,12 +525,194 @@ class LocalDatabase {
         await _prefs?.setInt(attemptsKey, prevAttempts + 1);
       }
 
+      int newCorrectCount = _prefs?.getInt('user_topic_${tid}_correct_count') ?? 0;
       if (isCorrect) {
         final correctKey = 'user_topic_${tid}_correct_count';
-        final prevCorrect = _prefs?.getInt(correctKey) ?? 0;
-        await _prefs?.setInt(correctKey, prevCorrect + 1);
+        newCorrectCount++;
+        await _prefs?.setInt(correctKey, newCorrectCount);
+      }
+
+      // Update or create TopicPracticeSession
+      final topic = getTopicById(tid);
+      final subject = topic != null ? getSubjectById(topic.subjectId) : null;
+      final effectiveTotal = (totalQuestions != null && totalQuestions > 0)
+          ? totalQuestions
+          : (getQuestionsByTopic(tid).isNotEmpty
+              ? getQuestionsByTopic(tid).length
+              : (topic?.questionCount ?? 0));
+
+      final existingSession = _practiceSessions[tid];
+      final sessionExamCode = (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL')
+          ? examCode
+          : (existingSession?.examCode.isNotEmpty == true
+              ? existingSession!.examCode
+              : (subject?.examCodes.firstOrNull ?? 'CGL'));
+
+      final effectiveAttemptedList = attemptedList.isNotEmpty
+          ? attemptedList
+          : getTopicAttemptedQids(tid);
+
+      _practiceSessions[tid] = TopicPracticeSession(
+        topicId: tid,
+        topicName: topic?.name ?? existingSession?.topicName ?? tid,
+        subjectId: topic?.subjectId ?? existingSession?.subjectId ?? '',
+        subjectName: subject?.name ?? existingSession?.subjectName ?? '',
+        examCode: sessionExamCode,
+        lastQuestionId: questionId ?? existingSession?.lastQuestionId,
+        lastQuestionIndex: currentQuestionIndex ?? (effectiveAttemptedList.isNotEmpty ? effectiveAttemptedList.length - 1 : 0),
+        attemptedQuestionIds: effectiveAttemptedList,
+        correctCount: newCorrectCount,
+        totalQuestions: effectiveTotal,
+        updatedAt: DateTime.now(),
+      );
+      await _persistPracticeSessions();
+    }
+  }
+
+  /// List of distinct question IDs attempted for a topic
+  List<String> getTopicAttemptedQids(String topicId) {
+    final tid = topicId.trim();
+    final attemptedKey = 'user_topic_${tid}_attempted_qids';
+    return _prefs?.getStringList(attemptedKey) ?? [];
+  }
+
+  /// Map of question ID -> selected option index for a topic
+  Map<String, int> getTopicAnswers(String topicId) {
+    final tid = topicId.trim();
+    final raw = _prefs?.getString('user_topic_${tid}_answers');
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      return map.map((k, v) => MapEntry(k, (v as num).toInt()));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Saves student's selected option index for a question in a topic
+  Future<void> saveTopicAnswer({
+    required String topicId,
+    required String questionId,
+    required int selectedIndex,
+  }) async {
+    final tid = topicId.trim();
+    final qid = questionId.trim();
+    final answers = getTopicAnswers(tid);
+    answers[qid] = selectedIndex;
+    await _prefs?.setString('user_topic_${tid}_answers', jsonEncode(answers));
+  }
+
+  /// Gets the last viewed/attempted question index for a topic
+  int getTopicLastIndex(String topicId) {
+    final tid = topicId.trim();
+    return _prefs?.getInt('user_topic_${tid}_last_index') ?? 0;
+  }
+
+  /// Sets the last viewed/attempted question index for a topic
+  Future<void> setTopicLastIndex(String topicId, int index) async {
+    final tid = topicId.trim();
+    await _prefs?.setInt('user_topic_${tid}_last_index', index);
+    if (_practiceSessions.containsKey(tid)) {
+      _practiceSessions[tid] = _practiceSessions[tid]!.copyWith(
+        lastQuestionIndex: index,
+        updatedAt: DateTime.now(),
+      );
+      await _persistPracticeSessions();
+    }
+  }
+
+  /// Calculates the next appropriate question index to resume for a topic.
+  /// Finds the first unattempted question; if all attempted, returns lastIndex or 0.
+  int getResumeQuestionIndex(String topicId, List<Question> questions) {
+    if (questions.isEmpty) return 0;
+    final attemptedIds = getTopicAttemptedQids(topicId).toSet();
+    if (attemptedIds.isEmpty) return 0;
+
+    // First unattempted question index
+    final firstUnattempted = questions.indexWhere((q) => !attemptedIds.contains(q.id));
+    if (firstUnattempted != -1) {
+      return firstUnattempted;
+    }
+
+    // If all are attempted, return last saved index if valid, else 0
+    final lastIdx = getTopicLastIndex(topicId);
+    if (lastIdx >= 0 && lastIdx < questions.length) {
+      return lastIdx;
+    }
+    return 0;
+  }
+
+  /// Saves a topic practice session
+  Future<void> savePracticeSession(TopicPracticeSession session) async {
+    _practiceSessions[session.topicId] = session;
+    await _persistPracticeSessions();
+  }
+
+  /// Retrieves a saved topic practice session
+  TopicPracticeSession? getPracticeSession(String topicId) {
+    return _practiceSessions[topicId];
+  }
+
+  /// Finds the latest incomplete practice session matching the selected exam.
+  /// Returns null if no incomplete practice session exists for that exam.
+  TopicPracticeSession? getResumablePracticeSession(String selectedExam) {
+    final candidates = <TopicPracticeSession>[];
+
+    for (final session in _practiceSessions.values) {
+      final currentTotal = getQuestionsByTopic(session.topicId).length;
+      final effectiveTotal = currentTotal > 0 ? currentTotal : session.totalQuestions;
+
+      // Must have at least 1 attempt and not be 100% completed
+      if (session.attemptedCount > 0 && effectiveTotal > 0 && session.attemptedCount < effectiveTotal) {
+        if (selectedExam.toUpperCase() == 'ALL') {
+          candidates.add(session.copyWith(totalQuestions: effectiveTotal));
+        } else {
+          final subject = getSubjectById(session.subjectId);
+          if (subject != null && subject.matchesExam(selectedExam)) {
+            candidates.add(session.copyWith(totalQuestions: effectiveTotal));
+          } else if (session.examCode.toUpperCase() == selectedExam.toUpperCase() ||
+              session.examDisplay.toUpperCase().contains(selectedExam.toUpperCase())) {
+            candidates.add(session.copyWith(totalQuestions: effectiveTotal));
+          }
+        }
       }
     }
+
+    // Fallback: check topics with progress in SharedPreferences not yet explicitly in _practiceSessions
+    for (final topic in _topics) {
+      if (_practiceSessions.containsKey(topic.id)) continue;
+      final attempted = getTopicAttemptedCount(topic.id);
+      final total = getQuestionsByTopic(topic.id).isNotEmpty
+          ? getQuestionsByTopic(topic.id).length
+          : topic.questionCount;
+
+      if (attempted > 0 && total > 0 && attempted < total) {
+        final subject = getSubjectById(topic.subjectId);
+        if (selectedExam.toUpperCase() == 'ALL' || (subject != null && subject.matchesExam(selectedExam))) {
+          final attemptedQids = getTopicAttemptedQids(topic.id);
+          final correct = getTopicCorrectCount(topic.id);
+          candidates.add(TopicPracticeSession(
+            topicId: topic.id,
+            topicName: topic.name,
+            subjectId: topic.subjectId,
+            subjectName: subject?.name ?? '',
+            examCode: selectedExam.toUpperCase() != 'ALL'
+                ? selectedExam
+                : (subject?.examCodes.firstOrNull ?? 'CGL'),
+            lastQuestionIndex: attempted,
+            attemptedQuestionIds: attemptedQids,
+            correctCount: correct,
+            totalQuestions: total,
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+          ));
+        }
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return candidates.first;
   }
 
   /// Total distinct questions attempted for a specific topic

@@ -1326,3 +1326,111 @@ class RemoteAppConfig {
   );
 }
 
+class TopicPracticeSession {
+  final String topicId;
+  final String topicName;
+  final String subjectId;
+  final String subjectName;
+  final String examCode;
+  final String? lastQuestionId;
+  final int lastQuestionIndex;
+  final List<String> attemptedQuestionIds;
+  final int correctCount;
+  final int totalQuestions;
+  final DateTime updatedAt;
+
+  const TopicPracticeSession({
+    required this.topicId,
+    required this.topicName,
+    required this.subjectId,
+    required this.subjectName,
+    required this.examCode,
+    this.lastQuestionId,
+    this.lastQuestionIndex = 0,
+    required this.attemptedQuestionIds,
+    required this.correctCount,
+    required this.totalQuestions,
+    required this.updatedAt,
+  });
+
+  int get attemptedCount => attemptedQuestionIds.length;
+
+  double get accuracy {
+    if (attemptedCount <= 0) return 0.0;
+    return (correctCount / attemptedCount) * 100;
+  }
+
+  double get progress {
+    if (totalQuestions <= 0) return 0.0;
+    return (attemptedCount / totalQuestions).clamp(0.0, 1.0);
+  }
+
+  bool get isCompleted => totalQuestions > 0 && attemptedCount >= totalQuestions;
+
+  String get examDisplay {
+    final code = examCode.trim();
+    if (code.isEmpty || code.toUpperCase() == 'ALL') return '';
+    if (code.toUpperCase().startsWith('AN ') || code.toUpperCase().startsWith('A&N ')) {
+      return code.toUpperCase();
+    }
+    return 'AN ${code.toUpperCase()}';
+  }
+
+  TopicPracticeSession copyWith({
+    String? topicId,
+    String? topicName,
+    String? subjectId,
+    String? subjectName,
+    String? examCode,
+    String? lastQuestionId,
+    int? lastQuestionIndex,
+    List<String>? attemptedQuestionIds,
+    int? correctCount,
+    int? totalQuestions,
+    DateTime? updatedAt,
+  }) {
+    return TopicPracticeSession(
+      topicId: topicId ?? this.topicId,
+      topicName: topicName ?? this.topicName,
+      subjectId: subjectId ?? this.subjectId,
+      subjectName: subjectName ?? this.subjectName,
+      examCode: examCode ?? this.examCode,
+      lastQuestionId: lastQuestionId ?? this.lastQuestionId,
+      lastQuestionIndex: lastQuestionIndex ?? this.lastQuestionIndex,
+      attemptedQuestionIds: attemptedQuestionIds ?? this.attemptedQuestionIds,
+      correctCount: correctCount ?? this.correctCount,
+      totalQuestions: totalQuestions ?? this.totalQuestions,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'topicId': topicId,
+    'topicName': topicName,
+    'subjectId': subjectId,
+    'subjectName': subjectName,
+    'examCode': examCode,
+    if (lastQuestionId != null) 'lastQuestionId': lastQuestionId,
+    'lastQuestionIndex': lastQuestionIndex,
+    'attemptedQuestionIds': attemptedQuestionIds,
+    'correctCount': correctCount,
+    'totalQuestions': totalQuestions,
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory TopicPracticeSession.fromMap(Map<String, dynamic> map) => TopicPracticeSession(
+    topicId: map['topicId'] ?? '',
+    topicName: map['topicName'] ?? '',
+    subjectId: map['subjectId'] ?? '',
+    subjectName: map['subjectName'] ?? '',
+    examCode: map['examCode'] ?? '',
+    lastQuestionId: map['lastQuestionId'],
+    lastQuestionIndex: (map['lastQuestionIndex'] as num?)?.toInt() ?? 0,
+    attemptedQuestionIds: List<String>.from(map['attemptedQuestionIds'] ?? []),
+    correctCount: (map['correctCount'] as num?)?.toInt() ?? 0,
+    totalQuestions: (map['totalQuestions'] as num?)?.toInt() ?? 0,
+    updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) ?? DateTime.now() : DateTime.now(),
+  );
+}
+
+

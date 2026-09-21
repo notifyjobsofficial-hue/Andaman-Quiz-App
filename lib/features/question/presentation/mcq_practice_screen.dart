@@ -42,8 +42,24 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     // On-demand fetch from Firestore — never falls back to entire question bank
     final fetched = await FirestoreService.instance.fetchQuestionsForTopic(widget.topicId);
     if (mounted) {
+      // Restore previously saved answers and submitted status
+      final savedAnswers = LocalDatabase.instance.getTopicAnswers(widget.topicId);
+      final attemptedIds = LocalDatabase.instance.getTopicAttemptedQids(widget.topicId);
+
+      for (final entry in savedAnswers.entries) {
+        _selectedAnswers[entry.key] = entry.value;
+        _submitted[entry.key] = true;
+      }
+      for (final qid in attemptedIds) {
+        _submitted[qid] = true;
+      }
+
+      // Resume at the next appropriate question in that same topic (never restart from Q1 unless reset)
+      final resumeIndex = LocalDatabase.instance.getResumeQuestionIndex(widget.topicId, fetched);
+
       setState(() {
         _questions = fetched;
+        _currentIndex = resumeIndex;
         _isLoading = false;
       });
     }
@@ -59,14 +75,23 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     });
 
     final isCorrect = index == currentQ.correctIndex;
+    final selectedExam = ref.read(selectedExamProvider);
+
     LocalDatabase.instance.recordPracticeAnswer(
       isCorrect: isCorrect,
       topicId: widget.topicId,
       questionId: currentQ.id,
+      selectedOptionIndex: index,
+      examCode: selectedExam,
+      totalQuestions: _questions.length,
+      currentQuestionIndex: _currentIndex,
     );
     if (!isCorrect) {
       LocalDatabase.instance.recordWrongQuestion(currentQ.id);
     }
+
+    // Refresh resumable practice session so Home screen updates immediately
+    ref.read(resumablePracticeSessionProvider.notifier).refresh();
   }
 
   void _goToPrevious() {
@@ -74,6 +99,8 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
       setState(() {
         _currentIndex--;
       });
+      LocalDatabase.instance.setTopicLastIndex(widget.topicId, _currentIndex);
+      ref.read(resumablePracticeSessionProvider.notifier).refresh();
     }
   }
 
@@ -82,6 +109,8 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
       setState(() {
         _currentIndex++;
       });
+      LocalDatabase.instance.setTopicLastIndex(widget.topicId, _currentIndex);
+      ref.read(resumablePracticeSessionProvider.notifier).refresh();
     }
   }
 

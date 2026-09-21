@@ -53,7 +53,7 @@ class HomeScreen extends ConsumerWidget {
             .firstOrNull ??
         allMocks.firstOrNull;
 
-    final attempts = ref.watch(studentAttemptsProvider);
+    final resumablePracticeSession = ref.watch(resumablePracticeSessionProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -63,6 +63,7 @@ class HomeScreen extends ConsumerWidget {
             ref.read(streakProvider.notifier).refresh();
             ref.read(accuracyProvider.notifier).refresh();
             ref.read(totalQuestionsCountProvider.notifier).refresh();
+            ref.read(resumablePracticeSessionProvider.notifier).refresh();
             ref.invalidate(todayQotdProvider);
           },
           child: SingleChildScrollView(
@@ -195,14 +196,14 @@ class HomeScreen extends ConsumerWidget {
                 _ExamSelectorRow(selectedExam: selectedExam),
                 const SizedBox(height: 24),
 
-                // Continue Practice Progress Card (Only shown when genuine attempts exist)
-                if (attempts.isNotEmpty) ...[
+                // Continue Practice Progress Card (Only shown when genuine incomplete practice session exists for selected exam)
+                if (resumablePracticeSession != null) ...[
                   Text(
                     'Continue Practice',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 10),
-                  _ContinuePracticeCard(latestAttempt: attempts.last),
+                  _ContinuePracticeCard(session: resumablePracticeSession),
                   const SizedBox(height: 24),
                 ],
 
@@ -757,14 +758,15 @@ class _ExamSelectorRow extends ConsumerWidget {
 }
 
 class _ContinuePracticeCard extends StatelessWidget {
-  final StudentAttempt latestAttempt;
-  const _ContinuePracticeCard({required this.latestAttempt});
+  final TopicPracticeSession session;
+  const _ContinuePracticeCard({required this.session});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final totalQuestions = latestAttempt.correctCount + latestAttempt.wrongCount + latestAttempt.unattemptedCount;
-    final progress = totalQuestions > 0 ? (latestAttempt.correctCount / totalQuestions).clamp(0.0, 1.0) : 0.0;
+    final subtitle = session.examDisplay.isNotEmpty
+        ? '${session.subjectName} • ${session.examDisplay}'
+        : session.subjectName;
 
     return AppCard(
       child: Column(
@@ -775,11 +777,11 @@ class _ContinuePracticeCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  latestAttempt.testTitle,
+                  session.topicName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -792,7 +794,7 @@ class _ContinuePracticeCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  '${latestAttempt.accuracy.round()}% ACC',
+                  '${session.accuracy.round()}% Accuracy',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -804,17 +806,42 @@ class _ContinuePracticeCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Score: ${latestAttempt.score.toStringAsFixed(2)} / ${latestAttempt.maxScore.toStringAsFixed(2)} • ${latestAttempt.correctCount}/$totalQuestions correct',
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 12,
+              fontWeight: FontWeight.w500,
               color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
             ),
           ),
           const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${session.attemptedCount} of ${session.totalQuestions} completed',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.textDark : AppColors.textLight,
+                ),
+              ),
+              Text(
+                '${(session.progress * 100).toInt()}%',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.actionBlue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(AppDimens.radiusPill),
             child: LinearProgressIndicator(
-              value: progress,
+              value: session.progress,
               minHeight: 6,
               backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
               valueColor: const AlwaysStoppedAnimation<Color>(AppColors.actionBlue),
@@ -824,24 +851,15 @@ class _ContinuePracticeCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              OutlinedButton(
-                onPressed: () => context.push('/tests/solutions/${latestAttempt.id}'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(80, 34),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: () => context.push('/tests/instructions/${latestAttempt.testId}'),
+              ElevatedButton.icon(
+                onPressed: () => context.push('/practice/mcq/${session.topicId}'),
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('Continue →', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                 style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(90, 34),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  minimumSize: const Size(120, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                child: const Text('Retake', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
