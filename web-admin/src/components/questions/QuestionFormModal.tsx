@@ -12,6 +12,7 @@ interface QuestionFormModalProps {
   onSaved: (q: Question) => void;
   exams: Exam[];
   subjects: Subject[];
+  defaultUsage?: 'PRACTICE' | 'MOCK' | 'BOTH';
 }
 
 export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
@@ -21,6 +22,7 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   onSaved,
   exams,
   subjects,
+  defaultUsage = 'BOTH',
 }) => {
   const [formData, setFormData] = useState<Partial<Question>>({
     question_text: '',
@@ -32,12 +34,14 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
     explanation_text: '',
     exam: exams[0]?.code || 'ANCHSL',
     subject: subjects[0]?.name || 'General Awareness',
+    subjectId: subjects[0]?.id || '',
     topic: 'General',
     difficulty: 'Medium',
     positive_marks: 2.0,
     negative_marks: 0.5,
     language: 'both',
     status: 'published',
+    usageType: defaultUsage,
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -46,7 +50,10 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   useEffect(() => {
     setFormError(null);
     if (questionToEdit) {
-      setFormData(questionToEdit);
+      setFormData({
+        ...questionToEdit,
+        usageType: questionToEdit.usageType || questionToEdit.usage_type || defaultUsage,
+      });
     } else {
       setFormData({
         id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -59,15 +66,17 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         explanation_text: '',
         exam: exams[0]?.code || 'ANCHSL',
         subject: subjects[0]?.name || 'General Awareness',
+        subjectId: subjects[0]?.id || '',
         topic: 'General',
         difficulty: 'Medium',
         positive_marks: 2.0,
         negative_marks: 0.5,
         language: 'both',
         status: 'published',
+        usageType: defaultUsage,
       });
     }
-  }, [questionToEdit, isOpen]);
+  }, [questionToEdit, isOpen, defaultUsage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +106,18 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         explanation_image_url: formData.explanation_image_url || undefined,
         exam: formData.exam || 'ANCHSL',
         subject: formData.subject || 'General Awareness',
+        subjectId: formData.subjectId || subjects.find(s => s.name === formData.subject)?.id,
         topic: formData.topic || 'General',
         difficulty: formData.difficulty || 'Medium',
         positive_marks: Number(formData.positive_marks) || 2.0,
         negative_marks: Number(formData.negative_marks) || 0.5,
         language: formData.language || 'both',
         status: formData.status || 'published',
+        usageType: (formData.usageType as any) || defaultUsage || 'BOTH',
+        usage_type: (formData.usageType as any) || defaultUsage || 'BOTH',
+        source: formData.source || 'MANUAL',
+        created_at: formData.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
 
       await saveQuestion(q);
@@ -130,7 +145,7 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
           </div>
         )}
         {/* Meta Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Target Exam</label>
             <select
@@ -148,7 +163,10 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 mb-1">Subject</label>
             <select
               value={formData.subject}
-              onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+              onChange={(e) => {
+                const sub = subjects.find(s => s.name === e.target.value);
+                setFormData({ ...formData, subject: e.target.value, subjectId: sub?.id || '' });
+              }}
               className="w-full text-xs font-semibold p-2 border border-slate-200 rounded-lg bg-white"
             >
               {subjects.map((sub) => (
@@ -178,6 +196,19 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
               <option value="Easy">Easy</option>
               <option value="Medium">Medium</option>
               <option value="Hard">Hard</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Question Usage</label>
+            <select
+              value={formData.usageType || 'BOTH'}
+              onChange={(e) => setFormData({ ...formData, usageType: e.target.value as any })}
+              className="w-full text-xs font-semibold p-2 border border-slate-200 rounded-lg bg-white text-brand-700"
+            >
+              <option value="PRACTICE">Practice Only</option>
+              <option value="MOCK">Mock Test Only</option>
+              <option value="BOTH">Practice + Mock Test</option>
             </select>
           </div>
         </div>

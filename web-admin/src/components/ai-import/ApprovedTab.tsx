@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { StagedQuestion, PdfImportJob } from '../../types';
+import { StagedQuestion, PdfImportJob, Question, MockTest, Exam } from '../../types';
 import { publishApprovedQuestionsToQuestionBank } from '../../services/aiImportService';
+import { PostImportAssignmentModal } from './PostImportAssignmentModal';
 import {
   CheckCircle2,
   UploadCloud,
@@ -14,19 +15,26 @@ import {
 interface ApprovedTabProps {
   job: PdfImportJob | null;
   stagedQuestions: StagedQuestion[];
+  mockTests?: MockTest[];
+  exams?: Exam[];
   onRefresh: () => void;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export const ApprovedTab: React.FC<ApprovedTabProps> = ({
   job,
   stagedQuestions,
+  mockTests = [],
+  exams = [],
   onRefresh,
+  onNavigateToTab,
 }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [resultFeedback, setResultFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [publishedQuestionsForModal, setPublishedQuestionsForModal] = useState<Question[] | null>(null);
 
   const approvedQuestions = stagedQuestions.filter((q) => q.review_status === 'approved');
   const alreadyPublishedCount = approvedQuestions.filter((q) => !!q.published_question_id).length;
@@ -52,6 +60,9 @@ export const ApprovedTab: React.FC<ApprovedTabProps> = ({
         });
       }
       onRefresh();
+      if (res.publishedQuestions && res.publishedQuestions.length > 0) {
+        setPublishedQuestionsForModal(res.publishedQuestions);
+      }
     } catch (err: any) {
       console.error('Publish error:', err);
       setResultFeedback({
@@ -160,6 +171,20 @@ export const ApprovedTab: React.FC<ApprovedTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Post-Import Assignment Choice Modal */}
+      <PostImportAssignmentModal
+        isOpen={!!publishedQuestionsForModal}
+        onClose={() => setPublishedQuestionsForModal(null)}
+        importedQuestions={publishedQuestionsForModal || []}
+        mockTests={mockTests}
+        exams={exams}
+        onNavigateToTab={onNavigateToTab}
+        onComplete={() => {
+          setPublishedQuestionsForModal(null);
+          onRefresh();
+        }}
+      />
     </div>
   );
 };

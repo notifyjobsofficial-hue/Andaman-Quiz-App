@@ -217,6 +217,29 @@ export async function updateStagedQuestionStatus(
   await safeSetDoc(ref, updates, { merge: true });
 }
 
+export async function bulkApproveStagedQuestions(
+  jobId: string,
+  questionIds: string[]
+): Promise<void> {
+  const chunkSize = 400;
+  const now = new Date().toISOString();
+  const reviewer = auth.currentUser?.email || 'admin';
+
+  for (let i = 0; i < questionIds.length; i += chunkSize) {
+    const chunk = questionIds.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    for (const qId of chunk) {
+      const ref = doc(db, JOBS_COLLECTION, jobId, 'staged_questions', qId);
+      batch.update(ref, {
+        review_status: 'approved',
+        reviewed_at: now,
+        reviewed_by: reviewer,
+      });
+    }
+    await batch.commit();
+  }
+}
+
 // -------------------------------------------------------------
 // 4. Deterministic Confidence & Validation Engine
 // -------------------------------------------------------------
@@ -331,13 +354,14 @@ export function calculateDeterministicConfidence(q: Partial<StagedQuestion>): {
 export async function publishApprovedQuestionsToQuestionBank(
   jobId: string,
   stagedQuestions: StagedQuestion[]
-): Promise<{ publishedCount: number; errors: string[] }> {
+): Promise<{ publishedCount: number; publishedQuestions: Question[]; errors: string[] }> {
   const approved = stagedQuestions.filter((q) => q.review_status === 'approved');
   if (approved.length === 0) {
-    return { publishedCount: 0, errors: ['No approved questions to publish'] };
+    return { publishedCount: 0, publishedQuestions: [], errors: ['No approved questions to publish'] };
   }
 
   const errors: string[] = [];
+  const publishedList: Question[] = [];
   const chunkSize = 400;
   let publishedCount = 0;
 
@@ -368,6 +392,9 @@ export async function publishApprovedQuestionsToQuestionBank(
         negative_marks: staged.negative_marks || 0.5,
         language: staged.language || 'both',
         status: 'published',
+        usageType: staged.usageType || staged.usage_type || 'BOTH',
+        usage_type: staged.usageType || staged.usage_type || 'BOTH',
+        source: 'PDF_IMPORT',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -390,6 +417,7 @@ export async function publishApprovedQuestionsToQuestionBank(
         updated_at: new Date().toISOString(),
       }, { merge: true });
 
+      publishedList.push(canonicalQuestion);
       publishedCount++;
     }
 
@@ -417,5 +445,5 @@ export async function publishApprovedQuestionsToQuestionBank(
     `Published ${publishedCount} questions from job ${jobId} to Question Bank`
   );
 
-  return { publishedCount, errors };
+  return { publishedCount, publishedQuestions: publishedList, errors };
 }

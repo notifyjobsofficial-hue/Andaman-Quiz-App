@@ -55,9 +55,26 @@ export function App() {
   return (
     <AdminLayout currentTab={currentTab} onSelectTab={setCurrentTab}>
       {currentTab === 'dashboard' && <Dashboard onNavigate={setCurrentTab} />}
-      {currentTab === 'questions' && <QuestionBank />}
+      {currentTab === 'questions' && (
+        <QuestionBank
+          mode="all"
+          onNavigateToMock={(testId) => {
+            setBuilderTestId(testId);
+            setCurrentTab('test-builder');
+          }}
+        />
+      )}
+      {currentTab === 'practice-questions' && (
+        <QuestionBank
+          mode="practice"
+          onNavigateToMock={(testId) => {
+            setBuilderTestId(testId);
+            setCurrentTab('test-builder');
+          }}
+        />
+      )}
       {currentTab === 'import' && <BulkImport />}
-      {currentTab === 'ai-pdf-import' && <AiPdfImport />}
+      {currentTab === 'ai-pdf-import' && <AiPdfImport onNavigateToTab={setCurrentTab} />}
       {currentTab === 'tests' && (
         <MockTests
           onNavigateToBuilder={(testId) => {

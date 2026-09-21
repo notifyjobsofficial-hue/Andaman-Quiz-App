@@ -513,7 +513,19 @@ class FirestoreService {
           .where('topicId', isEqualTo: topicId)
           .get();
 
-      final fetched = snap.docs.map((d) => Question.fromMap(d.data())).toList();
+      List<Question> fetched = snap.docs.map((d) => Question.fromMap(d.data())).toList();
+
+      final topic = LocalDatabase.instance.getTopicById(topicId);
+      if (fetched.isEmpty && topic != null && topic.name.isNotEmpty && topic.name != topicId) {
+        final snapName = await _firestore
+            .collection(colQuestions)
+            .where('topic', isEqualTo: topic.name)
+            .get();
+        if (snapName.docs.isNotEmpty) {
+          fetched = snapName.docs.map((d) => Question.fromMap(d.data())).toList();
+        }
+      }
+
       if (fetched.isNotEmpty) {
         await LocalDatabase.instance.syncQuestionsFromFirestore(fetched);
       }

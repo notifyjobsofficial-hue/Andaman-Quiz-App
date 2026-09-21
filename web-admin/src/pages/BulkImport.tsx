@@ -14,10 +14,11 @@ import {
 } from 'lucide-react';
 import { parseSpreadsheetFile } from '../utils/excelParser';
 import { validateQuestionRows, ValidationSummary } from '../utils/validator';
-import { fetchQuestions, fetchExams, fetchSubjects, batchInsertQuestions } from '../firebase/firestore';
+import { fetchQuestions, fetchExams, fetchSubjects, fetchMockTests, batchInsertQuestions } from '../firebase/firestore';
 import { uploadImage } from '../firebase/storage';
-import { Question, Exam, Subject } from '../types';
+import { Question, Exam, Subject, MockTest } from '../types';
 import { Badge } from '../components/common/Badge';
+import { PostImportAssignmentModal } from '../components/ai-import/PostImportAssignmentModal';
 
 export const BulkImport: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -25,6 +26,8 @@ export const BulkImport: React.FC = () => {
   const [existingQuestions, setExistingQuestions] = useState<Question[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [mockTests, setMockTests] = useState<MockTest[]>([]);
+  const [importedForModal, setImportedForModal] = useState<Question[] | null>(null);
 
   // Validation State
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
@@ -43,10 +46,11 @@ export const BulkImport: React.FC = () => {
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchQuestions(1000), fetchExams(), fetchSubjects()]).then(([q, e, s]) => {
+    Promise.all([fetchQuestions(1000), fetchExams(), fetchSubjects(), fetchMockTests()]).then(([q, e, s, m]) => {
       setExistingQuestions(q);
       setExams(e);
       setSubjects(s);
+      setMockTests(m);
     });
   }, []);
 
@@ -163,6 +167,7 @@ export const BulkImport: React.FC = () => {
         setImportProgress({ current, total });
       });
       setImportCompleted(true);
+      setImportedForModal(toImport);
     } catch (err: any) {
       setActionFeedback({ type: 'error', message: 'Import failed: ' + err.message });
     } finally {
@@ -412,6 +417,13 @@ export const BulkImport: React.FC = () => {
 
           <div className="pt-4 flex justify-center gap-3">
             <button
+              onClick={() => setImportedForModal(summary?.validQuestions || null)}
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2"
+            >
+              <span>Assign Questions Now</span>
+              <ArrowRight size={14} />
+            </button>
+            <button
               onClick={handleReset}
               className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition"
             >
@@ -419,6 +431,19 @@ export const BulkImport: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {importedForModal && (
+        <PostImportAssignmentModal
+          isOpen={!!importedForModal}
+          onClose={() => setImportedForModal(null)}
+          importedQuestions={importedForModal}
+          mockTests={mockTests}
+          exams={exams}
+          onComplete={() => {
+            setImportedForModal(null);
+          }}
+        />
       )}
     </div>
   );

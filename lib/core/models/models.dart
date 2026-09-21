@@ -202,6 +202,7 @@ class Question {
   final String? explanationImageUrl;
   final double positiveMarks;
   final double negativeMarks;
+  final String usageType; // 'PRACTICE', 'MOCK', 'BOTH'
 
   const Question({
     required this.id,
@@ -223,6 +224,7 @@ class Question {
     this.explanationImageUrl,
     this.positiveMarks = 2.0,
     this.negativeMarks = 0.5,
+    this.usageType = 'BOTH',
   });
 
   Question copyWith({
@@ -232,6 +234,7 @@ class Question {
     String? explanationImageUrl,
     double? positiveMarks,
     double? negativeMarks,
+    String? usageType,
   }) {
     return Question(
       id: id,
@@ -253,6 +256,7 @@ class Question {
       explanationImageUrl: explanationImageUrl ?? this.explanationImageUrl,
       positiveMarks: positiveMarks ?? this.positiveMarks,
       negativeMarks: negativeMarks ?? this.negativeMarks,
+      usageType: usageType ?? this.usageType,
     );
   }
 
@@ -276,6 +280,8 @@ class Question {
     if (explanationImageUrl != null && explanationImageUrl!.isNotEmpty) 'explanation_image_url': explanationImageUrl,
     'positive_marks': positiveMarks,
     'negative_marks': negativeMarks,
+    'usageType': usageType,
+    'usage_type': usageType,
   };
 
   factory Question.fromMap(Map<String, dynamic> map) {
@@ -354,6 +360,11 @@ class Question {
       explanationImageUrl: map['explanation_image_url'] ?? map['explanationImageUrl'],
       positiveMarks: (map['positive_marks'] as num?)?.toDouble() ?? 2.0,
       negativeMarks: (map['negative_marks'] as num?)?.toDouble() ?? 0.5,
+      usageType: () {
+        final raw = (map['usageType'] ?? map['usage_type'])?.toString().toUpperCase();
+        if (raw == 'PRACTICE' || raw == 'MOCK' || raw == 'BOTH') return raw!;
+        return 'BOTH';
+      }(),
     );
   }
 }

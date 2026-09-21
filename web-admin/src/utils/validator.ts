@@ -135,6 +135,9 @@ export function validateQuestionRows(
     if (exam) detectedExams.add(exam);
     if (subject) detectedSubjects.add(subject);
 
+    const rawUsage = (row['usage_type'] || row['usageType'] || row['usage'] || 'BOTH').toString().trim().toUpperCase();
+    const usageType = (rawUsage === 'PRACTICE' || rawUsage === 'MOCK' || rawUsage === 'BOTH') ? (rawUsage as 'PRACTICE' | 'MOCK' | 'BOTH') : 'BOTH';
+
     const question: Question = {
       id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       question_text: qText,
@@ -152,6 +155,11 @@ export function validateQuestionRows(
       negative_marks: parseFloat(row['negative_marks']) || 0.5,
       language: (row['language'] || 'both') as 'en' | 'hi' | 'both',
       status: 'published',
+      usageType,
+      usage_type: usageType,
+      source: 'BULK_IMPORT',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     if (qImg) question.question_image_url = qImg;

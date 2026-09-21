@@ -331,11 +331,21 @@ class LocalDatabase {
   }
 
   List<Question> getQuestionsByTopic(String topicId) {
-    return _questions.where((q) => q.topicId == topicId).toList();
+    final topic = getTopicById(topicId);
+    return _questions.where((q) {
+      final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
+      if (!matchesTopic) return false;
+      return q.usageType != 'MOCK';
+    }).toList();
   }
 
   List<Question> getQuestionsBySubject(String subjectId) {
-    return _questions.where((q) => q.subjectId == subjectId).toList();
+    final subject = getSubjectById(subjectId);
+    return _questions.where((q) {
+      final matchesSubject = q.subjectId == subjectId || (subject != null && q.subjectId.toLowerCase() == subject.name.toLowerCase());
+      if (!matchesSubject) return false;
+      return q.usageType != 'MOCK';
+    }).toList();
   }
 
   List<Question> getQuestionsByIds(List<String> ids) {

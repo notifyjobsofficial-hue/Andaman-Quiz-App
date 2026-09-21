@@ -55,15 +55,31 @@ export interface Question {
   exam: string;
   category?: string;
   subject: string;
+  subjectId?: string;
+  chapter?: string;
+  chapterId?: string;
   topic: string;
+  topicId?: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   positive_marks: number;
   negative_marks: number;
   language: 'en' | 'hi' | 'both';
   year?: string;
   status: 'published' | 'draft' | 'archived';
+  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  source?: 'MANUAL' | 'BULK_IMPORT' | 'PDF_IMPORT';
   created_at?: string;
   updated_at?: string;
+}
+
+export interface QuestionUsageSummary {
+  inPractice: boolean;
+  practiceTaxonomy?: { exam: string; subject: string; topic: string };
+  mockTests: { id: string; title: string; examCode: string }[];
+  liveTests: { id: string; title: string; mockTestId: string }[];
+  studentAvailable: boolean;
+  statusBadge: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
 }
 
 export interface TestSection {
@@ -235,7 +251,7 @@ export type JobStatus =
 
 export type ConfidenceLevel = 'HIGH' | 'REVIEW' | 'ERROR' | 'MEDIUM' | 'LOW';
 
-export type AnswerSource = 'SOURCE_ANSWER' | 'AI_INFERRED' | 'UNRESOLVED';
+export type AnswerSource = 'SOURCE_ANSWER' | 'AI_INFERRED' | 'UNRESOLVED' | 'MANUAL';
 
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
 
@@ -344,6 +360,8 @@ export interface StagedQuestion {
   negative_marks: number;
   language: 'en' | 'hi' | 'both';
   year?: string;
+  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH';
 
   // Source Traceability
   source_pdf: string;
