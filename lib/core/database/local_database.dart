@@ -30,7 +30,7 @@ class LocalDatabase {
   bool _isInitialized = false;
 
   // Increment when the cache schema changes to force a migration on existing devices
-  static const int _kCurrentDbVersion = 3;
+  static const int _kCurrentDbVersion = 4;
 
   Future<void> init({bool force = false}) async {
     if (_isInitialized && !force) return;

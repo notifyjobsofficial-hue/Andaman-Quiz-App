@@ -326,21 +326,16 @@ class Question {
     return trimmed;
   }
 
-  /// Explicit formatted source metadata if structured fields are set.
+  /// Explicit formatted source metadata if genuine source fields are set.
   String? get formattedSourceInfo {
     final parts = <String>[];
     if (sourceExam != null && sourceExam!.trim().isNotEmpty) {
       parts.add(sourceExam!.trim());
-    } else if (examTags.isNotEmpty) {
-      final validTags = examTags.where((t) => t.trim().isNotEmpty && !t.startsWith('sub_') && !t.startsWith('top_')).toList();
-      if (validTags.isNotEmpty) {
-        parts.add(validTags.join(', '));
-      }
     }
 
     if (examDate != null && examDate!.trim().isNotEmpty) {
       parts.add(_formatDateString(examDate!));
-    } else if (year != null && year!.trim().isNotEmpty && !year!.toLowerCase().contains('import')) {
+    } else if (year != null && year!.trim().isNotEmpty && RegExp(r'^\d{4}$').hasMatch(year!.trim())) {
       parts.add(year!.trim());
     }
 
@@ -385,41 +380,8 @@ class Question {
 
   String get cleanQuestionHi => questionHi;
 
-  /// Resolved source metadata row (structured fields or safely parsed from trailing text).
-  String? get resolvedSourceInfo {
-    final structured = formattedSourceInfo;
-    if (structured != null && structured.isNotEmpty) {
-      return structured;
-    }
-
-    final match = _legacySourceRegex.firstMatch(questionEn);
-    if (match != null) {
-      final rawMeta = match.group(1) ?? '';
-      if (rawMeta.trim().isNotEmpty) {
-        // Parse Exam, Date, and Shift components from rawMeta
-        final parts = <String>[];
-        final examMatch = RegExp(r'(SSC\s+(?:CGL|CHSL|MTS|CPO|GD|JE|Stenographer)|A\s*&\s*N\s+(?:CGL|CHSL|POLICE|MTS)|Police|CGL|CHSL|MTS)', caseSensitive: false).firstMatch(rawMeta);
-        if (examMatch != null) {
-          parts.add(examMatch.group(1)!.trim().replaceAll(RegExp(r'\s+'), ' '));
-        }
-
-        final dateMatch = RegExp(r'(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b(?:19|20)\d{2}\b)').firstMatch(rawMeta);
-        if (dateMatch != null) {
-          parts.add(_formatDateString(dateMatch.group(1)!));
-        }
-
-        final shiftMatch = RegExp(r'((?:Shift|Tier)[\s\-]*[0-9]+)', caseSensitive: false).firstMatch(rawMeta);
-        if (shiftMatch != null) {
-          parts.add(_formatShiftString(shiftMatch.group(1)!));
-        }
-
-        if (parts.isNotEmpty) {
-          return parts.join(' • ');
-        }
-      }
-    }
-    return null;
-  }
+  /// Resolved source metadata row (genuine structured fields only; null if absent).
+  String? get resolvedSourceInfo => formattedSourceInfo;
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -513,9 +475,14 @@ class Question {
       tags = [map['exam'].toString()];
     }
 
-    final rawSourceExam = (map['sourceExam'] ?? map['source_exam'] ?? map['examSource'] ?? map['source_name'] ?? map['source'])?.toString();
-    final rawExamDate = (map['examDate'] ?? map['exam_date'] ?? map['date'])?.toString();
-    final rawShift = map['shift']?.toString();
+    final rawSourceExam = (map['sourceExam'] ?? map['source_exam'] ?? map['examSource'] ?? map['source_name'])?.toString().trim();
+    final effectiveSourceExam = (rawSourceExam != null && rawSourceExam.isNotEmpty) ? rawSourceExam : null;
+
+    final rawExamDate = (map['examDate'] ?? map['exam_date'] ?? map['date'])?.toString().trim();
+    final effectiveExamDate = (rawExamDate != null && rawExamDate.isNotEmpty) ? rawExamDate : null;
+
+    final rawShift = map['shift']?.toString().trim();
+    final effectiveShift = (rawShift != null && rawShift.isNotEmpty) ? rawShift : null;
     final rawTopicName = map['topic']?.toString();
     final rawSubjectName = map['subject']?.toString();
 
@@ -532,9 +499,9 @@ class Question {
       explanationEn: map['explanationEn'] ?? map['explanation_text'] ?? '',
       explanationHi: map['explanationHi'] ?? '',
       year: map['year'],
-      sourceExam: rawSourceExam,
-      examDate: rawExamDate,
-      shift: rawShift,
+      sourceExam: effectiveSourceExam,
+      examDate: effectiveExamDate,
+      shift: effectiveShift,
       topicName: rawTopicName,
       subjectName: rawSubjectName,
       difficulty: map['difficulty'] ?? 'Medium',

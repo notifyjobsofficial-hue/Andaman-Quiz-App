@@ -363,12 +363,12 @@ void main() {
       expect(q.resolvedSourceInfo, 'A&N Police • 15 Mar 2024');
     });
 
-    test('4. Question with NO source metadata returns null and does not render row', () {
+    test('4. Question with NO source metadata returns null and does not render row (even with taxonomy examTags)', () {
       final q = const Question(
         id: 'q_source_4',
         subjectId: 'sub_eng',
         topicId: 'top_idioms',
-        examTags: [],
+        examTags: ['AN CHSL'], // Taxonomy exam must NEVER leak into source info
         questionEn: 'What is the capital of India?',
         questionHi: '',
         optionsEn: ['Delhi', 'Mumbai', 'Chennai', 'Kolkata'],
@@ -379,37 +379,77 @@ void main() {
       );
 
       expect(q.cleanQuestionEn, 'What is the capital of India?');
+      expect(q.resolvedSourceInfo, isNull, reason: 'Must return null when genuine sourceExam is absent');
+      expect(q.formattedSourceInfo, isNull);
+    });
+
+    test('5. Question A: taxonomy = AN CHSL, sourceExam = blank -> NO SOURCE TAG', () {
+      final q = Question.fromMap({
+        'id': 'q_1789797651242_0a0ktaupj',
+        'exam': 'AN CHSL',
+        'category': 'SSC',
+        'subject': 'General English',
+        'subjectId': 'sub_general_english',
+        'topic': 'Idioms',
+        'topicId': 'top_idioms',
+        'question_text': 'Choose the correct meaning of idiom Eat crow SSC CGL 21/09/2025 (Shift-1)',
+        'correct_answer': 'D',
+        'status': 'published',
+        'usageType': 'BOTH',
+      });
+
+      expect(q.examTags, contains('AN CHSL'));
+      expect(q.sourceExam, isNull);
+      expect(q.examDate, isNull);
+      expect(q.shift, isNull);
+      expect(q.resolvedSourceInfo, isNull);
+      expect(q.cleanQuestionEn, 'Choose the correct meaning of idiom Eat crow');
+    });
+
+    test('6. Question B: taxonomy = AN CHSL, genuine sourceExam = SSC CGL -> Shows source metadata', () {
+      final q = Question.fromMap({
+        'id': 'q_source_b',
+        'exam': 'AN CHSL',
+        'category': 'SSC',
+        'subject': 'General English',
+        'subjectId': 'sub_general_english',
+        'topic': 'Idioms',
+        'topicId': 'top_idioms',
+        'question_text': 'Choose the correct meaning of idiom',
+        'sourceExam': 'SSC CGL',
+        'examDate': '21/09/2025',
+        'shift': 'Shift-1',
+        'correct_answer': 'A',
+        'status': 'published',
+        'usageType': 'BOTH',
+      });
+
+      expect(q.examTags, contains('AN CHSL'));
+      expect(q.sourceExam, 'SSC CGL');
+      expect(q.resolvedSourceInfo, 'SSC CGL • 21 Sep 2025 • Shift 1');
+    });
+
+    test('7. Question C: taxonomy = AN CGL, sourceExam = blank -> NO SOURCE TAG', () {
+      final q = Question.fromMap({
+        'id': 'q_source_c',
+        'exam': 'AN CGL',
+        'category': 'SSC',
+        'subject': 'General English',
+        'subjectId': 'sub_general_english',
+        'topic': 'Idioms',
+        'topicId': 'top_idioms',
+        'question_text': 'What is the meaning of this idiom?',
+        'correct_answer': 'B',
+        'status': 'published',
+        'usageType': 'BOTH',
+      });
+
+      expect(q.examTags, contains('AN CGL'));
+      expect(q.sourceExam, isNull);
       expect(q.resolvedSourceInfo, isNull);
     });
 
-    test('5. Legacy question with embedded trailing metadata is safely extracted and cleaned', () {
-      final legacyQ = const Question(
-        id: 'q_legacy_1',
-        subjectId: 'sub_eng',
-        topicId: 'top_idioms',
-        examTags: [],
-        questionEn: 'Choose the correct meaning of idiom\nEat crow SSC CGL 21/09/2025\n(Shift-1)',
-        questionHi: '',
-        optionsEn: ['A', 'B', 'C', 'D'],
-        optionsHi: [],
-        correctIndex: 3,
-        explanationEn: '',
-        explanationHi: '',
-      );
-
-      expect(
-        legacyQ.cleanQuestionEn,
-        'Choose the correct meaning of idiom\nEat crow',
-        reason: 'Embedded trailing exam string must be stripped from clean question text',
-      );
-      expect(
-        legacyQ.resolvedSourceInfo,
-        'SSC CGL • 21 Sep 2025 • Shift 1',
-        reason: 'Trailing string must be parsed into clean structured format',
-      );
-    });
-
-    testWidgets('6. QuestionSourceMetadata widget renders cleanly and wraps without overflow at 320dp', (tester) async {
+    testWidgets('8. QuestionSourceMetadata widget renders cleanly and wraps without overflow at 320dp', (tester) async {
       tester.view.physicalSize = const Size(320 * 3, 600 * 3);
       tester.view.devicePixelRatio = 3.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -432,7 +472,7 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'Must render with ZERO overflow at 320dp');
     });
 
-    testWidgets('7. QuestionSourceMetadata returns SizedBox.shrink when sourceInfo is null or empty', (tester) async {
+    testWidgets('9. QuestionSourceMetadata returns SizedBox.shrink when sourceInfo is null or empty', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -444,6 +484,35 @@ void main() {
 
       expect(find.byType(SizedBox), findsOneWidget);
       expect(find.byType(Icon), findsNothing);
+    });
+
+    test('10. Cache test: questions saved to local database cache and reloaded do not show stale AN CHSL', () async {
+      final db = LocalDatabase.instance;
+      final q = Question.fromMap({
+        'id': 'q_cache_test_1',
+        'exam': 'AN CHSL',
+        'category': 'SSC',
+        'subject': 'General English',
+        'subjectId': 'sub_general_english',
+        'topic': 'Idioms',
+        'topicId': 'top_idioms',
+        'question_text': 'Meaning of idiom',
+        'correct_answer': 'A',
+        'status': 'published',
+        'usageType': 'PRACTICE',
+      });
+
+      await db.syncTopicQuestionsFromFirestore('top_idioms', [q]);
+
+      // Re-initialize local database simulating app restart
+      await db.init(force: true);
+
+      final loadedQuestions = db.getQuestionsByTopic('top_idioms');
+      expect(loadedQuestions.length, 1);
+      final loadedQ = loadedQuestions.first;
+      expect(loadedQ.sourceExam, isNull);
+      expect(loadedQ.resolvedSourceInfo, isNull);
+      expect(loadedQ.formattedSourceInfo, isNull);
     });
   });
 }
