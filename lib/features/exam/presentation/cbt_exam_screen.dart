@@ -11,6 +11,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/ads/ad_service.dart';
 
@@ -563,9 +564,9 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     final selectedOption = _selectedAnswers[currentQId];
 
     final lang = ref.watch(selectedLanguageProvider);
-    final questionText = (currentQ != null && lang == 'hi' && currentQ.questionHi.isNotEmpty)
-        ? currentQ.questionHi
-        : currentQ?.questionEn ?? '';
+    final questionText = (currentQ != null && lang == 'hi' && currentQ.cleanQuestionHi.isNotEmpty)
+        ? currentQ.cleanQuestionHi
+        : currentQ?.cleanQuestionEn ?? '';
     final options = (currentQ != null && lang == 'hi' && currentQ.optionsHi.isNotEmpty)
         ? currentQ.optionsHi
         : currentQ?.optionsEn ?? [];
@@ -776,6 +777,8 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                         ),
                                       ),
                                     ],
+                                    // Compact source metadata row below question text
+                                    QuestionSourceMetadata(sourceInfo: currentQ.resolvedSourceInfo),
                                   ],
                                 ),
                               ),

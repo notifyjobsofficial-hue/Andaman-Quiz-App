@@ -6,6 +6,7 @@ import '../../../core/database/local_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_source_metadata.dart';
 
 class SolutionsReviewScreen extends ConsumerStatefulWidget {
   final String attemptId;
@@ -231,7 +232,7 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                '${index + 1}. ${q.questionEn}',
+                                '${index + 1}. ${q.cleanQuestionEn}',
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
                               ),
                               // Question image if available
@@ -239,6 +240,8 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                 const SizedBox(height: 10),
                                 _buildNetworkImage(q.questionImageUrl!.trim()),
                               ],
+                              // Compact source metadata row below question text
+                              QuestionSourceMetadata(sourceInfo: q.resolvedSourceInfo),
                               const SizedBox(height: 14),
 
                               // Options

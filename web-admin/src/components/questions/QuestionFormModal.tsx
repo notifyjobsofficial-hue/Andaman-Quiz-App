@@ -140,6 +140,12 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         usageType: (formData.usageType as any) || defaultUsage || 'NOT_USED',
         usage_type: (formData.usageType as any) || defaultUsage || 'NOT_USED',
         source: formData.source || 'MANUAL',
+        source_exam: formData.source_exam?.trim() || undefined,
+        sourceExam: formData.source_exam?.trim() || undefined,
+        exam_date: formData.exam_date?.trim() || undefined,
+        examDate: formData.exam_date?.trim() || undefined,
+        shift: formData.shift?.trim() || undefined,
+        year: formData.year || (formData.exam_date ? formData.exam_date.slice(0, 4) : undefined),
         created_at: formData.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -253,6 +259,46 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
             value={formData.question_image_url}
             onChange={(url) => setFormData({ ...formData, question_image_url: url })}
           />
+        </div>
+
+        {/* Source & Previous Year Metadata (Optional) */}
+        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">Source / Previous Year Details (Optional)</span>
+            <span className="text-[10px] text-slate-500">Separated from Question Text</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Exam / Source</label>
+              <input
+                type="text"
+                value={formData.source_exam || ''}
+                onChange={(e) => setFormData({ ...formData, source_exam: e.target.value })}
+                placeholder="e.g. SSC CGL, A&N Police"
+                className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Exam Date / Year</label>
+              <input
+                type="text"
+                value={formData.exam_date || ''}
+                onChange={(e) => setFormData({ ...formData, exam_date: e.target.value })}
+                placeholder="e.g. 21/09/2025 or 2025"
+                className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white text-slate-800"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Shift / Tier</label>
+              <input
+                type="text"
+                value={formData.shift || ''}
+                onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
+                placeholder="e.g. Shift 1, Tier 1"
+                className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white text-slate-800"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Options (A, B, C, D) */}

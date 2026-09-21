@@ -312,7 +312,8 @@ class LocalDatabase {
 
   Topic? getTopicById(String id) {
     try {
-      return _topics.firstWhere((t) => t.id == id);
+      final normalized = id.trim().toLowerCase();
+      return _topics.firstWhere((t) => t.id == id || t.name.toLowerCase() == normalized);
     } catch (_) {
       return null;
     }
@@ -332,8 +333,19 @@ class LocalDatabase {
 
   List<Question> getQuestionsByTopic(String topicId) {
     final topic = getTopicById(topicId);
+    final normTarget = topicId.trim().toLowerCase();
+    final normTopicName = topic?.name.trim().toLowerCase();
+    final normTopicId = topic?.id.trim().toLowerCase();
+
     return _questions.where((q) {
-      final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
+      final qTopicId = q.topicId.trim().toLowerCase();
+      final qTopicName = q.topicName?.trim().toLowerCase();
+
+      final matchesTopic = qTopicId == normTarget ||
+          (normTopicId != null && qTopicId == normTopicId) ||
+          (normTopicName != null && (qTopicId == normTopicName || qTopicName == normTopicName)) ||
+          (qTopicName != null && qTopicName == normTarget);
+
       if (!matchesTopic) return false;
       return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
     }).toList();
@@ -341,8 +353,19 @@ class LocalDatabase {
 
   List<Question> getQuestionsBySubject(String subjectId) {
     final subject = getSubjectById(subjectId);
+    final normTarget = subjectId.trim().toLowerCase();
+    final normSubName = subject?.name.trim().toLowerCase();
+    final normSubId = subject?.id.trim().toLowerCase();
+
     return _questions.where((q) {
-      final matchesSubject = q.subjectId == subjectId || (subject != null && q.subjectId.toLowerCase() == subject.name.toLowerCase());
+      final qSubId = q.subjectId.trim().toLowerCase();
+      final qSubName = q.subjectName?.trim().toLowerCase();
+
+      final matchesSubject = qSubId == normTarget ||
+          (normSubId != null && qSubId == normSubId) ||
+          (normSubName != null && (qSubId == normSubName || qSubName == normSubName)) ||
+          (qSubName != null && qSubName == normTarget);
+
       if (!matchesSubject) return false;
       return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
     }).toList();
@@ -431,7 +454,11 @@ class LocalDatabase {
   }
 
   /// Records an individual question answered in practice mode (outside mock tests)
-  Future<void> recordPracticeAnswer({required bool isCorrect}) async {
+  Future<void> recordPracticeAnswer({
+    required bool isCorrect,
+    String? topicId,
+    String? questionId,
+  }) async {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final practiceDates = _prefs?.getStringList('user_practice_dates') ?? [];
@@ -445,6 +472,61 @@ class LocalDatabase {
       final correctCount = (_prefs?.getInt('user_practice_correct_count') ?? 0) + 1;
       await _prefs?.setInt('user_practice_correct_count', correctCount);
     }
+
+    // Per-topic practice progress & accuracy tracking
+    if (topicId != null && topicId.trim().isNotEmpty) {
+      final tid = topicId.trim();
+      if (questionId != null && questionId.trim().isNotEmpty) {
+        final qid = questionId.trim();
+        final attemptedKey = 'user_topic_${tid}_attempted_qids';
+        final attemptedList = _prefs?.getStringList(attemptedKey) ?? [];
+        if (!attemptedList.contains(qid)) {
+          attemptedList.add(qid);
+          await _prefs?.setStringList(attemptedKey, attemptedList);
+        }
+      } else {
+        final attemptsKey = 'user_topic_${tid}_attempts_count';
+        final prevAttempts = _prefs?.getInt(attemptsKey) ?? 0;
+        await _prefs?.setInt(attemptsKey, prevAttempts + 1);
+      }
+
+      if (isCorrect) {
+        final correctKey = 'user_topic_${tid}_correct_count';
+        final prevCorrect = _prefs?.getInt(correctKey) ?? 0;
+        await _prefs?.setInt(correctKey, prevCorrect + 1);
+      }
+    }
+  }
+
+  /// Total distinct questions attempted for a specific topic
+  int getTopicAttemptedCount(String topicId) {
+    final tid = topicId.trim();
+    final attemptedKey = 'user_topic_${tid}_attempted_qids';
+    final list = _prefs?.getStringList(attemptedKey);
+    if (list != null && list.isNotEmpty) return list.length;
+    return _prefs?.getInt('user_topic_${tid}_attempts_count') ?? 0;
+  }
+
+  /// Total correct answers recorded for a specific topic
+  int getTopicCorrectCount(String topicId) {
+    final tid = topicId.trim();
+    return _prefs?.getInt('user_topic_${tid}_correct_count') ?? 0;
+  }
+
+  /// Real topic accuracy: (correct answered attempts / attempted questions) * 100
+  double getTopicAccuracy(String topicId) {
+    final attempted = getTopicAttemptedCount(topicId);
+    if (attempted <= 0) return 0.0;
+    final correct = getTopicCorrectCount(topicId);
+    return ((correct / attempted) * 100.0).clamp(0.0, 100.0);
+  }
+
+  /// Real topic progress: completed / available (clamp 0.0 to 1.0)
+  double getTopicProgress(String topicId) {
+    final available = getQuestionsByTopic(topicId).length;
+    if (available <= 0) return 0.0;
+    final attempted = getTopicAttemptedCount(topicId);
+    return (attempted / available).clamp(0.0, 1.0);
   }
 
   /// Calculates total questions answered across all genuine attempts + practice sessions
@@ -627,8 +709,41 @@ class LocalDatabase {
     // Any question in cache for this topic that is no longer returned in publishedQuestions
     // is updated to 'draft' so it is never served to students in Practice.
     for (final q in _questions) {
-      final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
+      final matchesTopic = q.topicId == topicId ||
+          (topic != null && (q.topicId == topic.id ||
+              q.topicId.toLowerCase() == topic.name.toLowerCase() ||
+              (q.topicName != null && q.topicName!.toLowerCase() == topic.name.toLowerCase())));
       if (matchesTopic && !publishedIds.contains(q.id)) {
+        existingMap[q.id] = q.copyWith(status: 'draft');
+      }
+    }
+
+    // Add/update published questions
+    for (final fq in publishedQuestions) {
+      final isBookmarked = _bookmarkedIds.contains(fq.id);
+      existingMap[fq.id] = fq.copyWith(isBookmarked: isBookmarked);
+    }
+
+    _questions.clear();
+    _questions.addAll(existingMap.values);
+    await _persistQuestions();
+  }
+
+  /// Syncs questions for an entire subject and invalidates stale draft/archived cache.
+  Future<void> syncSubjectQuestionsFromFirestore(String subjectId, List<Question> publishedQuestions) async {
+    final subject = getSubjectById(subjectId);
+    final publishedIds = publishedQuestions.map((q) => q.id).toSet();
+
+    final existingMap = {for (final q in _questions) q.id: q};
+
+    // Any question in cache for this subject that is no longer returned in publishedQuestions
+    // is updated to 'draft' so it is never served to students in Practice.
+    for (final q in _questions) {
+      final matchesSubject = q.subjectId == subjectId ||
+          (subject != null && (q.subjectId == subject.id ||
+              q.subjectId.toLowerCase() == subject.name.toLowerCase() ||
+              (q.subjectName != null && q.subjectName!.toLowerCase() == subject.name.toLowerCase())));
+      if (matchesSubject && !publishedIds.contains(q.id)) {
         existingMap[q.id] = q.copyWith(status: 'draft');
       }
     }

@@ -497,6 +497,55 @@ class FirestoreService {
     }
   }
 
+  /// On-demand fetch for questions belonging to an entire subject for topic listings.
+  /// Strictly filters status == 'published' server-side and removes unassigned/draft cached questions.
+  Future<List<Question>> fetchQuestionsForSubject(String subjectId) async {
+    if (Firebase.apps.isEmpty) {
+      return LocalDatabase.instance.getQuestionsBySubject(subjectId);
+    }
+
+    try {
+      final snap = await _firestore
+          .collection(colQuestions)
+          .where('subjectId', isEqualTo: subjectId)
+          .where('status', isEqualTo: 'published')
+          .get();
+
+      List<Question> fetched = snap.docs.map((d) {
+        final data = d.data();
+        if (data['id'] == null || (data['id'] as String).isEmpty) {
+          data['id'] = d.id;
+        }
+        return Question.fromMap(data);
+      }).toList();
+
+      final subject = LocalDatabase.instance.getSubjectById(subjectId);
+      if (fetched.isEmpty && subject != null && subject.name.isNotEmpty && subject.name != subjectId) {
+        final snapName = await _firestore
+            .collection(colQuestions)
+            .where('subject', isEqualTo: subject.name)
+            .where('status', isEqualTo: 'published')
+            .get();
+        if (snapName.docs.isNotEmpty) {
+          fetched = snapName.docs.map((d) {
+            final data = d.data();
+            if (data['id'] == null || (data['id'] as String).isEmpty) {
+              data['id'] = d.id;
+            }
+            return Question.fromMap(data);
+          }).toList();
+        }
+      }
+
+      // Sync subject questions into local database
+      await LocalDatabase.instance.syncSubjectQuestionsFromFirestore(subjectId, fetched);
+      return LocalDatabase.instance.getQuestionsBySubject(subjectId);
+    } catch (e) {
+      debugPrint('Error fetching subject questions on demand: $e');
+      return LocalDatabase.instance.getQuestionsBySubject(subjectId);
+    }
+  }
+
   /// On-demand fetch for questions belonging to a specific topic for MCQ practice.
   /// Strictly filters status == 'published' server-side and removes unassigned/draft cached questions.
   Future<List<Question>> fetchQuestionsForTopic(String topicId) async {
@@ -511,7 +560,13 @@ class FirestoreService {
           .where('status', isEqualTo: 'published')
           .get();
 
-      List<Question> fetched = snap.docs.map((d) => Question.fromMap(d.data())).toList();
+      List<Question> fetched = snap.docs.map((d) {
+        final data = d.data();
+        if (data['id'] == null || (data['id'] as String).isEmpty) {
+          data['id'] = d.id;
+        }
+        return Question.fromMap(data);
+      }).toList();
 
       final topic = LocalDatabase.instance.getTopicById(topicId);
       if (fetched.isEmpty && topic != null && topic.name.isNotEmpty && topic.name != topicId) {
@@ -521,7 +576,13 @@ class FirestoreService {
             .where('status', isEqualTo: 'published')
             .get();
         if (snapName.docs.isNotEmpty) {
-          fetched = snapName.docs.map((d) => Question.fromMap(d.data())).toList();
+          fetched = snapName.docs.map((d) {
+            final data = d.data();
+            if (data['id'] == null || (data['id'] as String).isEmpty) {
+              data['id'] = d.id;
+            }
+            return Question.fromMap(data);
+          }).toList();
         }
       }
 

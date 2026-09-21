@@ -9,6 +9,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/ads/ad_service.dart';
 
 class McqPracticeScreen extends ConsumerStatefulWidget {
@@ -58,7 +59,11 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     });
 
     final isCorrect = index == currentQ.correctIndex;
-    LocalDatabase.instance.recordPracticeAnswer(isCorrect: isCorrect);
+    LocalDatabase.instance.recordPracticeAnswer(
+      isCorrect: isCorrect,
+      topicId: widget.topicId,
+      questionId: currentQ.id,
+    );
     if (!isCorrect) {
       LocalDatabase.instance.recordWrongQuestion(currentQ.id);
     }
@@ -99,20 +104,13 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
               const Icon(Icons.quiz_outlined, size: 52, color: Colors.grey),
               const SizedBox(height: 14),
               const Text(
-                'No questions available for this topic yet.',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center,
+                'No questions available yet for this topic.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Questions will appear once added by the administrator.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Go Back'),
+                onPressed: () => context.pop(),
+                child: const Text('Back to Topics'),
               ),
             ],
           ),
@@ -126,9 +124,9 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     final hasSubmitted = _submitted[currentQ.id] == true;
 
     final lang = ref.watch(selectedLanguageProvider);
-    final questionText = (lang == 'hi' && currentQ.questionHi.isNotEmpty)
-        ? currentQ.questionHi
-        : currentQ.questionEn;
+    final questionText = (lang == 'hi' && currentQ.cleanQuestionHi.isNotEmpty)
+        ? currentQ.cleanQuestionHi
+        : currentQ.cleanQuestionEn;
     final options = (lang == 'hi' && currentQ.optionsHi.isNotEmpty)
         ? currentQ.optionsHi
         : currentQ.optionsEn;
@@ -241,17 +239,6 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (currentQ.year != null) ...[
-                            Text(
-                              currentQ.year!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
                           if (questionText.isNotEmpty)
                             Text(
                               questionText,
@@ -285,6 +272,8 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                               ),
                             ),
                           ],
+                          // Compact source metadata row below question text
+                          QuestionSourceMetadata(sourceInfo: currentQ.resolvedSourceInfo),
                         ],
                       ),
                     ),

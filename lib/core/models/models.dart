@@ -205,6 +205,12 @@ class Question {
   final String usageType; // 'PRACTICE', 'MOCK', 'BOTH'
   final String status; // 'published', 'draft', 'archived'
 
+  final String? sourceExam;
+  final String? examDate;
+  final String? shift;
+  final String? topicName;
+  final String? subjectName;
+
   bool get isPublished => status.toLowerCase() == 'published';
   bool get isDraft => status.toLowerCase() == 'draft';
   bool get isArchived => status.toLowerCase() == 'archived';
@@ -222,6 +228,11 @@ class Question {
     required this.explanationEn,
     required this.explanationHi,
     this.year,
+    this.sourceExam,
+    this.examDate,
+    this.shift,
+    this.topicName,
+    this.subjectName,
     this.difficulty = 'Medium',
     this.isBookmarked = false,
     this.questionImageUrl,
@@ -234,6 +245,8 @@ class Question {
   });
 
   Question copyWith({
+    String? subjectId,
+    String? topicId,
     bool? isBookmarked,
     String? questionImageUrl,
     List<String>? optionImages,
@@ -242,11 +255,16 @@ class Question {
     double? negativeMarks,
     String? usageType,
     String? status,
+    String? sourceExam,
+    String? examDate,
+    String? shift,
+    String? topicName,
+    String? subjectName,
   }) {
     return Question(
       id: id,
-      subjectId: subjectId,
-      topicId: topicId,
+      subjectId: subjectId ?? this.subjectId,
+      topicId: topicId ?? this.topicId,
       examTags: examTags,
       questionEn: questionEn,
       questionHi: questionHi,
@@ -256,6 +274,11 @@ class Question {
       explanationEn: explanationEn,
       explanationHi: explanationHi,
       year: year,
+      sourceExam: sourceExam ?? this.sourceExam,
+      examDate: examDate ?? this.examDate,
+      shift: shift ?? this.shift,
+      topicName: topicName ?? this.topicName,
+      subjectName: subjectName ?? this.subjectName,
       difficulty: difficulty,
       isBookmarked: isBookmarked ?? this.isBookmarked,
       questionImageUrl: questionImageUrl ?? this.questionImageUrl,
@@ -266,6 +289,136 @@ class Question {
       usageType: usageType ?? this.usageType,
       status: status ?? this.status,
     );
+  }
+
+  static String _formatDateString(String rawDate) {
+    final trimmed = rawDate.trim();
+    try {
+      if (RegExp(r'^\d{4}-\d{1,2}-\d{1,2}$').hasMatch(trimmed)) {
+        final parts = trimmed.split('-');
+        final y = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        final d = int.parse(parts[2]);
+        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (m >= 1 && m <= 12) {
+          return '$d ${months[m]} $y';
+        }
+      } else if (RegExp(r'^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$').hasMatch(trimmed)) {
+        final sep = trimmed.contains('/') ? '/' : (trimmed.contains('-') ? '-' : '.');
+        final parts = trimmed.split(sep);
+        final d = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        var y = int.parse(parts[2]);
+        if (y < 100) y += 2000;
+        const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (m >= 1 && m <= 12) {
+          return '$d ${months[m]} $y';
+        }
+      }
+    } catch (_) {}
+    return trimmed;
+  }
+
+  static String _formatShiftString(String rawShift) {
+    var trimmed = rawShift.trim();
+    trimmed = trimmed.replaceAllMapped(RegExp(r'Shift[\s\-]*([0-9]+)', caseSensitive: false), (m) => 'Shift ${m[1]}');
+    trimmed = trimmed.replaceAllMapped(RegExp(r'Tier[\s\-]*([0-9]+)', caseSensitive: false), (m) => 'Tier ${m[1]}');
+    return trimmed;
+  }
+
+  /// Explicit formatted source metadata if structured fields are set.
+  String? get formattedSourceInfo {
+    final parts = <String>[];
+    if (sourceExam != null && sourceExam!.trim().isNotEmpty) {
+      parts.add(sourceExam!.trim());
+    } else if (examTags.isNotEmpty) {
+      final validTags = examTags.where((t) => t.trim().isNotEmpty && !t.startsWith('sub_') && !t.startsWith('top_')).toList();
+      if (validTags.isNotEmpty) {
+        parts.add(validTags.join(', '));
+      }
+    }
+
+    if (examDate != null && examDate!.trim().isNotEmpty) {
+      parts.add(_formatDateString(examDate!));
+    } else if (year != null && year!.trim().isNotEmpty && !year!.toLowerCase().contains('import')) {
+      parts.add(year!.trim());
+    }
+
+    if (shift != null && shift!.trim().isNotEmpty) {
+      parts.add(_formatShiftString(shift!));
+    }
+
+    if (parts.isEmpty) return null;
+    return parts.join(' • ');
+  }
+
+  static final RegExp _legacySourceRegex = RegExp(
+    r'(?:[\r\n\s]+|[\(\[])'
+    r'('
+      r'(?:SSC\s+(?:CGL|CHSL|MTS|CPO|GD|JE|Stenographer)|A\s*&\s*N\s+(?:CGL|CHSL|POLICE|MTS)|Police|CGL|CHSL|MTS)'
+      r'[\s\w\&\-\/\.]*?'
+      r'(?:'
+        r'(?:\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b)'
+        r'|'
+        r'(?:\b(?:19|20)\d{2}\b)'
+      r')'
+      r'[\s\w\(\)\-\/\:\.]*?'
+    r')'
+    r'[\)\]]?\s*$',
+    caseSensitive: false,
+  );
+
+  /// Resolved clean question English text, stripping confident trailing exam metadata.
+  String get cleanQuestionEn {
+    if (sourceExam != null && sourceExam!.trim().isNotEmpty) {
+      return questionEn;
+    }
+    final match = _legacySourceRegex.firstMatch(questionEn);
+    if (match != null) {
+      final clean = questionEn.substring(0, match.start).trim();
+      if (clean.length >= 5) {
+        return clean;
+      }
+    }
+    return questionEn;
+  }
+
+  String get cleanQuestionHi => questionHi;
+
+  /// Resolved source metadata row (structured fields or safely parsed from trailing text).
+  String? get resolvedSourceInfo {
+    final structured = formattedSourceInfo;
+    if (structured != null && structured.isNotEmpty) {
+      return structured;
+    }
+
+    final match = _legacySourceRegex.firstMatch(questionEn);
+    if (match != null) {
+      final rawMeta = match.group(1) ?? '';
+      if (rawMeta.trim().isNotEmpty) {
+        // Parse Exam, Date, and Shift components from rawMeta
+        final parts = <String>[];
+        final examMatch = RegExp(r'(SSC\s+(?:CGL|CHSL|MTS|CPO|GD|JE|Stenographer)|A\s*&\s*N\s+(?:CGL|CHSL|POLICE|MTS)|Police|CGL|CHSL|MTS)', caseSensitive: false).firstMatch(rawMeta);
+        if (examMatch != null) {
+          parts.add(examMatch.group(1)!.trim().replaceAll(RegExp(r'\s+'), ' '));
+        }
+
+        final dateMatch = RegExp(r'(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b(?:19|20)\d{2}\b)').firstMatch(rawMeta);
+        if (dateMatch != null) {
+          parts.add(_formatDateString(dateMatch.group(1)!));
+        }
+
+        final shiftMatch = RegExp(r'((?:Shift|Tier)[\s\-]*[0-9]+)', caseSensitive: false).firstMatch(rawMeta);
+        if (shiftMatch != null) {
+          parts.add(_formatShiftString(shiftMatch.group(1)!));
+        }
+
+        if (parts.isNotEmpty) {
+          return parts.join(' • ');
+        }
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> toMap() => {
@@ -281,6 +434,17 @@ class Question {
     'explanationEn': explanationEn,
     'explanationHi': explanationHi,
     'year': year,
+    if (sourceExam != null && sourceExam!.isNotEmpty) ...{
+      'sourceExam': sourceExam,
+      'source_exam': sourceExam,
+    },
+    if (examDate != null && examDate!.isNotEmpty) ...{
+      'examDate': examDate,
+      'exam_date': examDate,
+    },
+    if (shift != null && shift!.isNotEmpty) 'shift': shift,
+    if (topicName != null && topicName!.isNotEmpty) 'topic': topicName,
+    if (subjectName != null && subjectName!.isNotEmpty) 'subject': subjectName,
     'difficulty': difficulty,
     'isBookmarked': isBookmarked ? 1 : 0,
     if (questionImageUrl != null && questionImageUrl!.isNotEmpty) 'question_image_url': questionImageUrl,
@@ -349,6 +513,12 @@ class Question {
       tags = [map['exam'].toString()];
     }
 
+    final rawSourceExam = (map['sourceExam'] ?? map['source_exam'] ?? map['examSource'] ?? map['source_name'] ?? map['source'])?.toString();
+    final rawExamDate = (map['examDate'] ?? map['exam_date'] ?? map['date'])?.toString();
+    final rawShift = map['shift']?.toString();
+    final rawTopicName = map['topic']?.toString();
+    final rawSubjectName = map['subject']?.toString();
+
     return Question(
       id: map['id'] ?? '',
       subjectId: map['subjectId'] ?? map['subject'] ?? '',
@@ -362,6 +532,11 @@ class Question {
       explanationEn: map['explanationEn'] ?? map['explanation_text'] ?? '',
       explanationHi: map['explanationHi'] ?? '',
       year: map['year'],
+      sourceExam: rawSourceExam,
+      examDate: rawExamDate,
+      shift: rawShift,
+      topicName: rawTopicName,
+      subjectName: rawSubjectName,
       difficulty: map['difficulty'] ?? 'Medium',
       isBookmarked: map['isBookmarked'] == 1 || map['isBookmarked'] == true,
       questionImageUrl: map['question_image_url'] ?? map['questionImageUrl'],

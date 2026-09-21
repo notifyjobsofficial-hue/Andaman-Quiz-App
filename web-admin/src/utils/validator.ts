@@ -174,6 +174,28 @@ export function validateQuestionRows(
     const cat = (row['category'] || '').toString().trim();
     if (cat) question.category = cat;
 
+    const sourceExam = (row['source_exam'] || row['sourceExam'] || row['exam_source'] || row['source_name'] || '').toString().trim();
+    if (sourceExam) {
+      question.source_exam = sourceExam;
+      question.sourceExam = sourceExam;
+    }
+
+    const examDate = (row['exam_date'] || row['examDate'] || row['date'] || '').toString().trim();
+    if (examDate) {
+      question.exam_date = examDate;
+      question.examDate = examDate;
+    }
+
+    const shift = (row['shift'] || row['Shift'] || '').toString().trim();
+    if (shift) {
+      question.shift = shift;
+    }
+
+    const year = (row['year'] || row['Year'] || '').toString().trim();
+    if (year || examDate) {
+      question.year = year || (examDate.length >= 4 ? examDate.slice(0, 4) : undefined);
+    }
+
     validQuestions.push(question);
   });
 

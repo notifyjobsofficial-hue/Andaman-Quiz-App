@@ -192,10 +192,19 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final topic = filteredTopics[index];
-                        final progress = topic.questionCount > 0 ? topic.completedCount / topic.questionCount : 0.0;
+                        final eligibleQuestions = LocalDatabase.instance.getQuestionsByTopic(topic.id);
+                        final questionCount = eligibleQuestions.isNotEmpty
+                            ? eligibleQuestions.length
+                            : topic.questionCount;
+                        final attemptedCount = LocalDatabase.instance.getTopicAttemptedCount(topic.id);
+                        final accuracy = LocalDatabase.instance.getTopicAccuracy(topic.id);
+                        final progress = questionCount > 0 ? (attemptedCount / questionCount).clamp(0.0, 1.0) : 0.0;
 
                         return AnimatedPressable(
-                          onTap: () => context.push('/practice/mcq/${topic.id}'),
+                          onTap: () async {
+                            await context.push('/practice/mcq/${topic.id}');
+                            if (mounted) setState(() {});
+                          },
                           child: AppCard(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,7 +239,7 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${topic.questionCount} Questions • ${topic.accuracy.toInt()}% Accuracy',
+                                            '$questionCount Questions • ${accuracy.toInt()}% Accuracy',
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,

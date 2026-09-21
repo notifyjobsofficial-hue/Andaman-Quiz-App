@@ -65,6 +65,11 @@ export interface Question {
   negative_marks: number;
   language: 'en' | 'hi' | 'both';
   year?: string;
+  source_exam?: string;
+  sourceExam?: string;
+  exam_date?: string;
+  examDate?: string;
+  shift?: string;
   status: 'published' | 'draft' | 'archived';
   usageType?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
   usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
@@ -360,6 +365,11 @@ export interface StagedQuestion {
   negative_marks: number;
   language: 'en' | 'hi' | 'both';
   year?: string;
+  source_exam?: string;
+  sourceExam?: string;
+  exam_date?: string;
+  examDate?: string;
+  shift?: string;
   usageType?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
   usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
 

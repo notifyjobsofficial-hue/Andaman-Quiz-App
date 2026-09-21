@@ -191,13 +191,20 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 3),
-                                      Text(
-                                        '$topicsCount Topics • ${subject.questionCount} Questions',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                                        ),
-                                      ),
+                                      () {
+                                        final subjectQuestions = LocalDatabase.instance.getQuestionsBySubject(subject.id);
+                                        final displayQuestionsCount = subjectQuestions.isNotEmpty
+                                            ? subjectQuestions.length
+                                            : subject.questionCount;
+
+                                        return Text(
+                                          '$topicsCount Topics • $displayQuestionsCount Questions',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                          ),
+                                        );
+                                      }(),
                                     ],
                                   ),
                                 ),

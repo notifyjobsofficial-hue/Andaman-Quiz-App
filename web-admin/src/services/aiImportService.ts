@@ -406,6 +406,15 @@ export async function publishApprovedQuestionsToQuestionBank(
       if (staged.option_d_image_url) canonicalQuestion.option_d_image_url = staged.option_d_image_url;
       if (staged.explanation_image_url) canonicalQuestion.explanation_image_url = staged.explanation_image_url;
       if (staged.year) canonicalQuestion.year = staged.year;
+      if (staged.source_exam) {
+        canonicalQuestion.source_exam = staged.source_exam;
+        canonicalQuestion.sourceExam = staged.source_exam;
+      }
+      if (staged.exam_date) {
+        canonicalQuestion.exam_date = staged.exam_date;
+        canonicalQuestion.examDate = staged.exam_date;
+      }
+      if (staged.shift) canonicalQuestion.shift = staged.shift;
 
       const cleanCanonical = sanitizeForFirestore(canonicalQuestion);
       batch.set(qRef, cleanCanonical, { merge: true });

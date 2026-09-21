@@ -470,13 +470,14 @@ export class AiBatchProcessor {
         }
 
         const dupCheck = checkDuplicate(qText, existingQuestions);
+        const parsedSource = this.extractStructuredSourceFromText(qText);
 
         const stagedId = `staged_${job.id}_p${pageNumber}_q${qNum}_${Math.random().toString(36).substr(2, 6)}`;
         const staged: StagedQuestion = {
           id: stagedId,
           jobId: job.id,
           batchId,
-          question_text: qText,
+          question_text: parsedSource.cleanText,
           option_a_text: raw.options?.A || '',
           option_b_text: raw.options?.B || '',
           option_c_text: raw.options?.C || '',
@@ -493,6 +494,11 @@ export class AiBatchProcessor {
           negative_marks: job.defaults.negativeMarks ?? 0.5,
           language: raw.language || job.defaults.language || 'both',
           year: job.defaults.year,
+          source_exam: parsedSource.sourceExam,
+          sourceExam: parsedSource.sourceExam,
+          exam_date: parsedSource.examDate,
+          examDate: parsedSource.examDate,
+          shift: parsedSource.shift,
 
           source_pdf: job.fileName,
           source_page: pageNumber,
@@ -544,6 +550,37 @@ export class AiBatchProcessor {
     }
 
     return [];
+  }
+
+  /**
+   * Safely inspects question text for high-confidence trailing source metadata.
+   */
+  private extractStructuredSourceFromText(text: string): {
+    cleanText: string;
+    sourceExam?: string;
+    examDate?: string;
+    shift?: string;
+  } {
+    const trailingMetaMatch = text.match(
+      /(?:[\r\n\s]+|[\(\[])((?:SSC\s+(?:CGL|CHSL|MTS|CPO|GD|JE|Stenographer)|A\s*&\s*N\s+(?:CGL|CHSL|POLICE|MTS)|Police|CGL|CHSL|MTS)[\s\w\&\-\/\.]*?(?:(?:\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b)|(?:\b(?:19|20)\d{2}\b))[\s\w\(\)\-\/\:\.]*?)[\)\]]?\s*$/i
+    );
+
+    if (!trailingMetaMatch || trailingMetaMatch.index === undefined) {
+      return { cleanText: text };
+    }
+
+    const rawMeta = trailingMetaMatch[1];
+    const examMatch = rawMeta.match(/(SSC\s+(?:CGL|CHSL|MTS|CPO|GD|JE|Stenographer)|A\s*&\s*N\s+(?:CGL|CHSL|POLICE|MTS)|Police|CGL|CHSL|MTS)/i);
+    const dateMatch = rawMeta.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\b(?:19|20)\d{2}\b)/);
+    const shiftMatch = rawMeta.match(/((?:Shift|Tier)[\s\-]*[0-9]+)/i);
+
+    const cleaned = text.slice(0, trailingMetaMatch.index).trim();
+    return {
+      cleanText: cleaned.length >= 5 ? cleaned : text,
+      sourceExam: examMatch ? examMatch[1].trim() : undefined,
+      examDate: dateMatch ? dateMatch[1].trim() : undefined,
+      shift: shiftMatch ? shiftMatch[1].replace(/[\s\-]+/g, ' ').trim() : undefined,
+    };
   }
 
   /**
@@ -660,13 +697,14 @@ export class AiBatchProcessor {
       }
 
       const dupCheck = checkDuplicate(qText, existingQuestions);
+      const parsedSource = this.extractStructuredSourceFromText(qText);
       const stagedId = `staged_${job.id}_p${pageNumber}_q${current.qNum}_${Math.random().toString(36).substr(2, 6)}`;
 
       const staged: StagedQuestion = {
         id: stagedId,
         jobId: job.id,
         batchId,
-        question_text: qText,
+        question_text: parsedSource.cleanText,
         option_a_text: optionsMap.A,
         option_b_text: optionsMap.B,
         option_c_text: optionsMap.C,
@@ -683,6 +721,11 @@ export class AiBatchProcessor {
         negative_marks: job.defaults.negativeMarks ?? 0.5,
         language: job.defaults.language || 'both',
         year: job.defaults.year,
+        source_exam: parsedSource.sourceExam,
+        sourceExam: parsedSource.sourceExam,
+        exam_date: parsedSource.examDate,
+        examDate: parsedSource.examDate,
+        shift: parsedSource.shift,
 
         source_pdf: job.fileName,
         source_page: pageNumber,

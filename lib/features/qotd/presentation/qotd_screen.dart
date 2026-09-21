@@ -256,9 +256,9 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
 
     final question = _question!;
     final lang = ref.watch(selectedLanguageProvider);
-    final questionText = (lang == 'hi' && question.questionHi.isNotEmpty)
-        ? question.questionHi
-        : question.questionEn;
+    final questionText = (lang == 'hi' && question.cleanQuestionHi.isNotEmpty)
+        ? question.cleanQuestionHi
+        : question.cleanQuestionEn;
     final options = (lang == 'hi' && question.optionsHi.isNotEmpty)
         ? question.optionsHi
         : question.optionsEn;
