@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs && node test_timeout_resilience.mjs && node test_question_usage_and_review.mjs && node test_qa_practice_status.mjs && node test_practice_questions_hierarchy.mjs"
+    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs && node test_timeout_resilience.mjs && node test_question_usage_and_review.mjs && node test_qa_practice_status.mjs && node test_practice_questions_hierarchy.mjs && node test_assignment_transitions_state_machine.mjs && node test_qa_usage_state_test.mjs"
   },
   "dependencies": {
     "firebase": "^10.13.2",

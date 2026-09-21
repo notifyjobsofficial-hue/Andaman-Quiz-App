@@ -294,7 +294,7 @@ export async function bulkUpdateQuestionStatus(
  * Removes selected questions from student practice.
  * - Does NOT delete the question document!
  * - If question is used in Mock Tests: sets usageType = 'MOCK'
- * - If question is not in Mock Tests: sets usageType = 'MOCK'
+ * - If question is not in Mock Tests: sets usageType = 'NOT_USED' (UNASSIGNED)
  * Preserves canonical ID and question data in Question Bank.
  */
 export async function bulkRemoveFromPractice(
@@ -305,14 +305,26 @@ export async function bulkRemoveFromPractice(
   const idSet = new Set(questionIds);
   const targetQuestions = allQuestions.filter((q) => idSet.has(q.id));
 
+  // Determine which questions exist in any mock test section
+  const mockReferencedIds = new Set<string>();
+  allMockTests.forEach((m) => {
+    m.sections?.forEach((sec) => {
+      sec.questionIds?.forEach((qId) => mockReferencedIds.add(qId));
+    });
+  });
+
   const updatedQuestions: Question[] = [];
   const batch = writeBatch(db);
 
   for (const q of targetQuestions) {
+    const hasMockRelationship = mockReferencedIds.has(q.id);
+    const nextUsage: 'MOCK' | 'NOT_USED' = hasMockRelationship ? 'MOCK' : 'NOT_USED';
+
     const updated: Question = {
       ...q,
-      usageType: 'MOCK',
-      usage_type: 'MOCK',
+      status: q.status || 'published', // preserves existing status
+      usageType: nextUsage,
+      usage_type: nextUsage,
       updated_at: new Date().toISOString(),
     };
 

@@ -225,15 +225,28 @@ assert.strictEqual(movedQ.topic, 'Profit & Loss', 'Topic updated to Profit & Los
 assert.strictEqual(movedQ.status, 'published', 'Status preserved');
 console.log('[PASS] Test 6: Move questions updates topic while preserving ID and status.\n');
 
-// >>> TEST 7: Remove Question from Practice (Never Deletes Record)
-console.log('>>> TEST 7: Remove Question from Practice (Never Deletes Record)');
-const removedQ = {
-  ...mockQuestions[0],
-  usageType: 'MOCK',
+// >>> TEST 7: Remove Question from Practice (Never Deletes Record, Resolves Real State)
+console.log('>>> TEST 7: Remove Question from Practice (Never Deletes Record, Resolves Real State)');
+// 7A: Practice-only question -> Remove from Practice -> UNASSIGNED (NOT_USED)
+const removedPracticeOnlyQ = {
+  ...mockQuestions[0], // q1 has no mock relationships
+  usageType: 'NOT_USED',
+  usage_type: 'NOT_USED',
 };
-assert.strictEqual(isPracticeQuestion(removedQ), false, 'Question is no longer practice-eligible');
-assert.strictEqual(removedQ.id, 'q1', 'Question record exists intact in Question Bank');
-console.log('[PASS] Test 7: Removing from practice safely updates usageType without deleting record.\n');
+assert.strictEqual(isPracticeQuestion(removedPracticeOnlyQ), false, 'Question is no longer practice-eligible');
+assert.strictEqual(removedPracticeOnlyQ.usageType, 'NOT_USED', 'Practice-only becomes NOT_USED, never false MOCK');
+assert.strictEqual(removedPracticeOnlyQ.id, 'q1', 'Question record exists intact in Question Bank');
+
+// 7B: BOTH question (in mock) -> Remove from Practice -> MOCK
+const removedBothQ = {
+  ...mockQuestions[2], // q3 is BOTH (assigned to mock)
+  usageType: 'MOCK',
+  usage_type: 'MOCK',
+};
+assert.strictEqual(isPracticeQuestion(removedBothQ), false, 'Question is no longer practice-eligible');
+assert.strictEqual(removedBothQ.usageType, 'MOCK', 'Question with mock relationship becomes MOCK');
+assert.strictEqual(removedBothQ.id, 'q3', 'Question record exists intact in Question Bank');
+console.log('[PASS] Test 7: Removing from practice safely updates usageType based on real relationships without deleting record.\n');
 
 console.log('====================================================');
 console.log('ALL 7 PRACTICE QUESTIONS HIERARCHY TESTS PASSED (100%)');

@@ -335,7 +335,7 @@ class LocalDatabase {
     return _questions.where((q) {
       final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
       if (!matchesTopic) return false;
-      return q.isPublished && q.usageType != 'MOCK';
+      return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
     }).toList();
   }
 
@@ -344,7 +344,7 @@ class LocalDatabase {
     return _questions.where((q) {
       final matchesSubject = q.subjectId == subjectId || (subject != null && q.subjectId.toLowerCase() == subject.name.toLowerCase());
       if (!matchesSubject) return false;
-      return q.isPublished && q.usageType != 'MOCK';
+      return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
     }).toList();
   }
 

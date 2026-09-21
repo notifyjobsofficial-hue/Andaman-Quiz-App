@@ -66,8 +66,8 @@ export interface Question {
   language: 'en' | 'hi' | 'both';
   year?: string;
   status: 'published' | 'draft' | 'archived';
-  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH';
-  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
+  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
   source?: 'MANUAL' | 'BULK_IMPORT' | 'PDF_IMPORT';
   created_at?: string;
   updated_at?: string;
@@ -360,8 +360,8 @@ export interface StagedQuestion {
   negative_marks: number;
   language: 'en' | 'hi' | 'both';
   year?: string;
-  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH';
-  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  usageType?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
+  usage_type?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
 
   // Source Traceability
   source_pdf: string;

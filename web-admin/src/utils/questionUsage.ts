@@ -91,16 +91,30 @@ export async function assignQuestionToPractice(
 
 /**
  * Removes a question from Practice while preserving Mock Test usage and existing status.
+ * Determines real mock relationships from mockTests or boolean flag.
+ * If question is in >= 1 mock: usageType = 'MOCK'.
+ * If question is in 0 mocks: usageType = 'NOT_USED' (UNASSIGNED).
  */
 export async function removeQuestionFromPractice(
   question: Question,
-  isUsedInAnyMock: boolean = false
+  allMockTestsOrIsUsedInAnyMock: MockTest[] | boolean = false
 ): Promise<Question> {
+  let isUsedInAnyMock = false;
+  if (typeof allMockTestsOrIsUsedInAnyMock === 'boolean') {
+    isUsedInAnyMock = allMockTestsOrIsUsedInAnyMock;
+  } else if (Array.isArray(allMockTestsOrIsUsedInAnyMock)) {
+    isUsedInAnyMock = allMockTestsOrIsUsedInAnyMock.some((m) =>
+      m.sections?.some((sec) => sec.questionIds?.includes(question.id))
+    );
+  }
+
+  const nextUsage: 'MOCK' | 'NOT_USED' = isUsedInAnyMock ? 'MOCK' : 'NOT_USED';
+
   const updated: Question = {
     ...question,
     status: question.status || 'published',
-    usageType: isUsedInAnyMock ? 'MOCK' : 'MOCK',
-    usage_type: isUsedInAnyMock ? 'MOCK' : 'MOCK',
+    usageType: nextUsage,
+    usage_type: nextUsage,
     updated_at: new Date().toISOString(),
   };
   await saveQuestion(updated);
@@ -229,5 +243,41 @@ export async function removeQuestionsFromMockTest(
   };
 
   await saveMockTest(updatedMock);
+
+  // Update question usage types based on remaining mock relationships
+  const remainingMocks = allMockTests.map((m) => (m.id === mockTestId ? updatedMock : m));
+
+  for (const qId of questionIds) {
+    const q = allQuestions.find((item) => item.id === qId);
+    if (q) {
+      const stillInAnyMock = remainingMocks.some((m) =>
+        m.sections?.some((sec) => sec.questionIds?.includes(qId))
+      );
+      const currentUsage = (q.usageType || q.usage_type || 'BOTH').toUpperCase();
+      const isInPractice = currentUsage === 'PRACTICE' || currentUsage === 'BOTH';
+
+      let nextUsage: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
+      if (isInPractice && stillInAnyMock) {
+        nextUsage = 'BOTH';
+      } else if (isInPractice) {
+        nextUsage = 'PRACTICE';
+      } else if (stillInAnyMock) {
+        nextUsage = 'MOCK';
+      } else {
+        nextUsage = 'NOT_USED';
+      }
+
+      if (q.usageType !== nextUsage || q.usage_type !== nextUsage) {
+        await saveQuestion({
+          ...q,
+          status: q.status || 'published',
+          usageType: nextUsage,
+          usage_type: nextUsage,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
   return updatedMock;
 }

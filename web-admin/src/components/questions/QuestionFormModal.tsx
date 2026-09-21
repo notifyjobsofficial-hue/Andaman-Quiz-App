@@ -12,7 +12,7 @@ interface QuestionFormModalProps {
   onSaved: (q: Question) => void;
   exams: Exam[];
   subjects: Subject[];
-  defaultUsage?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  defaultUsage?: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED';
   defaultExam?: string;
   defaultSubject?: string;
   defaultSubjectId?: string;
@@ -27,7 +27,7 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   onSaved,
   exams,
   subjects,
-  defaultUsage = 'BOTH',
+  defaultUsage = 'NOT_USED',
   defaultExam,
   defaultSubject,
   defaultSubjectId,
@@ -63,7 +63,7 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
     if (questionToEdit) {
       setFormData({
         ...questionToEdit,
-        usageType: questionToEdit.usageType || questionToEdit.usage_type || defaultUsage,
+        usageType: questionToEdit.usageType || questionToEdit.usage_type || 'NOT_USED',
       });
     } else {
       const targetExam = defaultExam || exams[0]?.code || 'ANCHSL';
@@ -137,8 +137,8 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         negative_marks: Number(formData.negative_marks) || 0.5,
         language: formData.language || 'both',
         status: formData.status || 'published',
-        usageType: (formData.usageType as any) || defaultUsage || 'BOTH',
-        usage_type: (formData.usageType as any) || defaultUsage || 'BOTH',
+        usageType: (formData.usageType as any) || defaultUsage || 'NOT_USED',
+        usage_type: (formData.usageType as any) || defaultUsage || 'NOT_USED',
         source: formData.source || 'MANUAL',
         created_at: formData.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -226,10 +226,11 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">Question Usage</label>
             <select
-              value={formData.usageType || 'BOTH'}
+              value={formData.usageType || 'NOT_USED'}
               onChange={(e) => setFormData({ ...formData, usageType: e.target.value as any })}
               className="w-full text-xs font-semibold p-2 border border-slate-200 rounded-lg bg-white text-brand-700"
             >
+              <option value="NOT_USED">Not Assigned (Question Bank Only)</option>
               <option value="PRACTICE">Practice Only</option>
               <option value="MOCK">Mock Test Only</option>
               <option value="BOTH">Practice + Mock Test</option>

@@ -371,7 +371,7 @@ class Question {
       negativeMarks: (map['negative_marks'] as num?)?.toDouble() ?? 0.5,
       usageType: () {
         final raw = (map['usageType'] ?? map['usage_type'])?.toString().toUpperCase();
-        if (raw == 'PRACTICE' || raw == 'MOCK' || raw == 'BOTH') return raw!;
+        if (raw == 'PRACTICE' || raw == 'MOCK' || raw == 'BOTH' || raw == 'NOT_USED') return raw!;
         return 'BOTH';
       }(),
       status: () {
