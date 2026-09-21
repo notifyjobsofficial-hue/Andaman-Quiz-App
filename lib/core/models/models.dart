@@ -291,6 +291,75 @@ class Question {
     );
   }
 
+  /// Exam matcher: checks exact match, substring match, case-insensitivity, and alphanumeric normalization.
+  bool matchesExam(String targetExam) {
+    if (targetExam.toUpperCase() == 'ALL') return true;
+    if (examTags.isEmpty) return true; // Global question if no specific tag
+    final normTarget = targetExam.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    return examTags.any((tag) {
+      final normTag = tag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      return normTag == normTarget ||
+          normTarget.contains(normTag) ||
+          normTag.contains(normTarget);
+    });
+  }
+
+  /// Canonical Practice eligibility calculation.
+  /// A question counts in Practice only when:
+  /// - published status required (never draft or archived)
+  /// - usage permits Practice ('PRACTICE' or 'BOTH', never 'MOCK' or 'NOT_USED')
+  /// - belongs to the selected Exam (if specified and not 'ALL')
+  /// - belongs to the Subject (if specified)
+  /// - belongs to the Topic (if specified)
+  bool isPracticeEligible({
+    String? examCode,
+    String? subjectId,
+    String? topicId,
+    Subject? subjectContext,
+    Topic? topicContext,
+  }) {
+    if (!isPublished) return false;
+
+    final uType = usageType.toUpperCase().trim();
+    if (uType == 'MOCK' || uType == 'NOT_USED') return false;
+
+    if (examCode != null && examCode.toUpperCase() != 'ALL' && !matchesExam(examCode)) {
+      return false;
+    }
+
+    if (subjectId != null) {
+      final normTarget = subjectId.trim().toLowerCase();
+      final qSubId = this.subjectId.trim().toLowerCase();
+      final qSubName = subjectName?.trim().toLowerCase();
+      final normCtxId = subjectContext?.id.trim().toLowerCase();
+      final normCtxName = subjectContext?.name.trim().toLowerCase();
+
+      final matchesSub = qSubId == normTarget ||
+          (normCtxId != null && qSubId == normCtxId) ||
+          (normCtxName != null && (qSubId == normCtxName || qSubName == normCtxName)) ||
+          (qSubName != null && qSubName == normTarget);
+
+      if (!matchesSub) return false;
+    }
+
+    if (topicId != null) {
+      final normTarget = topicId.trim().toLowerCase();
+      final qTopId = this.topicId.trim().toLowerCase();
+      final qTopName = topicName?.trim().toLowerCase();
+      final normCtxId = topicContext?.id.trim().toLowerCase();
+      final normCtxName = topicContext?.name.trim().toLowerCase();
+
+      final matchesTopic = qTopId == normTarget ||
+          (normCtxId != null && qTopId == normCtxId) ||
+          (normCtxName != null && (qTopId == normCtxName || qTopName == normCtxName)) ||
+          (qTopName != null && qTopName == normTarget);
+
+      if (!matchesTopic) return false;
+    }
+
+    return true;
+  }
+
   static String _formatDateString(String rawDate) {
     final trimmed = rawDate.trim();
     try {

@@ -358,44 +358,36 @@ class LocalDatabase {
     }
   }
 
-  List<Question> getQuestionsByTopic(String topicId) {
+  List<Question> getQuestionsByTopic(String topicId, {String? examCode}) {
     final topic = getTopicById(topicId);
-    final normTarget = topicId.trim().toLowerCase();
-    final normTopicName = topic?.name.trim().toLowerCase();
-    final normTopicId = topic?.id.trim().toLowerCase();
-
-    return _questions.where((q) {
-      final qTopicId = q.topicId.trim().toLowerCase();
-      final qTopicName = q.topicName?.trim().toLowerCase();
-
-      final matchesTopic = qTopicId == normTarget ||
-          (normTopicId != null && qTopicId == normTopicId) ||
-          (normTopicName != null && (qTopicId == normTopicName || qTopicName == normTopicName)) ||
-          (qTopicName != null && qTopicName == normTarget);
-
-      if (!matchesTopic) return false;
-      return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
-    }).toList();
+    return _questions.where((q) => q.isPracticeEligible(
+      topicId: topicId,
+      topicContext: topic,
+      examCode: examCode,
+    )).toList();
   }
 
-  List<Question> getQuestionsBySubject(String subjectId) {
+  List<Question> getQuestionsBySubject(String subjectId, {String? examCode}) {
     final subject = getSubjectById(subjectId);
-    final normTarget = subjectId.trim().toLowerCase();
-    final normSubName = subject?.name.trim().toLowerCase();
-    final normSubId = subject?.id.trim().toLowerCase();
+    return _questions.where((q) => q.isPracticeEligible(
+      subjectId: subjectId,
+      subjectContext: subject,
+      examCode: examCode,
+    )).toList();
+  }
 
-    return _questions.where((q) {
-      final qSubId = q.subjectId.trim().toLowerCase();
-      final qSubName = q.subjectName?.trim().toLowerCase();
+  /// Number of unique eligible Practice question IDs belonging to that Subject under the selected Exam.
+  int getSubjectPracticeQuestionCount(String subjectId, {String? examCode}) {
+    final questions = getQuestionsBySubject(subjectId, examCode: examCode);
+    final uniqueIds = questions.map((q) => q.id).toSet();
+    return uniqueIds.length;
+  }
 
-      final matchesSubject = qSubId == normTarget ||
-          (normSubId != null && qSubId == normSubId) ||
-          (normSubName != null && (qSubId == normSubName || qSubName == normSubName)) ||
-          (qSubName != null && qSubName == normTarget);
-
-      if (!matchesSubject) return false;
-      return q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED';
-    }).toList();
+  /// Number of unique eligible Practice question IDs belonging to that Topic under the selected Exam.
+  int getTopicPracticeQuestionCount(String topicId, {String? examCode}) {
+    final questions = getQuestionsByTopic(topicId, examCode: examCode);
+    final uniqueIds = questions.map((q) => q.id).toSet();
+    return uniqueIds.length;
   }
 
   List<Question> getQuestionsByIds(List<String> ids) {
@@ -906,6 +898,33 @@ class LocalDatabase {
     final existingMap = {for (final q in _questions) q.id: q};
 
     for (final fq in firestoreQuestions) {
+      final isBookmarked = _bookmarkedIds.contains(fq.id);
+      existingMap[fq.id] = fq.copyWith(isBookmarked: isBookmarked);
+    }
+
+    _questions.clear();
+    _questions.addAll(existingMap.values);
+    await _persistQuestions();
+  }
+
+  /// Syncs all published practice questions from Firestore real-time stream.
+  /// Updates existing records, adds new ones, and invalidates any questions that were
+  /// unpublished or moved out of practice.
+  Future<void> syncPracticeQuestionsFromFirestore(List<Question> publishedQuestions) async {
+    final publishedIds = publishedQuestions.map((q) => q.id).toSet();
+    final existingMap = {for (final q in _questions) q.id: q};
+
+    // 1. Any existing practice question no longer published in Firestore is marked as draft
+    for (final entry in existingMap.entries) {
+      if (entry.value.isPublished &&
+          (entry.value.usageType == 'PRACTICE' || entry.value.usageType == 'BOTH') &&
+          !publishedIds.contains(entry.key)) {
+        existingMap[entry.key] = entry.value.copyWith(status: 'draft');
+      }
+    }
+
+    // 2. Add or update all published practice questions
+    for (final fq in publishedQuestions) {
       final isBookmarked = _bookmarkedIds.contains(fq.id);
       existingMap[fq.id] = fq.copyWith(isBookmarked: isBookmarked);
     }

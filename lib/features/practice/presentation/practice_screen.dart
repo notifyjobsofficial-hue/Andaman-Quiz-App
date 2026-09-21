@@ -192,10 +192,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                                       ),
                                       const SizedBox(height: 3),
                                       () {
-                                        final subjectQuestions = LocalDatabase.instance.getQuestionsBySubject(subject.id);
-                                        final displayQuestionsCount = subjectQuestions.isNotEmpty
-                                            ? subjectQuestions.length
-                                            : subject.questionCount;
+                                        final displayQuestionsCount = LocalDatabase.instance.getSubjectPracticeQuestionCount(
+                                          subject.id,
+                                          examCode: _activeExam,
+                                        );
 
                                         return Text(
                                           '$topicsCount Topics • $displayQuestionsCount Questions',

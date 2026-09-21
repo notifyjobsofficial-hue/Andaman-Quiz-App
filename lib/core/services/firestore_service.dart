@@ -34,6 +34,7 @@ class FirestoreService {
   final _liveTestsController = StreamController<List<LiveTestItem>>.broadcast();
   final _remoteConfigController = StreamController<RemoteAppConfig>.broadcast();
   final _qotdController = StreamController<QuestionOfTheDay?>.broadcast();
+  final _practiceQuestionsController = StreamController<List<Question>>.broadcast();
 
   // Public streams for Riverpod providers to subscribe to
   Stream<List<ExamCategory>> get categoriesStream => _categoriesController.stream;
@@ -46,6 +47,7 @@ class FirestoreService {
   Stream<List<LiveTestItem>> get liveTestsStream => _liveTestsController.stream;
   Stream<RemoteAppConfig> get remoteConfigStream => _remoteConfigController.stream;
   Stream<QuestionOfTheDay?> get qotdStream => _qotdController.stream;
+  Stream<List<Question>> get practiceQuestionsStream => _practiceQuestionsController.stream;
 
   // Active subscriptions
   final List<StreamSubscription> _subscriptions = [];
@@ -163,8 +165,33 @@ class FirestoreService {
     _subscribeToLiveTests();
     _subscribeToAppConfig();
     _subscribeToQotd();
+    _subscribeToPracticeQuestions();
 
     debugPrint('FirestoreService: real-time listeners started for all collections.');
+  }
+
+  void _subscribeToPracticeQuestions() {
+    final sub = _firestore
+        .collection(colQuestions)
+        .where('status', isEqualTo: 'published')
+        .snapshots()
+        .listen((snapshot) async {
+      try {
+        final questions = snapshot.docs.map((d) {
+          final data = d.data();
+          if (data['id'] == null || (data['id'] as String).isEmpty) {
+            data['id'] = d.id;
+          }
+          return Question.fromMap(data);
+        }).where((q) => q.isPublished && q.usageType != 'MOCK' && q.usageType != 'NOT_USED').toList();
+
+        await LocalDatabase.instance.syncPracticeQuestionsFromFirestore(questions);
+        _practiceQuestionsController.add(questions);
+      } catch (e) {
+        debugPrint('Practice questions sync error: $e');
+      }
+    }, onError: (e) => debugPrint('Practice questions stream error: $e'));
+    _subscriptions.add(sub);
   }
 
   void _subscribeToCategories() {

@@ -56,6 +56,11 @@ final remoteConfigStreamProvider = StreamProvider<RemoteAppConfig>((ref) async* 
   yield* FirestoreService.instance.remoteConfigStream;
 });
 
+final practiceQuestionsStreamProvider = StreamProvider<List<Question>>((ref) async* {
+  yield LocalDatabase.instance.getAllQuestions();
+  yield* FirestoreService.instance.practiceQuestionsStream;
+});
+
 // ---------------------------------------------------------------------------
 // User Preferences (selected exam, language)
 // ---------------------------------------------------------------------------

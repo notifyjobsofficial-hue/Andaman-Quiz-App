@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:andaman_quiz/core/database/local_database.dart';
 import 'package:andaman_quiz/core/models/models.dart';
 import 'package:andaman_quiz/core/widgets/question_source_metadata.dart';
+import 'package:andaman_quiz/features/home/presentation/home_screen.dart';
 import 'package:andaman_quiz/features/practice/presentation/topics_list_screen.dart';
 
 void main() {
@@ -513,6 +515,323 @@ void main() {
       expect(loadedQ.sourceExam, isNull);
       expect(loadedQ.resolvedSourceInfo, isNull);
       expect(loadedQ.formattedSourceInfo, isNull);
+    });
+  });
+
+  group('SUBJECT-LEVEL PRACTICE QUESTION COUNT ROLLUP SUITE', () {
+    test('1. Mandatory Rollup: Home Subject Count = Topic Card Count = MCQ Session Count (146 = 146 = 146)', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0, // In Firestore subject doc, static questionCount is 0!
+        examCodes: ['AN CHSL', 'CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+
+      final topic = const Topic(
+        id: 'top_idioms',
+        subjectId: 'sub_eng',
+        name: 'Idioms',
+        hindiName: 'मुहावरे',
+        questionCount: 0,
+      );
+      await db.syncTopicsFromFirestore([topic]);
+
+      // 146 published practice questions tagged for AN CHSL
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_idiom_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // Verify Rollup
+      final homeSubjectCount = db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL');
+      final topicCardCount = db.getTopicPracticeQuestionCount('top_idioms', examCode: 'AN CHSL');
+      final sessionQuestions = db.getQuestionsByTopic('top_idioms', examCode: 'AN CHSL');
+
+      expect(homeSubjectCount, 146, reason: 'Home Subject count must dynamically calculate 146');
+      expect(topicCardCount, 146, reason: 'Topic card count must calculate 146');
+      expect(sessionQuestions.length, 146, reason: 'Session questions count must be 146');
+      expect(homeSubjectCount == topicCardCount && topicCardCount == sessionQuestions.length, isTrue);
+    });
+
+    test('2. Exam-specific filtering: AN CHSL yields 146, AN CGL yields 0', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL', 'AN CGL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_idiom_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 146);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CGL'), 0);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'ALL'), 146);
+    });
+
+    test('3. Unique-ID counting prevents duplicate counts', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+
+      final q1 = const Question(
+        id: 'q_duplicate_1',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Question 1',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      );
+
+      // Add questions with duplicate IDs
+      await db.syncPracticeQuestionsFromFirestore([q1, q1]);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 1);
+    });
+
+    test('4. Dynamic Lifecycle Sync: publish, unpublish, move topic, move subject', () async {
+      final db = LocalDatabase.instance;
+
+      // 146 initial questions in General English -> Idioms
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_idiom_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 146);
+
+      // A. Admin publishes 1 new question (146 -> 147)
+      final newQ = const Question(
+        id: 'q_new_idiom',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'New Idiom Question',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      );
+      await db.syncPracticeQuestionsFromFirestore([...questions, newQ]);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 147);
+      expect(db.getTopicPracticeQuestionCount('top_idioms', examCode: 'AN CHSL'), 147);
+
+      // B. Admin unpublishes the question (147 -> 146)
+      await db.syncPracticeQuestionsFromFirestore(questions);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 146);
+      expect(db.getTopicPracticeQuestionCount('top_idioms', examCode: 'AN CHSL'), 146);
+
+      // C. Move 1 question from Idioms to Synonyms (General English remains 146, Idioms = 145, Synonyms = 1)
+      final movedToSynonyms = questions.first.copyWith(
+        topicId: 'top_synonyms',
+        topicName: 'Synonyms',
+      );
+      final updatedQuestionsWithSynonyms = [
+        movedToSynonyms,
+        ...questions.sublist(1),
+      ];
+      await db.syncPracticeQuestionsFromFirestore(updatedQuestionsWithSynonyms);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 146);
+      expect(db.getTopicPracticeQuestionCount('top_idioms', examCode: 'AN CHSL'), 145);
+      expect(db.getTopicPracticeQuestionCount('top_synonyms', examCode: 'AN CHSL'), 1);
+
+      // D. Move 1 question to Quantitative Aptitude (General English = 145, Quant = 1)
+      final movedToQuant = movedToSynonyms.copyWith(
+        subjectId: 'sub_quant',
+        subjectName: 'Quantitative Aptitude',
+        topicId: 'top_percentages',
+        topicName: 'Percentage',
+      );
+      final updatedQuestionsWithQuant = [
+        movedToQuant,
+        ...questions.sublist(1),
+      ];
+      await db.syncPracticeQuestionsFromFirestore(updatedQuestionsWithQuant);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 145);
+      expect(db.getSubjectPracticeQuestionCount('sub_quant', examCode: 'AN CHSL'), 1);
+    });
+
+    test('5. Offline cached count: re-initializing database maintains counts', () async {
+      final db = LocalDatabase.instance;
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_idiom_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // Simulate offline restart
+      await db.init(force: true);
+      expect(db.getSubjectPracticeQuestionCount('sub_eng', examCode: 'AN CHSL'), 146);
+    });
+
+    test('6. Mock Test count is independent of Practice subject count', () async {
+      final db = LocalDatabase.instance;
+
+      final mockTest = MockTest(
+        id: 'mock_pyq_idioms',
+        title: 'PYQ IDIOMS',
+        examCode: 'CHSL',
+        categoryId: 'SSC',
+        totalQuestions: 146,
+        durationMinutes: 120,
+        totalMarks: 200.0,
+        negativeMarks: 0.5,
+        isFree: true,
+        sections: [
+          TestSection(
+            id: 'sec_1',
+            name: 'Idioms',
+            hindiName: 'मुहावरे',
+            questionIds: List.generate(146, (i) => 'q_mock_idiom_$i'),
+          ),
+        ],
+      );
+
+      await db.syncMockTestsFromFirestore([mockTest]);
+
+      final loadedMock = db.getMockTestById('mock_pyq_idioms');
+      expect(loadedMock, isNotNull);
+      expect(loadedMock!.totalQuestions, 146);
+      expect(loadedMock.sections.first.questionIds.length, 146);
+    });
+
+    testWidgets('7. HomeScreen Practice by Subject widget renders General English 146 Questions and hides 0-question subjects', (tester) async {
+      final db = LocalDatabase.instance;
+
+      final subject1 = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL', 'CHSL'],
+      );
+      final subject2 = const Subject(
+        id: 'sub_empty',
+        name: 'Empty Subject',
+        hindiName: 'खाली विषय',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL', 'CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject1, subject2]);
+      await db.setSelectedExam('AN CHSL');
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_idiom_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Verify General English is displayed with 146 Questions
+      expect(find.text('General English'), findsOneWidget);
+      expect(find.text('146 Questions'), findsOneWidget);
+
+      // Verify Empty Subject (0 questions) is hidden on Home
+      expect(find.text('Empty Subject'), findsNothing);
     });
   });
 }
