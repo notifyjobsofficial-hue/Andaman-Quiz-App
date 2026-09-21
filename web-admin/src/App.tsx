@@ -4,6 +4,7 @@ import { Login } from './pages/Login';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { Dashboard } from './pages/Dashboard';
 import { QuestionBank } from './pages/QuestionBank';
+import { PracticeQuestions } from './pages/PracticeQuestions';
 import { BulkImport } from './pages/BulkImport';
 import { AiPdfImport } from './pages/AiPdfImport';
 import { MockTests } from './pages/MockTests';
@@ -65,13 +66,7 @@ export function App() {
         />
       )}
       {currentTab === 'practice-questions' && (
-        <QuestionBank
-          mode="practice"
-          onNavigateToMock={(testId) => {
-            setBuilderTestId(testId);
-            setCurrentTab('test-builder');
-          }}
-        />
+        <PracticeQuestions onNavigateToTab={setCurrentTab} />
       )}
       {currentTab === 'import' && <BulkImport />}
       {currentTab === 'ai-pdf-import' && <AiPdfImport onNavigateToTab={setCurrentTab} />}

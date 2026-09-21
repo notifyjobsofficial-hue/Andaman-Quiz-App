@@ -13,6 +13,11 @@ interface QuestionFormModalProps {
   exams: Exam[];
   subjects: Subject[];
   defaultUsage?: 'PRACTICE' | 'MOCK' | 'BOTH';
+  defaultExam?: string;
+  defaultSubject?: string;
+  defaultSubjectId?: string;
+  defaultTopic?: string;
+  defaultTopicId?: string;
 }
 
 export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
@@ -23,6 +28,11 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   exams,
   subjects,
   defaultUsage = 'BOTH',
+  defaultExam,
+  defaultSubject,
+  defaultSubjectId,
+  defaultTopic,
+  defaultTopicId,
 }) => {
   const [formData, setFormData] = useState<Partial<Question>>({
     question_text: '',
@@ -32,10 +42,11 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
     option_d_text: '',
     correct_answer: 'A',
     explanation_text: '',
-    exam: exams[0]?.code || 'ANCHSL',
-    subject: subjects[0]?.name || 'General Awareness',
-    subjectId: subjects[0]?.id || '',
-    topic: 'General',
+    exam: defaultExam || exams[0]?.code || 'ANCHSL',
+    subject: defaultSubject || subjects[0]?.name || 'General Awareness',
+    subjectId: defaultSubjectId || subjects[0]?.id || '',
+    topic: defaultTopic || 'General',
+    topicId: defaultTopicId || '',
     difficulty: 'Medium',
     positive_marks: 2.0,
     negative_marks: 0.5,
@@ -55,6 +66,9 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         usageType: questionToEdit.usageType || questionToEdit.usage_type || defaultUsage,
       });
     } else {
+      const targetExam = defaultExam || exams[0]?.code || 'ANCHSL';
+      const targetSubName = defaultSubject || subjects[0]?.name || 'General Awareness';
+      const targetSubObj = subjects.find(s => s.name === targetSubName) || subjects[0];
       setFormData({
         id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         question_text: '',
@@ -64,10 +78,11 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         option_d_text: '',
         correct_answer: 'A',
         explanation_text: '',
-        exam: exams[0]?.code || 'ANCHSL',
-        subject: subjects[0]?.name || 'General Awareness',
-        subjectId: subjects[0]?.id || '',
-        topic: 'General',
+        exam: targetExam,
+        subject: targetSubName,
+        subjectId: defaultSubjectId || targetSubObj?.id || '',
+        topic: defaultTopic || 'General',
+        topicId: defaultTopicId || '',
         difficulty: 'Medium',
         positive_marks: 2.0,
         negative_marks: 0.5,
@@ -76,7 +91,16 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
         usageType: defaultUsage,
       });
     }
-  }, [questionToEdit, isOpen, defaultUsage]);
+  }, [
+    questionToEdit,
+    isOpen,
+    defaultUsage,
+    defaultExam,
+    defaultSubject,
+    defaultSubjectId,
+    defaultTopic,
+    defaultTopicId,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
