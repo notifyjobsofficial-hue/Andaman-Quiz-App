@@ -203,6 +203,11 @@ class Question {
   final double positiveMarks;
   final double negativeMarks;
   final String usageType; // 'PRACTICE', 'MOCK', 'BOTH'
+  final String status; // 'published', 'draft', 'archived'
+
+  bool get isPublished => status.toLowerCase() == 'published';
+  bool get isDraft => status.toLowerCase() == 'draft';
+  bool get isArchived => status.toLowerCase() == 'archived';
 
   const Question({
     required this.id,
@@ -225,6 +230,7 @@ class Question {
     this.positiveMarks = 2.0,
     this.negativeMarks = 0.5,
     this.usageType = 'BOTH',
+    this.status = 'published',
   });
 
   Question copyWith({
@@ -235,6 +241,7 @@ class Question {
     double? positiveMarks,
     double? negativeMarks,
     String? usageType,
+    String? status,
   }) {
     return Question(
       id: id,
@@ -257,6 +264,7 @@ class Question {
       positiveMarks: positiveMarks ?? this.positiveMarks,
       negativeMarks: negativeMarks ?? this.negativeMarks,
       usageType: usageType ?? this.usageType,
+      status: status ?? this.status,
     );
   }
 
@@ -282,6 +290,7 @@ class Question {
     'negative_marks': negativeMarks,
     'usageType': usageType,
     'usage_type': usageType,
+    'status': status,
   };
 
   factory Question.fromMap(Map<String, dynamic> map) {
@@ -364,6 +373,17 @@ class Question {
         final raw = (map['usageType'] ?? map['usage_type'])?.toString().toUpperCase();
         if (raw == 'PRACTICE' || raw == 'MOCK' || raw == 'BOTH') return raw!;
         return 'BOTH';
+      }(),
+      status: () {
+        final rawStatus = map['status']?.toString().toLowerCase().trim();
+        final bool isDraftExplicit = map['is_draft'] == true || map['isDraft'] == true || rawStatus == 'draft';
+        final bool isArchivedExplicit = map['is_archived'] == true || map['isArchived'] == true || rawStatus == 'archived';
+
+        if (isArchivedExplicit) return 'archived';
+        if (isDraftExplicit) return 'draft';
+        if (rawStatus == 'published') return 'published';
+        if (rawStatus != null && rawStatus.isNotEmpty) return rawStatus;
+        return 'published'; // Safe default for verified live records
       }(),
     );
   }

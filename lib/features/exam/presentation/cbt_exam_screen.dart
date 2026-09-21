@@ -85,10 +85,11 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     }
 
     // Build question cache from local DB (now populated by fetchQuestionsForTest)
+    // Only published questions are added to the active test runner session
     for (final sec in _test.sections) {
       for (final qId in sec.questionIds) {
         final q = LocalDatabase.instance.getQuestionById(qId);
-        if (q != null) {
+        if (q != null && q.isPublished) {
           _questionCache[qId] = q;
         }
         _questionStates[qId] = CbtQuestionState.notVisited;
@@ -191,7 +192,9 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
   void _loadSection(int sectionIndex) {
     _currentSectionIndex = sectionIndex;
     _currentQuestionIndex = 0;
-    _currentSectionQuestionIds = _test.sections[sectionIndex].questionIds;
+    _currentSectionQuestionIds = _test.sections[sectionIndex].questionIds
+        .where((qId) => _questionCache.containsKey(qId))
+        .toList();
 
     if (_currentSectionQuestionIds.isNotEmpty) {
       final qId = _currentSectionQuestionIds[0];
@@ -305,11 +308,12 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
       double secScore = 0.0;
       for (final qId in sec.questionIds) {
         final q = _questionCache[qId];
+        if (q == null) continue; // Skip draft/archived questions
         final selected = _selectedAnswers[qId];
 
         if (selected == null) {
           unattemptedCount++;
-        } else if (q != null && selected == q.correctIndex) {
+        } else if (selected == q.correctIndex) {
           correctCount++;
           secScore += positiveMarks;
         } else {

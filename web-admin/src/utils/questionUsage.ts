@@ -34,18 +34,19 @@ export function computeQuestionUsage(
     }
   });
 
-  // 3. Practice Eligibility
+  // 3. Practice Assignment (independent of publication status)
   const rawUsage = (question.usageType || question.usage_type || 'BOTH').toUpperCase();
   const isEligibleUsage = rawUsage === 'PRACTICE' || rawUsage === 'BOTH';
   const hasTaxonomy = !!(question.exam && question.subject);
   const isPublished = question.status === 'published';
 
-  const inPractice = isPublished && isEligibleUsage && hasTaxonomy;
+  // inPractice represents whether question is assigned to Practice
+  const inPractice = isEligibleUsage && hasTaxonomy;
 
-  // 4. Student Availability
+  // 4. Student Availability: Requires status === 'published' AND valid assignment
   const studentAvailable = isPublished && (inPractice || referencingMocks.length > 0);
 
-  // 5. Status Badge
+  // 5. Status Badge (shows WHERE it is assigned, independent of publication status)
   let statusBadge: 'PRACTICE' | 'MOCK' | 'BOTH' | 'NOT_USED' = 'NOT_USED';
   if (inPractice && referencingMocks.length > 0) {
     statusBadge = 'BOTH';
@@ -70,7 +71,7 @@ export function computeQuestionUsage(
 }
 
 /**
- * Assigns a question to Practice by updating its usageType and publishing status.
+ * Assigns a question to Practice by updating its usageType while preserving existing status.
  */
 export async function assignQuestionToPractice(
   question: Question,
@@ -78,7 +79,8 @@ export async function assignQuestionToPractice(
 ): Promise<Question> {
   const updated: Question = {
     ...question,
-    status: 'published',
+    // Preserve existing status; do NOT automatically publish drafts
+    status: question.status || 'published',
     usageType: isUsedInAnyMock ? 'BOTH' : 'PRACTICE',
     usage_type: isUsedInAnyMock ? 'BOTH' : 'PRACTICE',
     updated_at: new Date().toISOString(),
@@ -88,7 +90,7 @@ export async function assignQuestionToPractice(
 }
 
 /**
- * Removes a question from Practice while preserving Mock Test usage.
+ * Removes a question from Practice while preserving Mock Test usage and existing status.
  */
 export async function removeQuestionFromPractice(
   question: Question,
@@ -96,6 +98,7 @@ export async function removeQuestionFromPractice(
 ): Promise<Question> {
   const updated: Question = {
     ...question,
+    status: question.status || 'published',
     usageType: isUsedInAnyMock ? 'MOCK' : 'MOCK',
     usage_type: isUsedInAnyMock ? 'MOCK' : 'MOCK',
     updated_at: new Date().toISOString(),
@@ -175,8 +178,10 @@ export async function assignQuestionsToMockTest(
       if (q.usageType !== nextUsage) {
         await saveQuestion({
           ...q,
+          status: q.status || 'published',
           usageType: nextUsage,
           usage_type: nextUsage,
+          updated_at: new Date().toISOString(),
         });
       }
     }

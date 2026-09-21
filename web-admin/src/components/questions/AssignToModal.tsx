@@ -198,8 +198,17 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
             </span>
           </div>
           <p className="text-xs text-slate-500 pl-6.5">
-            When enabled, question(s) become discoverable and solvable inside the student app's "Practice by Subject" module.
+            When enabled, question(s) belong to the Practice module. Questions only become visible to students when their status is Published.
           </p>
+          {assignPractice && (isSingle ? singleQ?.status === 'draft' : questions.some((q) => q.status === 'draft')) && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
+              <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block">Assigned to Practice • Status: Draft</span>
+                <span className="text-[11px] text-amber-700">Not currently visible to students. Will become available in the student app once published.</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SECTION 2: Mock Tests */}

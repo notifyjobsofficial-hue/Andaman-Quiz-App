@@ -498,19 +498,17 @@ class FirestoreService {
   }
 
   /// On-demand fetch for questions belonging to a specific topic for MCQ practice.
+  /// Strictly filters status == 'published' server-side and removes unassigned/draft cached questions.
   Future<List<Question>> fetchQuestionsForTopic(String topicId) async {
     if (Firebase.apps.isEmpty) {
       return LocalDatabase.instance.getQuestionsByTopic(topicId);
     }
 
-    // Check local cache first
-    final cached = LocalDatabase.instance.getQuestionsByTopic(topicId);
-    if (cached.isNotEmpty) return cached;
-
     try {
       final snap = await _firestore
           .collection(colQuestions)
           .where('topicId', isEqualTo: topicId)
+          .where('status', isEqualTo: 'published')
           .get();
 
       List<Question> fetched = snap.docs.map((d) => Question.fromMap(d.data())).toList();
@@ -520,19 +518,19 @@ class FirestoreService {
         final snapName = await _firestore
             .collection(colQuestions)
             .where('topic', isEqualTo: topic.name)
+            .where('status', isEqualTo: 'published')
             .get();
         if (snapName.docs.isNotEmpty) {
           fetched = snapName.docs.map((d) => Question.fromMap(d.data())).toList();
         }
       }
 
-      if (fetched.isNotEmpty) {
-        await LocalDatabase.instance.syncQuestionsFromFirestore(fetched);
-      }
+      // Sync topic questions: adds/updates published and invalidates stale draft cache
+      await LocalDatabase.instance.syncTopicQuestionsFromFirestore(topicId, fetched);
       return LocalDatabase.instance.getQuestionsByTopic(topicId);
     } catch (e) {
       debugPrint('Error fetching topic questions on demand: $e');
-      return cached;
+      return LocalDatabase.instance.getQuestionsByTopic(topicId);
     }
   }
 

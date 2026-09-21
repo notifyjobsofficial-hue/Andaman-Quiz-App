@@ -335,7 +335,7 @@ class LocalDatabase {
     return _questions.where((q) {
       final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
       if (!matchesTopic) return false;
-      return q.usageType != 'MOCK';
+      return q.isPublished && q.usageType != 'MOCK';
     }).toList();
   }
 
@@ -344,7 +344,7 @@ class LocalDatabase {
     return _questions.where((q) {
       final matchesSubject = q.subjectId == subjectId || (subject != null && q.subjectId.toLowerCase() == subject.name.toLowerCase());
       if (!matchesSubject) return false;
-      return q.usageType != 'MOCK';
+      return q.isPublished && q.usageType != 'MOCK';
     }).toList();
   }
 
@@ -607,6 +607,34 @@ class LocalDatabase {
     final existingMap = {for (final q in _questions) q.id: q};
 
     for (final fq in firestoreQuestions) {
+      final isBookmarked = _bookmarkedIds.contains(fq.id);
+      existingMap[fq.id] = fq.copyWith(isBookmarked: isBookmarked);
+    }
+
+    _questions.clear();
+    _questions.addAll(existingMap.values);
+    await _persistQuestions();
+  }
+
+  /// Syncs topic questions and removes/invalidates any cached questions for this topic
+  /// that are no longer published in Firestore, preventing stale draft leaks.
+  Future<void> syncTopicQuestionsFromFirestore(String topicId, List<Question> publishedQuestions) async {
+    final topic = getTopicById(topicId);
+    final publishedIds = publishedQuestions.map((q) => q.id).toSet();
+
+    final existingMap = {for (final q in _questions) q.id: q};
+
+    // Any question in cache for this topic that is no longer returned in publishedQuestions
+    // is updated to 'draft' so it is never served to students in Practice.
+    for (final q in _questions) {
+      final matchesTopic = q.topicId == topicId || (topic != null && q.topicId.toLowerCase() == topic.name.toLowerCase());
+      if (matchesTopic && !publishedIds.contains(q.id)) {
+        existingMap[q.id] = q.copyWith(status: 'draft');
+      }
+    }
+
+    // Add/update published questions
+    for (final fq in publishedQuestions) {
       final isBookmarked = _bookmarkedIds.contains(fq.id);
       existingMap[fq.id] = fq.copyWith(isBookmarked: isBookmarked);
     }
