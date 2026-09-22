@@ -10,6 +10,7 @@ import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/question_source_metadata.dart';
+import '../../../core/widgets/question_text_view.dart';
 import '../../../core/ads/ad_service.dart';
 
 class McqPracticeScreen extends ConsumerStatefulWidget {
@@ -269,13 +270,11 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (questionText.isNotEmpty)
-                            Text(
-                              questionText,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                height: 1.45,
-                              ),
+                            QuestionTextView(
+                              text: questionText,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              height: 1.45,
                             ),
                           if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
                             if (questionText.isNotEmpty) const SizedBox(height: 12),

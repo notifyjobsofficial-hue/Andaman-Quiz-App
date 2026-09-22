@@ -7,6 +7,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/question_source_metadata.dart';
+import '../../../core/widgets/question_text_view.dart';
 
 class SolutionsReviewScreen extends ConsumerStatefulWidget {
   final String attemptId;
@@ -231,9 +232,12 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                '${index + 1}. ${q.cleanQuestionEn}',
-                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+                              QuestionTextView(
+                                text: q.cleanQuestionEn,
+                                prefix: '${index + 1}. ',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
                               ),
                               // Question image if available
                               if (q.questionImageUrl != null && q.questionImageUrl!.trim().isNotEmpty) ...[

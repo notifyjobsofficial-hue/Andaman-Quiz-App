@@ -9,6 +9,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/question_source_metadata.dart';
+import '../../../core/widgets/question_text_view.dart';
 
 class SavedScreen extends ConsumerStatefulWidget {
   const SavedScreen({super.key});
@@ -160,9 +161,11 @@ class _QuestionListTab extends StatelessWidget {
                   ),
                 ],
               ),
-              Text(
-                q.cleanQuestionEn,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+              QuestionTextView(
+                text: q.cleanQuestionEn,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
               ),
               QuestionSourceMetadata(sourceInfo: q.resolvedSourceInfo),
               const SizedBox(height: 12),

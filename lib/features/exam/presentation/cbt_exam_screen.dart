@@ -12,6 +12,7 @@ import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/question_source_metadata.dart';
+import '../../../core/widgets/question_text_view.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/ads/ad_service.dart';
 
@@ -741,13 +742,11 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                     ),
                                     const SizedBox(height: 10),
                                     if (questionText.isNotEmpty)
-                                      Text(
-                                        questionText,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          height: 1.45,
-                                        ),
+                                      QuestionTextView(
+                                        text: questionText,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.45,
                                       ),
                                     if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
                                       if (questionText.isNotEmpty) const SizedBox(height: 12),

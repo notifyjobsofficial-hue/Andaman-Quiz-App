@@ -10,6 +10,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_text_view.dart';
 
 class QotdScreen extends ConsumerStatefulWidget {
   const QotdScreen({super.key});
@@ -397,13 +398,11 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                       ),
                       const SizedBox(height: 8),
                     ],
-                    Text(
-                      questionText,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        height: 1.45,
-                      ),
+                    QuestionTextView(
+                      text: questionText,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
                     ),
                     if (question.questionImageUrl != null && question.questionImageUrl!.isNotEmpty)
                       _buildNetworkImage(question.questionImageUrl!, maxHeight: 180),
