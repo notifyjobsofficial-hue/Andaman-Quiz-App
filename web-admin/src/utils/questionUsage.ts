@@ -75,7 +75,8 @@ export function computeQuestionUsage(
  */
 export async function assignQuestionToPractice(
   question: Question,
-  isUsedInAnyMock: boolean = false
+  isUsedInAnyMock: boolean = false,
+  taxonomy?: { subject?: string; subjectId?: string; topic?: string; topicId?: string }
 ): Promise<Question> {
   const updated: Question = {
     ...question,
@@ -83,6 +84,10 @@ export async function assignQuestionToPractice(
     status: question.status || 'published',
     usageType: isUsedInAnyMock ? 'BOTH' : 'PRACTICE',
     usage_type: isUsedInAnyMock ? 'BOTH' : 'PRACTICE',
+    ...(taxonomy?.subject ? { subject: taxonomy.subject } : {}),
+    ...(taxonomy?.subjectId ? { subjectId: taxonomy.subjectId } : {}),
+    ...(taxonomy?.topic ? { topic: taxonomy.topic } : {}),
+    ...(taxonomy?.topicId ? { topicId: taxonomy.topicId } : {}),
     updated_at: new Date().toISOString(),
   };
   await saveQuestion(updated);

@@ -106,18 +106,34 @@ export const QuestionUsageDrawer: React.FC<QuestionUsageDrawerProps> = ({
             </div>
 
             {usage.inPractice ? (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-400">Exam:</span>
-                  <span className="font-bold text-slate-700">{usage.practiceTaxonomy?.exam || 'N/A'}</span>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+                <div className="flex justify-between py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Exam:</span>
+                  <span className="font-bold text-slate-800">{usage.practiceTaxonomy?.exam || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Subject:</span>
+                  <span className="font-bold text-slate-800">{usage.practiceTaxonomy?.subject || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Topic:</span>
+                  <span className="font-bold text-slate-800">{usage.practiceTaxonomy?.topic || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between py-0.5 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Status:</span>
+                  <span className={`font-bold capitalize ${
+                    (question.status || 'published') === 'published' ? 'text-emerald-700' : 'text-amber-700'
+                  }`}>
+                    {question.status || 'published'}
+                  </span>
                 </div>
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-400">Subject:</span>
-                  <span className="font-bold text-slate-700">{usage.practiceTaxonomy?.subject || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-400">Topic:</span>
-                  <span className="font-bold text-slate-700">{usage.practiceTaxonomy?.topic || 'General'}</span>
+                  <span className="text-slate-500 font-medium">Student Availability:</span>
+                  <span className={`font-bold ${
+                    usage.studentAvailable ? 'text-emerald-700' : 'text-slate-500'
+                  }`}>
+                    {usage.studentAvailable ? 'Available' : 'Not Available'}
+                  </span>
                 </div>
               </div>
             ) : (

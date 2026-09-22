@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Question, MockTest, Exam } from '../../types';
+import { Question, MockTest, Exam, Subject, Topic } from '../../types';
 import { Modal } from '../common/Modal';
 import {
   computeQuestionUsage,
@@ -8,6 +8,7 @@ import {
   assignQuestionsToMockTest,
   removeQuestionsFromMockTest,
 } from '../../utils/questionUsage';
+import { PracticeDestinationSelector } from '../practice/PracticeDestinationSelector';
 import {
   CheckCircle2,
   AlertCircle,
@@ -16,6 +17,7 @@ import {
   Search,
   Filter,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface AssignToModalProps {
@@ -24,7 +26,10 @@ interface AssignToModalProps {
   questions: Question[];
   mockTests: MockTest[];
   exams: Exam[];
+  subjects: Subject[];
+  topics: Topic[];
   onAssigned: () => void;
+  onOpenSubjectsTopics?: () => void;
 }
 
 export const AssignToModal: React.FC<AssignToModalProps> = ({
@@ -33,7 +38,10 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
   questions,
   mockTests,
   exams,
+  subjects,
+  topics,
   onAssigned,
+  onOpenSubjectsTopics,
 }) => {
   const isSingle = questions.length === 1;
   const singleQ = isSingle ? questions[0] : null;
@@ -44,8 +52,36 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
     return computeQuestionUsage(singleQ, mockTests);
   }, [singleQ, mockTests]);
 
+  // Distinct Exams in selection (for bulk safety check)
+  const distinctExams = useMemo(() => {
+    const set = new Set<string>();
+    questions.forEach((q) => {
+      const code = (q.exam || '').trim();
+      if (code) set.add(code);
+    });
+    return Array.from(set);
+  }, [questions]);
+
+  const hasMixedExams = distinctExams.length > 1;
+  const primaryExamCode = useMemo(() => {
+    if (isSingle && singleQ?.exam) return singleQ.exam.trim();
+    if (distinctExams.length === 1) return distinctExams[0];
+    return exams[0]?.code || 'ANCHSL';
+  }, [isSingle, singleQ, distinctExams, exams]);
+
+  const primaryExamName = useMemo(() => {
+    const found = exams.find(
+      (e) => e.code.toLowerCase() === primaryExamCode.toLowerCase() || e.name.toLowerCase() === primaryExamCode.toLowerCase()
+    );
+    return found ? `${found.name} (${found.code})` : primaryExamCode;
+  }, [exams, primaryExamCode]);
+
   // Practice selection state
   const [assignPractice, setAssignPractice] = useState<boolean>(true);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
 
   // Selected mock test IDs
   const [selectedMockIds, setSelectedMockIds] = useState<Set<string>>(new Set());
@@ -62,19 +98,76 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
     if (!isOpen) return;
     setErrorMsg(null);
 
-    if (singleUsage) {
-      setAssignPractice(singleUsage.inPractice);
-      setSelectedMockIds(new Set(singleUsage.mockTests.map((m) => m.id)));
-      if (singleQ?.exam) {
+    if (singleQ) {
+      const inPrac = singleUsage ? singleUsage.inPractice : true;
+      setAssignPractice(inPrac);
+
+      // Resolve existing subject
+      let subId = singleQ.subjectId || '';
+      let subObj = subjects.find((s) => s.id === subId);
+      if (!subObj && singleQ.subject) {
+        subObj = subjects.find(
+          (s) => s.name.trim().toLowerCase() === singleQ.subject.trim().toLowerCase()
+        );
+        if (subObj) subId = subObj.id;
+      }
+      setSelectedSubjectId(subId);
+      setSelectedSubject(subObj || null);
+
+      // Resolve existing topic
+      let topId = singleQ.topicId || '';
+      let topObj = topics.find((t) => t.id === topId);
+      if (!topObj && singleQ.topic && subId) {
+        topObj = topics.find(
+          (t) =>
+            t.subjectId === subId &&
+            t.name.trim().toLowerCase() === singleQ.topic.trim().toLowerCase()
+        );
+        if (topObj) topId = topObj.id;
+      }
+      setSelectedTopicId(topId);
+      setSelectedTopic(topObj || null);
+
+      if (singleUsage) {
+        setSelectedMockIds(new Set(singleUsage.mockTests.map((m) => m.id)));
+      } else {
+        setSelectedMockIds(new Set());
+      }
+
+      if (singleQ.exam) {
         setExamFilter(singleQ.exam);
       }
     } else {
       // Bulk default
-      setAssignPractice(true);
+      if (hasMixedExams) {
+        setAssignPractice(false);
+      } else {
+        setAssignPractice(true);
+      }
+      setSelectedSubjectId('');
+      setSelectedSubject(null);
+      setSelectedTopicId('');
+      setSelectedTopic(null);
       setSelectedMockIds(new Set());
       setExamFilter('ALL');
     }
-  }, [isOpen, singleUsage, singleQ]);
+  }, [isOpen, singleQ, singleUsage, subjects, topics, hasMixedExams]);
+
+  // Handle Subject selection from PracticeDestinationSelector
+  const handleSubjectChange = (sub: Subject | null) => {
+    setSelectedSubject(sub);
+    setSelectedSubjectId(sub ? sub.id : '');
+    setSelectedTopic(null);
+    setSelectedTopicId('');
+    setErrorMsg(null);
+  };
+
+  // Handle Topic selection from PracticeDestinationSelector
+  const handleTopicChange = (top: Topic | null) => {
+    setSelectedTopic(top);
+    setSelectedTopicId(top ? top.id : '');
+    setErrorMsg(null);
+  };
 
   // Filtered mock tests for the picker list
   const filteredMocks = useMemo(() => {
@@ -97,23 +190,49 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const qIds = questions.map((q) => q.id);
+      // 1. Validation for Practice Assignment
+      if (assignPractice) {
+        if (hasMixedExams) {
+          throw new Error(
+            'Selected questions belong to multiple Exams. Practice Subject/Topic assignment can only be applied to questions from the same Exam. Filter or select questions from one Exam first.'
+          );
+        }
 
-      // 1. Process Practice Assignment / Removal
-      for (const q of questions) {
-        const hasTaxonomy = !!(q.exam && q.subject);
-        if (assignPractice) {
-          if (!hasTaxonomy) {
-            throw new Error(`Cannot assign question (${q.id}) to Practice: Missing Exam or Subject taxonomy.`);
-          }
-          await assignQuestionToPractice(q, selectedMockIds.size > 0);
-        } else {
-          await removeQuestionFromPractice(q, selectedMockIds.size > 0);
+        if (!selectedSubject) {
+          throw new Error('Please select an existing Subject for Practice assignment.');
+        }
+
+        if (!selectedTopic) {
+          throw new Error('Please select an existing Topic for Practice assignment.');
         }
       }
 
-      // 2. Process Mock Test Assignments
-      // Identify additions & removals for single question mode
+      const qIds = questions.map((q) => q.id);
+
+      // 2. Process Practice Assignment or Removal on canonical Question records
+      for (const q of questions) {
+        // Evaluate future mock presence for this question
+        const willBeInMocks = isSingle
+          ? selectedMockIds.size > 0
+          : selectedMockIds.size > 0 || mockTests.some((m) => m.sections?.some((sec) => sec.questionIds?.includes(q.id)));
+
+        if (assignPractice && selectedSubject && selectedTopic) {
+          // Assign to Practice hierarchy while preserving status and ID
+          await assignQuestionToPractice(q, willBeInMocks, {
+            subject: selectedSubject.name,
+            subjectId: selectedSubject.id,
+            topic: selectedTopic.name,
+            topicId: selectedTopic.id,
+          });
+        } else {
+          // Remove from Practice: recalculates true mock relationship
+          // If in >= 1 mock -> MOCK. If in 0 mocks -> NOT_USED.
+          // NEVER deletes question.
+          await removeQuestionFromPractice(q, willBeInMocks);
+        }
+      }
+
+      // 3. Process Mock Test Assignments via canonical mock.sections[].questionIds
       if (isSingle && singleUsage) {
         const initialMockIds = new Set(singleUsage.mockTests.map((m) => m.id));
 
@@ -131,7 +250,7 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
           }
         }
       } else {
-        // Bulk mode: assign to all selected mocks
+        // Bulk mode: assign selected questions to all checked mocks
         for (const mId of Array.from(selectedMockIds)) {
           await assignQuestionsToMockTest(qIds, mId, mockTests, questions);
         }
@@ -147,6 +266,10 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
     }
   };
 
+  const hasDraftQuestions = isSingle
+    ? singleQ?.status === 'draft'
+    : questions.some((q) => q.status === 'draft');
+
   return (
     <Modal
       isOpen={isOpen}
@@ -156,56 +279,111 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
     >
       <div className="space-y-6">
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-            <AlertCircle size={15} className="shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span className="leading-relaxed">{errorMsg}</span>
           </div>
         )}
 
+        {/* Question Preview for Single Question */}
         {isSingle && singleQ && (
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
-            <span className="text-slate-400 block font-semibold">Question Preview:</span>
-            <p className="font-medium text-slate-800 line-clamp-2">{singleQ.question_text || 'No text content'}</p>
-            <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-slate-500">
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+            <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">
+              Question Preview:
+            </span>
+            <p className="font-medium text-slate-800 line-clamp-2 leading-relaxed">
+              {singleQ.question_text || '(Image / Diagram Question)'}
+            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500">
               <span className="font-semibold text-slate-700">Exam: {singleQ.exam || 'Unassigned'}</span>
               <span>•</span>
-              <span className="font-semibold text-slate-700">Subject: {singleQ.subject || 'Unassigned'}</span>
+              <span className="font-semibold text-slate-700">Current Subject: {singleQ.subject || 'None'}</span>
               <span>•</span>
-              <span className="font-semibold text-slate-700">Topic: {singleQ.topic || 'General'}</span>
+              <span className="font-semibold text-slate-700">Current Topic: {singleQ.topic || 'None'}</span>
+              <span>•</span>
+              <span className={`px-2 py-0.2 rounded font-bold uppercase text-[10px] ${
+                singleQ.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {singleQ.status || 'published'}
+              </span>
             </div>
           </div>
         )}
 
         {/* SECTION 1: Practice Questions */}
-        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-4">
           <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <label className={`flex items-center gap-2.5 ${hasMixedExams ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer select-none'}`}>
               <input
                 type="checkbox"
                 checked={assignPractice}
-                onChange={(e) => setAssignPractice(e.target.checked)}
+                disabled={hasMixedExams}
+                onChange={(e) => {
+                  if (!hasMixedExams) {
+                    setAssignPractice(e.target.checked);
+                    setErrorMsg(null);
+                  }
+                }}
                 className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
               />
               <div className="flex items-center gap-2">
                 <BookOpen size={16} className="text-brand-600" />
-                <span className="font-bold text-sm text-slate-900">Student Practice</span>
+                <span className="font-bold text-sm text-slate-900">Assign to Student Practice</span>
               </div>
             </label>
             <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-              assignPractice ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+              assignPractice && !hasMixedExams
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                : 'bg-slate-100 text-slate-500'
             }`}>
-              {assignPractice ? 'Eligible for Practice' : 'Excluded from Practice'}
+              {assignPractice && !hasMixedExams ? 'Eligible for Practice' : 'Excluded from Practice'}
             </span>
           </div>
-          <p className="text-xs text-slate-500 pl-6.5">
-            When enabled, question(s) belong to the Practice module. Questions only become visible to students when their status is Published.
-          </p>
-          {assignPractice && (isSingle ? singleQ?.status === 'draft' : questions.some((q) => q.status === 'draft')) && (
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
+
+          {/* Mixed-Exam Bulk Safety Guard */}
+          {hasMixedExams && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertTriangle size={17} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block">
+                  Selected questions belong to multiple Exams: {distinctExams.join(', ')}
+                </span>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Practice Subject/Topic assignment can only be applied to questions from the same Exam.
+                  Filter or select questions from one Exam first. You may still assign these questions to Mock Tests below.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Practice Destination Selector (Shown when Practice is enabled and exams are uniform) */}
+          {assignPractice && !hasMixedExams && (
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <PracticeDestinationSelector
+                examCode={primaryExamCode}
+                examName={primaryExamName}
+                selectedSubjectId={selectedSubjectId}
+                selectedTopicId={selectedTopicId}
+                onSubjectChange={handleSubjectChange}
+                onTopicChange={handleTopicChange}
+                subjects={subjects}
+                topics={topics}
+                required={true}
+                onOpenSubjectsTopics={onOpenSubjectsTopics}
+              />
+            </div>
+          )}
+
+          {/* Draft Status Notice (Publication Independence) */}
+          {assignPractice && hasDraftQuestions && (
+            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5">
               <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block">Assigned to Practice • Status: Draft</span>
-                <span className="text-[11px] text-amber-700">Not currently visible to students. Will become available in the student app once published.</span>
+                <span className="font-bold block">Publication Independence: Status is Draft</span>
+                <span className="text-[11px] text-amber-700 leading-relaxed block mt-0.5">
+                  Assigning to Practice organizes where this question belongs, but will NOT automatically publish it.
+                  It will become available in the student app only once its status is explicitly set to Published.
+                </span>
               </div>
             </div>
           )}
@@ -224,7 +402,7 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
           </div>
 
           <p className="text-xs text-slate-500">
-            Select one or multiple Mock Tests. Questions are added directly to the mock's section and mock question counts recalculate automatically.
+            Select one or multiple Mock Tests. Canonical section references (<code>mock.sections[].questionIds</code>) will be updated without duplicating question records.
           </p>
 
           {/* Exam & Search Filters inside modal */}
@@ -255,7 +433,7 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
           </div>
 
           {/* Mock Test List */}
-          <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+          <div className="max-h-52 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
             {filteredMocks.length === 0 ? (
               <div className="p-4 text-center text-xs text-slate-400">
                 No mock tests match the selected filters.
@@ -307,8 +485,8 @@ export const AssignToModal: React.FC<AssignToModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            disabled={isSaving}
-            className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-500/20 transition flex items-center gap-2 disabled:opacity-50"
+            disabled={isSaving || (assignPractice && !hasMixedExams && (!selectedSubjectId || !selectedTopicId))}
+            className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-500/20 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving && <Loader2 size={14} className="animate-spin" />}
             <span>Save Assignment</span>

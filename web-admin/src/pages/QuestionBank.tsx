@@ -33,11 +33,12 @@ import {
   bulkDeleteQuestions,
   fetchExams,
   fetchSubjects,
+  fetchTopics,
   fetchMockTests,
   fetchLiveTests,
   saveQuestion,
 } from '../firebase/firestore';
-import { Question, Exam, Subject, MockTest, LiveTestItem, QuestionUsageSummary } from '../types';
+import { Question, Exam, Subject, Topic, MockTest, LiveTestItem, QuestionUsageSummary } from '../types';
 import { Badge } from '../components/common/Badge';
 import { QuestionPreviewModal } from '../components/questions/QuestionPreviewModal';
 import { QuestionFormModal } from '../components/questions/QuestionFormModal';
@@ -57,6 +58,7 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
   const [questions, setQuestions] = useState<Question[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [topics, setTopics] = useState<Topic[]>([]);
   const [mockTests, setMockTests] = useState<MockTest[]>([]);
   const [liveTests, setLiveTests] = useState<LiveTestItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,16 +118,18 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
   const loadData = async () => {
     setLoading(true);
     try {
-      const [q, e, s, m, lt] = await Promise.all([
+      const [q, e, s, t, m, lt] = await Promise.all([
         fetchQuestions(3000),
         fetchExams().catch(() => []),
         fetchSubjects().catch(() => []),
+        fetchTopics().catch(() => []),
         fetchMockTests().catch(() => []),
         fetchLiveTests().catch(() => []),
       ]);
       setQuestions(q);
       setExams(e);
       setSubjects(s);
+      setTopics(t);
       setMockTests(m);
       setLiveTests(lt);
     } catch (err) {
@@ -1137,6 +1141,8 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
         questions={assignModalQuestions}
         mockTests={mockTests}
         exams={exams}
+        subjects={subjects}
+        topics={topics}
         onAssigned={() => loadData()}
       />
 
