@@ -58,7 +58,24 @@ final remoteConfigStreamProvider = StreamProvider<RemoteAppConfig>((ref) async* 
 
 final practiceQuestionsStreamProvider = StreamProvider<List<Question>>((ref) async* {
   yield LocalDatabase.instance.getAllQuestions();
-  yield* FirestoreService.instance.practiceQuestionsStream;
+  yield* LocalDatabase.instance.questionsStream;
+});
+
+/// Single Source of Truth provider for available Practice subjects for an exam.
+/// Recomputes automatically whenever practice questions or subjects update.
+final availablePracticeSubjectsProvider =
+    Provider.family<List<PracticeSubjectItem>, String>((ref, examCode) {
+  // Watch reactive questions and subjects streams so UI re-evaluates
+  ref.watch(practiceQuestionsStreamProvider);
+  final streamSubjects = ref.watch(subjectsStreamProvider).value;
+  final allSubjects = (streamSubjects != null && streamSubjects.isNotEmpty)
+      ? streamSubjects
+      : LocalDatabase.instance.getSubjects();
+
+  return LocalDatabase.instance.getAvailablePracticeSubjectsForExam(
+    examCode,
+    subjectsContext: allSubjects,
+  );
 });
 
 // ---------------------------------------------------------------------------

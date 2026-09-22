@@ -16,11 +16,10 @@ class PracticeScreen extends ConsumerStatefulWidget {
 }
 
 class _PracticeScreenState extends ConsumerState<PracticeScreen> {
-  String _activeExam = 'ALL';
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selectedExam = ref.watch(selectedExamProvider);
 
     // Dynamic exams from Firestore → build filter chips
     final streamExams = ref.watch(examsStreamProvider).value;
@@ -29,14 +28,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         : LocalDatabase.instance.getExams();
     final examFilters = ['ALL', ...dbExams.map((e) => e.code)];
 
-    // Dynamic subjects from Firestore
-    final streamSubjects = ref.watch(subjectsStreamProvider).value;
-    final allSubjects = (streamSubjects != null && streamSubjects.isNotEmpty)
-        ? streamSubjects
-        : LocalDatabase.instance.getSubjects();
-    final subjects = _activeExam == 'ALL'
-        ? allSubjects
-        : allSubjects.where((s) => s.matchesExam(_activeExam)).toList();
+    // Single source of truth for available Practice subjects under selectedExam
+    final practiceSubjects = ref.watch(availablePracticeSubjectsProvider(selectedExam));
 
     return Scaffold(
       appBar: AppBar(
@@ -57,7 +50,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final exam = examFilters[index];
-                  final isSelected = _activeExam == exam;
+                  final isSelected = selectedExam.toUpperCase() == exam.toUpperCase();
 
                   return ChoiceChip(
                     label: Text(
@@ -70,7 +63,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                     selected: isSelected,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() => _activeExam = exam);
+                        ref.read(selectedExamProvider.notifier).setExam(exam);
                       }
                     },
                     selectedColor: AppColors.actionBlue,
@@ -88,7 +81,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
 
             // Subject List — live from Firestore
             Expanded(
-              child: subjects.isEmpty
+              child: practiceSubjects.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -109,7 +102,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Subjects will appear once added by the administrator.',
+                            'No available Practice subjects for this exam.',
                             style: TextStyle(
                               fontSize: 13,
                               color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
@@ -120,11 +113,13 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.all(AppDimens.space16),
-                      itemCount: subjects.length,
+                      itemCount: practiceSubjects.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final subject = subjects[index];
+                        final item = practiceSubjects[index];
+                        final subject = item.subject;
                         final topicsCount = LocalDatabase.instance.getTopicsBySubject(subject.id).length;
+                        final displayQuestionsCount = item.eligibleQuestionCount;
 
                         return AnimatedPressable(
                           onTap: () {
@@ -191,20 +186,13 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 3),
-                                      () {
-                                        final displayQuestionsCount = LocalDatabase.instance.getSubjectPracticeQuestionCount(
-                                          subject.id,
-                                          examCode: _activeExam,
-                                        );
-
-                                        return Text(
-                                          '$topicsCount Topics • $displayQuestionsCount Questions',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                                          ),
-                                        );
-                                      }(),
+                                      Text(
+                                        '$topicsCount Topics • $displayQuestionsCount Questions',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),

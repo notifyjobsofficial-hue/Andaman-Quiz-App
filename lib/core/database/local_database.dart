@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,10 @@ class LocalDatabase {
   LocalDatabase._internal();
 
   SharedPreferences? _prefs;
+
+  final StreamController<List<Question>> _questionsStreamController =
+      StreamController<List<Question>>.broadcast();
+  Stream<List<Question>> get questionsStream => _questionsStreamController.stream;
 
   // In-memory indexed caches for instant 60 FPS reads
   final List<ExamCategory> _categories = [];
@@ -60,6 +65,7 @@ class LocalDatabase {
     _topics.clear();
     _mockTests.clear();
     _attempts.clear();
+    _questionsStreamController.add([]);
   }
 
   /// One-time migration: purges all legacy seeded/dev content while preserving
@@ -284,6 +290,7 @@ class LocalDatabase {
   Future<void> _persistQuestions() async {
     final raw = jsonEncode(_questions.map((q) => q.toMap()).toList());
     await _prefs?.setString('db_questions', raw);
+    _questionsStreamController.add(List.unmodifiable(_questions));
   }
 
   Future<void> _persistMockTests() async {
@@ -388,6 +395,30 @@ class LocalDatabase {
     final questions = getQuestionsByTopic(topicId, examCode: examCode);
     final uniqueIds = questions.map((q) => q.id).toSet();
     return uniqueIds.length;
+  }
+
+  /// Returns the available Practice subjects with strictly eligible questions for the specified exam.
+  /// This is the SINGLE SOURCE OF TRUTH for both HomeScreen and PracticeScreen.
+  List<PracticeSubjectItem> getAvailablePracticeSubjectsForExam(
+    String examCode, {
+    List<Subject>? subjectsContext,
+  }) {
+    final allSubjects = subjectsContext ?? getSubjects();
+    final matchingSubjects = examCode.toUpperCase() == 'ALL'
+        ? allSubjects
+        : allSubjects.where((s) => s.matchesExam(examCode)).toList();
+
+    final result = <PracticeSubjectItem>[];
+    for (final subject in matchingSubjects) {
+      final count = getSubjectPracticeQuestionCount(subject.id, examCode: examCode);
+      if (count > 0) {
+        result.add(PracticeSubjectItem(
+          subject: subject,
+          eligibleQuestionCount: count,
+        ));
+      }
+    }
+    return List.unmodifiable(result);
   }
 
   List<Question> getQuestionsByIds(List<String> ids) {

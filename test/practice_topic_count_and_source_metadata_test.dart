@@ -6,6 +6,7 @@ import 'package:andaman_quiz/core/database/local_database.dart';
 import 'package:andaman_quiz/core/models/models.dart';
 import 'package:andaman_quiz/core/widgets/question_source_metadata.dart';
 import 'package:andaman_quiz/features/home/presentation/home_screen.dart';
+import 'package:andaman_quiz/features/practice/presentation/practice_screen.dart';
 import 'package:andaman_quiz/features/practice/presentation/topics_list_screen.dart';
 
 void main() {
@@ -832,6 +833,330 @@ void main() {
 
       // Verify Empty Subject (0 questions) is hidden on Home
       expect(find.text('Empty Subject'), findsNothing);
+    });
+  });
+
+  group('SHARED PRACTICE SUBJECTS SINGLE SOURCE OF TRUTH SUITE', () {
+    setUp(() async {
+      await LocalDatabase.instance.resetForTesting();
+      SharedPreferences.setMockInitialValues({});
+      await LocalDatabase.instance.init(force: true);
+    });
+
+    test('1. Single Source of Truth: getAvailablePracticeSubjectsForExam returns identical results for Home and Practice', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL', 'CHSL'],
+      );
+      final emptySubject = const Subject(
+        id: 'sub_empty',
+        name: 'Empty Subject',
+        hindiName: 'खाली विषय',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL', 'CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject, emptySubject]);
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Question $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // Query via single source of truth
+      final homeItems = db.getAvailablePracticeSubjectsForExam('AN CHSL');
+      final practiceItems = db.getAvailablePracticeSubjectsForExam('AN CHSL');
+
+      expect(homeItems.length, 1);
+      expect(practiceItems.length, 1);
+      expect(homeItems.first.subject.name, 'General English');
+      expect(homeItems.first.eligibleQuestionCount, 146);
+      expect(practiceItems.first.subject.name, 'General English');
+      expect(practiceItems.first.eligibleQuestionCount, 146);
+      expect(homeItems.first, equals(practiceItems.first));
+    });
+
+    test('2. Canonical Exam Normalization: All variations resolve correctly', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Question $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // Test variations of AN CHSL
+      final variations = ['AN CHSL', 'A&N CHSL', 'A & N CHSL', 'an_chsl', 'AN-CHSL', 'exam_an_chsl', 'CHSL'];
+      for (final v in variations) {
+        final res = db.getAvailablePracticeSubjectsForExam(v);
+        expect(res.isNotEmpty, isTrue, reason: 'Failed for exam variation: $v');
+        expect(res.first.eligibleQuestionCount, 146, reason: 'Count mismatch for $v');
+      }
+
+      // Test unrelated exam yields strictly 0
+      final unrelated = ['AN CGL', 'CGL', 'POLICE', 'MTS'];
+      for (final u in unrelated) {
+        final res = db.getAvailablePracticeSubjectsForExam(u);
+        expect(res.isEmpty, isTrue, reason: 'Unrelated exam $u should have 0 subjects');
+      }
+
+      // Test ALL yields 146
+      final allRes = db.getAvailablePracticeSubjectsForExam('ALL');
+      expect(allRes.length, 1);
+      expect(allRes.first.eligibleQuestionCount, 146);
+    });
+
+    test('3. Exam Switch Test: Switching between AN CHSL and AN CGL updates counts reliably', () async {
+      final db = LocalDatabase.instance;
+
+      final chslSubject = const Subject(
+        id: 'sub_chsl',
+        name: 'CHSL English',
+        hindiName: '',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      final cglSubject = const Subject(
+        id: 'sub_cgl',
+        name: 'CGL English',
+        hindiName: '',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CGL'],
+      );
+      await db.syncSubjectsFromFirestore([chslSubject, cglSubject]);
+
+      // Add 146 questions to CHSL only
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_chsl_$i',
+        subjectId: 'sub_chsl',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'CHSL Question $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // Select AN CHSL -> exactly 1 subject with 146 questions
+      final chslItems = db.getAvailablePracticeSubjectsForExam('AN CHSL');
+      expect(chslItems.length, 1);
+      expect(chslItems.first.subject.id, 'sub_chsl');
+      expect(chslItems.first.eligibleQuestionCount, 146);
+
+      // Switch to AN CGL -> 0 available subjects
+      final cglItems = db.getAvailablePracticeSubjectsForExam('AN CGL');
+      expect(cglItems.isEmpty, isTrue);
+
+      // Switch to ALL -> 1 subject with 146 questions
+      final allItems = db.getAvailablePracticeSubjectsForExam('ALL');
+      expect(allItems.length, 1);
+      expect(allItems.first.eligibleQuestionCount, 146);
+    });
+
+    test('4. Reactive Stream Notification: questionsStream triggers recomputation on sync', () async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: '',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+
+      // Initially no questions
+      expect(db.getAvailablePracticeSubjectsForExam('AN CHSL'), isEmpty);
+
+      // Listen to questionsStream
+      bool streamFired = false;
+      final sub = db.questionsStream.listen((questions) {
+        streamFired = true;
+      });
+
+      // Sync questions
+      final questions = [
+        const Question(
+          id: 'q_new_1',
+          subjectId: 'sub_eng',
+          topicId: 'top_idioms',
+          topicName: 'Idioms',
+          examTags: ['AN CHSL'],
+          questionEn: 'New Question 1',
+          questionHi: '',
+          optionsEn: ['A', 'B', 'C', 'D'],
+          optionsHi: [],
+          correctIndex: 0,
+          explanationEn: '',
+          explanationHi: '',
+          usageType: 'PRACTICE',
+          status: 'published',
+        ),
+      ];
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(streamFired, isTrue);
+
+      // Query again -> count is now 1
+      final updated = db.getAvailablePracticeSubjectsForExam('AN CHSL');
+      expect(updated.length, 1);
+      expect(updated.first.eligibleQuestionCount, 1);
+
+      await sub.cancel();
+    });
+
+    testWidgets('5. Screen Parity: HomeScreen and PracticeScreen render identical subject and count', (tester) async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+      await db.setSelectedExam('AN CHSL');
+
+      final questions = List.generate(146, (i) => Question(
+        id: 'q_$i',
+        subjectId: 'sub_eng',
+        topicId: 'top_idioms',
+        topicName: 'Idioms',
+        examTags: ['AN CHSL'],
+        questionEn: 'Meaning of idiom $i',
+        questionHi: '',
+        optionsEn: ['A', 'B', 'C', 'D'],
+        optionsHi: [],
+        correctIndex: 0,
+        explanationEn: '',
+        explanationHi: '',
+        usageType: 'PRACTICE',
+        status: 'published',
+      ));
+      await db.syncPracticeQuestionsFromFirestore(questions);
+
+      // 1. Pump HomeScreen
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('General English'), findsOneWidget);
+      expect(find.text('146 Questions'), findsOneWidget);
+      expect(find.text('No subjects available for this exam yet.'), findsNothing);
+
+      // 2. Pump PracticeScreen
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: PracticeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('General English'), findsOneWidget);
+      expect(find.text('0 Topics • 146 Questions'), findsOneWidget);
+      expect(find.text('No subjects available yet'), findsNothing);
+    });
+
+    testWidgets('6. Zero State Parity: Both screens display empty state when exam has 0 eligible questions', (tester) async {
+      final db = LocalDatabase.instance;
+
+      final subject = const Subject(
+        id: 'sub_eng',
+        name: 'General English',
+        hindiName: 'सामान्य अंग्रेजी',
+        iconName: 'book',
+        questionCount: 0,
+        examCodes: ['AN CHSL'],
+      );
+      await db.syncSubjectsFromFirestore([subject]);
+      await db.setSelectedExam('AN CGL'); // AN CGL has 0 questions
+
+      // 1. Pump HomeScreen under AN CGL
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: HomeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('No subjects available for this exam yet.'), findsOneWidget);
+      expect(find.text('General English'), findsNothing);
+
+      // 2. Pump PracticeScreen under AN CGL
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: PracticeScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('No subjects available yet'), findsOneWidget);
+      expect(find.text('General English'), findsNothing);
     });
   });
 }

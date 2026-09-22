@@ -127,19 +127,48 @@ class Subject {
     isAndamanSpecial: map['isAndamanSpecial'] ?? false,
   );
 
-  /// Flexible exam matcher: handles exact match, substring match, case-insensitivity,
-  /// alphanumeric normalization (e.g. "CGL" matches "AN CGL"), and global subjects.
+  /// Flexible exam matcher: handles exact match, canonical normalization, substring match,
+  /// case-insensitivity, alphanumeric normalization (e.g. "CGL" matches "AN CGL"), and global subjects.
   bool matchesExam(String targetExam) {
     if (targetExam.toUpperCase() == 'ALL') return true;
     if (examCodes.isEmpty) return true; // Global subject if not restricted
+    final canonTarget = Question.canonicalExamCode(targetExam);
     final normTarget = targetExam.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
     return examCodes.any((code) {
+      if (code.toUpperCase() == 'ALL') return true;
+      final canonCode = Question.canonicalExamCode(code);
+      if (canonCode.isNotEmpty && canonTarget.isNotEmpty && canonCode == canonTarget) {
+        return true;
+      }
       final normCode = code.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
       return normCode == normTarget ||
           normTarget.contains(normCode) ||
           normCode.contains(normTarget);
     });
   }
+}
+
+/// A Practice Subject bundled with its dynamic eligible question count.
+/// Serves as the canonical single source of truth across Home and Practice screens.
+class PracticeSubjectItem {
+  final Subject subject;
+  final int eligibleQuestionCount;
+
+  const PracticeSubjectItem({
+    required this.subject,
+    required this.eligibleQuestionCount,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PracticeSubjectItem &&
+          runtimeType == other.runtimeType &&
+          subject.id == other.subject.id &&
+          eligibleQuestionCount == other.eligibleQuestionCount;
+
+  @override
+  int get hashCode => subject.id.hashCode ^ eligibleQuestionCount.hashCode;
 }
 
 class Topic {
@@ -291,12 +320,35 @@ class Question {
     );
   }
 
-  /// Exam matcher: checks exact match, substring match, case-insensitivity, and alphanumeric normalization.
+  /// Canonical exam code normalizer: strips punctuation and known prefixes
+  /// ('AN', 'ANDAMAN', 'SSC', 'EXAM') to yield the fundamental exam identity
+  /// (e.g. 'AN CHSL', 'A&N CHSL', 'an_chsl', 'exam_an_chsl' -> 'CHSL').
+  static String canonicalExamCode(String raw) {
+    if (raw.trim().isEmpty) return '';
+    final upper = raw.trim().toUpperCase();
+    if (upper == 'ALL') return 'ALL';
+    var clean = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    for (final prefix in ['EXAM', 'ANDAMAN', 'SSC', 'AN']) {
+      if (clean.startsWith(prefix) && clean.length > prefix.length) {
+        clean = clean.substring(prefix.length);
+      }
+    }
+    return clean;
+  }
+
+  /// Exam matcher: checks exact match, canonical normalization, substring match,
+  /// case-insensitivity, and alphanumeric normalization.
   bool matchesExam(String targetExam) {
     if (targetExam.toUpperCase() == 'ALL') return true;
     if (examTags.isEmpty) return true; // Global question if no specific tag
+    final canonTarget = canonicalExamCode(targetExam);
     final normTarget = targetExam.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
     return examTags.any((tag) {
+      if (tag.toUpperCase() == 'ALL') return true;
+      final canonTag = canonicalExamCode(tag);
+      if (canonTag.isNotEmpty && canonTarget.isNotEmpty && canonTag == canonTarget) {
+        return true;
+      }
       final normTag = tag.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
       return normTag == normTarget ||
           normTarget.contains(normTag) ||
@@ -323,8 +375,12 @@ class Question {
     final uType = usageType.toUpperCase().trim();
     if (uType == 'MOCK' || uType == 'NOT_USED') return false;
 
-    if (examCode != null && examCode.toUpperCase() != 'ALL' && !matchesExam(examCode)) {
-      return false;
+    if (examCode != null && examCode.toUpperCase() != 'ALL') {
+      final matchesDirectly = matchesExam(examCode);
+      final matchesSubjectExam = subjectContext == null || subjectContext.matchesExam(examCode);
+      if (!matchesDirectly || !matchesSubjectExam) {
+        return false;
+      }
     }
 
     if (subjectId != null) {
@@ -538,10 +594,14 @@ class Question {
     }
 
     List<String> tags = [];
-    if (map['examTags'] != null) {
+    if (map['examTags'] != null && (map['examTags'] as List).isNotEmpty) {
       tags = List<String>.from(map['examTags']);
-    } else if (map['exam'] != null) {
-      tags = [map['exam'].toString()];
+    } else {
+      for (final key in ['exam', 'examId', 'exam_id', 'examCode', 'exam_code', 'category']) {
+        if (map[key] != null && map[key].toString().trim().isNotEmpty) {
+          tags.add(map[key].toString().trim());
+        }
+      }
     }
 
     final rawSourceExam = (map['sourceExam'] ?? map['source_exam'] ?? map['examSource'] ?? map['source_name'])?.toString().trim();

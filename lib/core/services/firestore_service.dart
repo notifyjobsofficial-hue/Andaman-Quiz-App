@@ -566,6 +566,7 @@ class FirestoreService {
 
       // Sync subject questions into local database
       await LocalDatabase.instance.syncSubjectQuestionsFromFirestore(subjectId, fetched);
+      _practiceQuestionsController.add(LocalDatabase.instance.getAllQuestions());
       return LocalDatabase.instance.getQuestionsBySubject(subjectId);
     } catch (e) {
       debugPrint('Error fetching subject questions on demand: $e');

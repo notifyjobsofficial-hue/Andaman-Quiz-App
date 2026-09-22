@@ -33,29 +33,9 @@ class HomeScreen extends ConsumerWidget {
     final streak = ref.watch(streakProvider);
     final accuracy = ref.watch(accuracyProvider);
     final totalQuestions = ref.watch(totalQuestionsCountProvider);
-    ref.watch(practiceQuestionsStreamProvider); // Rebuild dynamically on practice question changes
 
-    // Watch reactive streams — auto-rebuild when Firestore changes
-    final streamSubjects = ref.watch(subjectsStreamProvider).value;
-    final allSubjects = (streamSubjects != null && streamSubjects.isNotEmpty)
-        ? streamSubjects
-        : LocalDatabase.instance.getSubjects();
-    final subjects = selectedExam == 'ALL'
-        ? allSubjects
-        : allSubjects.where((s) => s.matchesExam(selectedExam)).toList();
-
-    // Dynamically calculate eligible question count for each subject under selectedExam
-    // Zero-question subjects are filtered out from Home to prioritize available practice content
-    final subjectsWithCount = subjects
-        .map((s) => (
-              subject: s,
-              count: LocalDatabase.instance.getSubjectPracticeQuestionCount(
-                s.id,
-                examCode: selectedExam,
-              ),
-            ))
-        .where((item) => item.count > 0)
-        .toList();
+    // Single source of truth for available Practice subjects under selectedExam
+    final practiceSubjects = ref.watch(availablePracticeSubjectsProvider(selectedExam));
 
     final streamMocks = ref.watch(mockTestsStreamProvider).value;
     final allMocks = (streamMocks != null && streamMocks.isNotEmpty)
@@ -79,6 +59,8 @@ class HomeScreen extends ConsumerWidget {
             ref.read(totalQuestionsCountProvider.notifier).refresh();
             ref.read(resumablePracticeSessionProvider.notifier).refresh();
             ref.invalidate(todayQotdProvider);
+            ref.invalidate(availablePracticeSubjectsProvider);
+            ref.invalidate(practiceQuestionsStreamProvider);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -245,7 +227,7 @@ class HomeScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (subjectsWithCount.isEmpty)
+                if (practiceSubjects.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     child: Center(
@@ -262,13 +244,13 @@ class HomeScreen extends ConsumerWidget {
                   ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: subjectsWithCount.length,
+                    itemCount: practiceSubjects.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
-                      final item = subjectsWithCount[index];
+                      final item = practiceSubjects[index];
                       return _SubjectListItem(
                         subject: item.subject,
-                        questionCount: item.count,
+                        questionCount: item.eligibleQuestionCount,
                       );
                     },
                   ),
