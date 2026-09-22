@@ -61,8 +61,27 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
   useEffect(() => {
     setFormError(null);
     if (questionToEdit) {
+      const qImg = questionToEdit.questionImageUrl || questionToEdit.question_image_url || undefined;
+      const optA = questionToEdit.optionAImageUrl || questionToEdit.option_a_image_url || questionToEdit.optionImages?.[0] || undefined;
+      const optB = questionToEdit.optionBImageUrl || questionToEdit.option_b_image_url || questionToEdit.optionImages?.[1] || undefined;
+      const optC = questionToEdit.optionCImageUrl || questionToEdit.option_c_image_url || questionToEdit.optionImages?.[2] || undefined;
+      const optD = questionToEdit.optionDImageUrl || questionToEdit.option_d_image_url || questionToEdit.optionImages?.[3] || undefined;
+      const expImg = questionToEdit.explanationImageUrl || questionToEdit.explanation_image_url || undefined;
+
       setFormData({
         ...questionToEdit,
+        questionImageUrl: qImg,
+        question_image_url: qImg,
+        optionAImageUrl: optA,
+        option_a_image_url: optA,
+        optionBImageUrl: optB,
+        option_b_image_url: optB,
+        optionCImageUrl: optC,
+        option_c_image_url: optC,
+        optionDImageUrl: optD,
+        option_d_image_url: optD,
+        explanationImageUrl: expImg,
+        explanation_image_url: expImg,
         usageType: questionToEdit.usageType || questionToEdit.usage_type || 'NOT_USED',
       });
     } else {
@@ -72,12 +91,24 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
       setFormData({
         id: `q_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         question_text: '',
+        questionImageUrl: undefined,
+        question_image_url: undefined,
         option_a_text: '',
+        optionAImageUrl: undefined,
+        option_a_image_url: undefined,
         option_b_text: '',
+        optionBImageUrl: undefined,
+        option_b_image_url: undefined,
         option_c_text: '',
+        optionCImageUrl: undefined,
+        option_c_image_url: undefined,
         option_d_text: '',
+        optionDImageUrl: undefined,
+        option_d_image_url: undefined,
         correct_answer: 'A',
         explanation_text: '',
+        explanationImageUrl: undefined,
+        explanation_image_url: undefined,
         exam: targetExam,
         subject: targetSubName,
         subjectId: defaultSubjectId || targetSubObj?.id || '',
@@ -106,28 +137,54 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
     e.preventDefault();
     setFormError(null);
 
-    if (!formData.question_text?.trim() && !formData.question_image_url?.trim()) {
+    const hasQuestion = Boolean(
+      formData.question_text?.trim() ||
+      formData.questionImageUrl?.trim() ||
+      formData.question_image_url?.trim()
+    );
+
+    if (!hasQuestion) {
       setFormError('Please provide either Question Text or a Question Image.');
       return;
     }
 
     try {
       setIsSaving(true);
+      const qImageUrl = formData.questionImageUrl?.trim() || formData.question_image_url?.trim() || undefined;
+      const optAImg = formData.optionAImageUrl?.trim() || formData.option_a_image_url?.trim() || undefined;
+      const optBImg = formData.optionBImageUrl?.trim() || formData.option_b_image_url?.trim() || undefined;
+      const optCImg = formData.optionCImageUrl?.trim() || formData.option_c_image_url?.trim() || undefined;
+      const optDImg = formData.optionDImageUrl?.trim() || formData.option_d_image_url?.trim() || undefined;
+      const expImg = formData.explanationImageUrl?.trim() || formData.explanation_image_url?.trim() || undefined;
+
+      const optImgsList = [optAImg || '', optBImg || '', optCImg || '', optDImg || ''];
+      const hasAnyOptImg = optImgsList.some(img => img.length > 0);
+
       const q: Question = {
         id: formData.id || `q_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         question_text: formData.question_text || '',
-        question_image_url: formData.question_image_url || undefined,
+        // Canonical fields
+        questionImageUrl: qImageUrl,
+        optionAImageUrl: optAImg,
+        optionBImageUrl: optBImg,
+        optionCImageUrl: optCImg,
+        optionDImageUrl: optDImg,
+        explanationImageUrl: expImg,
+        optionImages: hasAnyOptImg ? optImgsList : undefined,
+        // Dual-write legacy fields for backward compatibility
+        question_image_url: qImageUrl,
+        option_a_image_url: optAImg,
+        option_b_image_url: optBImg,
+        option_c_image_url: optCImg,
+        option_d_image_url: optDImg,
+        explanation_image_url: expImg,
+        option_images: hasAnyOptImg ? optImgsList : undefined,
         option_a_text: formData.option_a_text || '',
-        option_a_image_url: formData.option_a_image_url || undefined,
         option_b_text: formData.option_b_text || '',
-        option_b_image_url: formData.option_b_image_url || undefined,
         option_c_text: formData.option_c_text || '',
-        option_c_image_url: formData.option_c_image_url || undefined,
         option_d_text: formData.option_d_text || '',
-        option_d_image_url: formData.option_d_image_url || undefined,
         correct_answer: formData.correct_answer || 'A',
         explanation_text: formData.explanation_text || '',
-        explanation_image_url: formData.explanation_image_url || undefined,
         exam: formData.exam || 'ANCHSL',
         subject: formData.subject || 'General Awareness',
         subjectId: formData.subjectId || subjects.find(s => s.name === formData.subject)?.id,
@@ -256,8 +313,8 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
           />
           <ImageUploader
             label="Question Diagram / Image"
-            value={formData.question_image_url}
-            onChange={(url) => setFormData({ ...formData, question_image_url: url })}
+            value={formData.questionImageUrl || formData.question_image_url}
+            onChange={(url) => setFormData({ ...formData, questionImageUrl: url, question_image_url: url })}
           />
         </div>
 
@@ -310,8 +367,10 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
 
           {(['A', 'B', 'C', 'D'] as const).map((opt) => {
             const textFieldKey = `option_${opt.toLowerCase()}_text` as keyof Question;
-            const imgFieldKey = `option_${opt.toLowerCase()}_image_url` as keyof Question;
+            const canonicalImgKey = `option${opt}ImageUrl` as keyof Question;
+            const legacyImgKey = `option_${opt.toLowerCase()}_image_url` as keyof Question;
             const isCorrect = formData.correct_answer === opt;
+            const currentOptImg = (formData[canonicalImgKey] || formData[legacyImgKey]) as string | undefined;
 
             return (
               <div
@@ -346,8 +405,12 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
                     />
                     <ImageUploader
                       label={`Option ${opt} Image`}
-                      value={formData[imgFieldKey] as string}
-                      onChange={(url) => setFormData({ ...formData, [imgFieldKey]: url })}
+                      value={currentOptImg}
+                      onChange={(url) => setFormData({
+                        ...formData,
+                        [canonicalImgKey]: url,
+                        [legacyImgKey]: url,
+                      })}
                     />
                   </div>
                 </div>
@@ -368,8 +431,12 @@ export const QuestionFormModal: React.FC<QuestionFormModalProps> = ({
           />
           <ImageUploader
             label="Explanation Diagram"
-            value={formData.explanation_image_url}
-            onChange={(url) => setFormData({ ...formData, explanation_image_url: url })}
+            value={formData.explanationImageUrl || formData.explanation_image_url}
+            onChange={(url) => setFormData({
+              ...formData,
+              explanationImageUrl: url,
+              explanation_image_url: url,
+            })}
           />
         </div>
 

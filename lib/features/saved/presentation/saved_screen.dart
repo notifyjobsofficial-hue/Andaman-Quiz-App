@@ -10,6 +10,7 @@ import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/widgets/question_text_view.dart';
+import '../../../core/widgets/question_image_widget.dart';
 
 class SavedScreen extends ConsumerStatefulWidget {
   const SavedScreen({super.key});
@@ -167,6 +168,14 @@ class _QuestionListTab extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 height: 1.4,
               ),
+              if (q.hasQuestionImage) ...[
+                const SizedBox(height: 10),
+                QuestionImageWidget(
+                  imageUrl: q.questionImageUrl,
+                  maxHeight: 220,
+                  enableZoom: true,
+                ),
+              ],
               QuestionSourceMetadata(sourceInfo: q.resolvedSourceInfo),
               const SizedBox(height: 12),
               Container(

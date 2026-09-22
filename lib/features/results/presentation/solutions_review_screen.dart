@@ -6,6 +6,7 @@ import '../../../core/database/local_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_image_widget.dart';
 import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/widgets/question_text_view.dart';
 
@@ -55,41 +56,6 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
         // Fallback to local cache
       }
     }
-  }
-
-  Widget _buildNetworkImage(String url, {double? height}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.network(
-        url,
-        height: height,
-        fit: BoxFit.contain,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) => Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.withAlpha(25),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.broken_image_outlined, size: 16, color: Colors.grey),
-              SizedBox(width: 6),
-              Text('Image unavailable', style: TextStyle(fontSize: 11, color: Colors.grey)),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -240,9 +206,13 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                 height: 1.4,
                               ),
                               // Question image if available
-                              if (q.questionImageUrl != null && q.questionImageUrl!.trim().isNotEmpty) ...[
+                              if (q.hasQuestionImage) ...[
                                 const SizedBox(height: 10),
-                                _buildNetworkImage(q.questionImageUrl!.trim()),
+                                QuestionImageWidget(
+                                  imageUrl: q.questionImageUrl,
+                                  maxHeight: 240,
+                                  enableZoom: true,
+                                ),
                               ],
                               // Compact source metadata row below question text
                               QuestionSourceMetadata(sourceInfo: q.resolvedSourceInfo),
@@ -327,7 +297,13 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                       ),
                                       if (hasOptionImg) ...[
                                         const SizedBox(height: 6),
-                                        _buildNetworkImage(q.optionImages![optIdx].trim(), height: 90),
+                                        QuestionImageWidget(
+                                          imageUrl: q.optionImageAt(optIdx),
+                                          maxHeight: 90,
+                                          borderRadius: 6,
+                                          enableZoom: false,
+                                          isOption: true,
+                                        ),
                                       ],
                                     ],
                                   ),
@@ -362,7 +338,11 @@ class _SolutionsReviewScreenState extends ConsumerState<SolutionsReviewScreen> {
                                     // Explanation image if available
                                     if (q.explanationImageUrl != null && q.explanationImageUrl!.trim().isNotEmpty) ...[
                                       const SizedBox(height: 8),
-                                      _buildNetworkImage(q.explanationImageUrl!.trim()),
+                                      QuestionImageWidget(
+                                        imageUrl: q.explanationImageUrl,
+                                        maxHeight: 180,
+                                        enableZoom: true,
+                                      ),
                                     ],
                                   ],
                                 ),

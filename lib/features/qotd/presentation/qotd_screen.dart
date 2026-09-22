@@ -10,6 +10,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_image_widget.dart';
 import '../../../core/widgets/question_text_view.dart';
 
 class QotdScreen extends ConsumerStatefulWidget {
@@ -162,30 +163,6 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
         LocalDatabase.instance.recordWrongQuestion(_question!.id);
       }
     }
-  }
-
-  Widget _buildNetworkImage(String url, {double? maxHeight}) {
-    if (url.trim().isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          url,
-          fit: BoxFit.contain,
-          height: maxHeight,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              height: maxHeight ?? 140,
-              color: Colors.black12,
-              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-        ),
-      ),
-    );
   }
 
   @override
@@ -404,8 +381,11 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                       fontWeight: FontWeight.w600,
                       height: 1.45,
                     ),
-                    if (question.questionImageUrl != null && question.questionImageUrl!.isNotEmpty)
-                      _buildNetworkImage(question.questionImageUrl!, maxHeight: 180),
+                    QuestionImageWidget(
+                      imageUrl: question.questionImageUrl,
+                      maxHeight: 200,
+                      semanticLabel: 'Question diagram',
+                    ),
                   ],
                 ),
               ),
@@ -494,8 +474,11 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                                     fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                                   ),
                                 ),
-                                if (optImg != null && optImg.isNotEmpty)
-                                  _buildNetworkImage(optImg, maxHeight: 80),
+                                QuestionImageWidget(
+                                  imageUrl: optImg,
+                                  maxHeight: 90,
+                                  semanticLabel: 'Option $optionLabel image',
+                                ),
                               ],
                             ),
                           ),
@@ -576,8 +559,11 @@ class _QotdScreenState extends ConsumerState<QotdScreen> {
                         explanation,
                         style: const TextStyle(fontSize: 14, height: 1.5),
                       ),
-                      if (question.explanationImageUrl != null && question.explanationImageUrl!.isNotEmpty)
-                        _buildNetworkImage(question.explanationImageUrl!, maxHeight: 180),
+                      QuestionImageWidget(
+                        imageUrl: question.explanationImageUrl,
+                        maxHeight: 180,
+                        semanticLabel: 'Explanation diagram',
+                      ),
                     ],
                   ),
                 ),

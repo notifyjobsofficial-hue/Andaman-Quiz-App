@@ -26,6 +26,8 @@ import {
   Layers,
   ExternalLink,
   ShieldAlert,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import {
   fetchQuestions,
@@ -38,6 +40,7 @@ import {
   fetchLiveTests,
   saveQuestion,
 } from '../firebase/firestore';
+import { uploadImage } from '../firebase/storage';
 import { Question, Exam, Subject, Topic, MockTest, LiveTestItem, QuestionUsageSummary } from '../types';
 import { Badge } from '../components/common/Badge';
 import { QuestionPreviewModal } from '../components/questions/QuestionPreviewModal';
@@ -136,6 +139,60 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
       console.error('QuestionBank loadData error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Check if Biology question q_1790045200762_l4lovg has the indirect kommodo URL
+  const biologyQuestionToMigrate = useMemo(() => {
+    return questions.find(
+      (q) =>
+        q.id === 'q_1790045200762_l4lovg' &&
+        ((q.questionImageUrl && q.questionImageUrl.includes('kommodo.ai')) ||
+          (q.question_image_url && q.question_image_url.includes('kommodo.ai')))
+    );
+  }, [questions]);
+
+  const [isMigratingBio, setIsMigratingBio] = useState(false);
+  const [bioMigrationSuccess, setBioMigrationSuccess] = useState<string | null>(null);
+
+  const handleMigrateBiologyImage = async () => {
+    if (!biologyQuestionToMigrate) return;
+    setIsMigratingBio(true);
+    setBioMigrationSuccess(null);
+    try {
+      let blob: Blob;
+      try {
+        const res = await fetch('/q_1790045200762_l4lovg_diagram.webp');
+        if (!res.ok) throw new Error('Local asset HTTP ' + res.status);
+        blob = await res.blob();
+      } catch {
+        const res = await fetch(
+          'https://plain-apac-prod-public.komododecks.com/202609/22/dOHQG0PQE1dj3tAxOSCg/image.webp'
+        );
+        if (!res.ok) throw new Error('Direct image fetch HTTP ' + res.status);
+        blob = await res.blob();
+      }
+
+      const file = new File([blob], 'q_1790045200762_l4lovg_diagram.webp', { type: 'image/webp' });
+      const downloadUrl = await uploadImage(file, 'question_images');
+
+      const updatedQ: Question = {
+        ...biologyQuestionToMigrate,
+        questionImageUrl: downloadUrl,
+        question_image_url: downloadUrl,
+        updated_at: new Date().toISOString(),
+      };
+      await saveQuestion(updatedQ);
+
+      setQuestions((prev) => prev.map((q) => (q.id === updatedQ.id ? updatedQ : q)));
+      setBioMigrationSuccess(
+        `Biology question diagram migrated successfully to Firebase Storage: ${downloadUrl}`
+      );
+    } catch (err: any) {
+      console.error('Migration failed:', err);
+      alert('Failed to migrate image to Firebase Storage: ' + (err.message || String(err)));
+    } finally {
+      setIsMigratingBio(false);
     }
   };
 
@@ -242,11 +299,17 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
 
       // 3. Image / Text Type
       const hasImages = !!(
+        q.questionImageUrl ||
         q.question_image_url ||
+        q.optionAImageUrl ||
         q.option_a_image_url ||
+        q.optionBImageUrl ||
         q.option_b_image_url ||
+        q.optionCImageUrl ||
         q.option_c_image_url ||
-        q.option_d_image_url
+        q.optionDImageUrl ||
+        q.option_d_image_url ||
+        (q.optionImages && q.optionImages.some((img) => img && img.trim().length > 0))
       );
       if (typeFilter === 'IMAGE_ONLY' && !hasImages) return false;
       if (typeFilter === 'TEXT_ONLY' && hasImages) return false;
@@ -566,6 +629,57 @@ export const QuestionBank: React.FC<QuestionBankProps> = ({ mode = 'all', onNavi
           </>
         )}
       </div>
+
+      {/* Biology Question Migration Banner */}
+      {biologyQuestionToMigrate && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-amber-900 shadow-xs">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="text-amber-600 shrink-0" size={22} />
+            <div>
+              <p className="font-bold text-sm text-amber-950">
+                Action Required: Biology Question ({biologyQuestionToMigrate.id}) Image Migration
+              </p>
+              <p className="text-amber-800 mt-0.5">
+                This question uses a third-party webpage link (<code className="text-amber-900 bg-amber-100 px-1 py-0.5 rounded">kommodo.ai</code>) causing preview & student device errors. Click below to permanently migrate the image binary to Firebase Storage.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={isMigratingBio}
+            onClick={handleMigrateBiologyImage}
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition disabled:opacity-50 flex items-center gap-2 shadow-xs"
+          >
+            {isMigratingBio ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                <span>Uploading to Firebase Storage...</span>
+              </>
+            ) : (
+              <>
+                <Upload size={14} />
+                <span>Migrate to Firebase Storage</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {bioMigrationSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 flex items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span className="font-medium">{bioMigrationSuccess}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBioMigrationSuccess(null)}
+            className="text-emerald-700 hover:text-emerald-900 font-bold px-2 py-0.5"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Filter Toolbar Container */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3.5">

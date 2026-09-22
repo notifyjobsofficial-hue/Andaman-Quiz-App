@@ -9,6 +9,7 @@ import '../../../core/providers/app_providers.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/question_image_widget.dart';
 import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/widgets/question_text_view.dart';
 import '../../../core/ads/ad_service.dart';
@@ -276,28 +277,12 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                               fontWeight: FontWeight.w600,
                               height: 1.45,
                             ),
-                          if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
+                          if (currentQ.hasQuestionImage) ...[
                             if (questionText.isNotEmpty) const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                currentQ.questionImageUrl!,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                                      SizedBox(width: 8),
-                                      Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            QuestionImageWidget(
+                              imageUrl: currentQ.questionImageUrl,
+                              maxHeight: 250,
+                              enableZoom: true,
                             ),
                           ],
                           // Compact source metadata row below question text
@@ -424,15 +409,13 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                                           ),
                                         ),
                                       if (hasOptionImg) ...[
-                                        if (optionText.isNotEmpty) const SizedBox(height: 6),
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(6),
-                                          child: Image.network(
-                                            currentQ.optionImages![index],
-                                            height: 70,
-                                            fit: BoxFit.contain,
-                                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                                          ),
+                                        if (optionText.isNotEmpty) const SizedBox(height: 8),
+                                        QuestionImageWidget(
+                                          imageUrl: currentQ.optionImageAt(index),
+                                          maxHeight: 85,
+                                          borderRadius: 6,
+                                          enableZoom: false,
+                                          isOption: true,
                                         ),
                                       ],
                                     ],
@@ -477,6 +460,14 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
                                 color: isDark ? AppColors.textDark : AppColors.textLight,
                               ),
                             ),
+                            if (currentQ.explanationImageUrl != null && currentQ.explanationImageUrl!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              QuestionImageWidget(
+                                imageUrl: currentQ.explanationImageUrl,
+                                maxHeight: 180,
+                                enableZoom: true,
+                              ),
+                            ],
                           ],
                         ),
                       ),

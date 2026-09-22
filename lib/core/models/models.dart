@@ -508,6 +508,33 @@ class Question {
   /// Resolved source metadata row (genuine structured fields only; null if absent).
   String? get resolvedSourceInfo => formattedSourceInfo;
 
+  /// Whether question diagram image is present
+  bool get hasQuestionImage => questionImageUrl != null && questionImageUrl!.trim().isNotEmpty;
+
+  /// Whether an option has a non-empty image URL
+  bool hasOptionImage(int index) {
+    if (optionImages == null) return false;
+    if (index < 0 || index >= optionImages!.length) return false;
+    return optionImages![index].trim().isNotEmpty;
+  }
+
+  /// Option image URL at given index if available
+  String? optionImageAt(int index) {
+    if (!hasOptionImage(index)) return null;
+    return optionImages![index].trim();
+  }
+
+  /// Whether any option contains an image
+  bool get hasAnyOptionImage {
+    if (optionImages == null || optionImages!.isEmpty) return false;
+    return optionImages!.any((img) => img.trim().isNotEmpty);
+  }
+
+  String? get optionAImageUrl => optionImageAt(0);
+  String? get optionBImageUrl => optionImageAt(1);
+  String? get optionCImageUrl => optionImageAt(2);
+  String? get optionDImageUrl => optionImageAt(3);
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'subjectId': subjectId,
@@ -534,9 +561,34 @@ class Question {
     if (subjectName != null && subjectName!.isNotEmpty) 'subject': subjectName,
     'difficulty': difficulty,
     'isBookmarked': isBookmarked ? 1 : 0,
-    if (questionImageUrl != null && questionImageUrl!.isNotEmpty) 'question_image_url': questionImageUrl,
-    if (optionImages != null && optionImages!.isNotEmpty) 'option_images': optionImages,
-    if (explanationImageUrl != null && explanationImageUrl!.isNotEmpty) 'explanation_image_url': explanationImageUrl,
+    if (questionImageUrl != null && questionImageUrl!.isNotEmpty) ...{
+      'questionImageUrl': questionImageUrl,
+      'question_image_url': questionImageUrl,
+    },
+    if (optionImages != null && optionImages!.isNotEmpty) ...{
+      'optionImages': optionImages,
+      'option_images': optionImages,
+      if (optionImages!.isNotEmpty && optionImages![0].isNotEmpty) ...{
+        'optionAImageUrl': optionImages![0],
+        'option_a_image_url': optionImages![0],
+      },
+      if (optionImages!.length > 1 && optionImages![1].isNotEmpty) ...{
+        'optionBImageUrl': optionImages![1],
+        'option_b_image_url': optionImages![1],
+      },
+      if (optionImages!.length > 2 && optionImages![2].isNotEmpty) ...{
+        'optionCImageUrl': optionImages![2],
+        'option_c_image_url': optionImages![2],
+      },
+      if (optionImages!.length > 3 && optionImages![3].isNotEmpty) ...{
+        'optionDImageUrl': optionImages![3],
+        'option_d_image_url': optionImages![3],
+      },
+    },
+    if (explanationImageUrl != null && explanationImageUrl!.isNotEmpty) ...{
+      'explanationImageUrl': explanationImageUrl,
+      'explanation_image_url': explanationImageUrl,
+    },
     'positive_marks': positiveMarks,
     'negative_marks': negativeMarks,
     'usageType': usageType,
@@ -560,21 +612,24 @@ class Question {
       ];
     }
 
+    final optA = map['optionAImageUrl'] ?? map['option_a_image_url'];
+    final optB = map['optionBImageUrl'] ?? map['option_b_image_url'];
+    final optC = map['optionCImageUrl'] ?? map['option_c_image_url'];
+    final optD = map['optionDImageUrl'] ?? map['option_d_image_url'];
+
     List<String>? optImgs;
-    if (map['option_images'] != null) {
-      optImgs = List<String>.from(map['option_images']);
+    if (optA != null || optB != null || optC != null || optD != null) {
+      final arr = (map['optionImages'] as List?) ?? (map['option_images'] as List?);
+      optImgs = [
+        optA?.toString() ?? (arr != null && arr.isNotEmpty ? arr[0]?.toString() ?? '' : ''),
+        optB?.toString() ?? (arr != null && arr.length > 1 ? arr[1]?.toString() ?? '' : ''),
+        optC?.toString() ?? (arr != null && arr.length > 2 ? arr[2]?.toString() ?? '' : ''),
+        optD?.toString() ?? (arr != null && arr.length > 3 ? arr[3]?.toString() ?? '' : ''),
+      ];
     } else if (map['optionImages'] != null) {
       optImgs = List<String>.from(map['optionImages']);
-    } else if (map['option_a_image_url'] != null ||
-        map['option_b_image_url'] != null ||
-        map['option_c_image_url'] != null ||
-        map['option_d_image_url'] != null) {
-      optImgs = [
-        map['option_a_image_url']?.toString() ?? '',
-        map['option_b_image_url']?.toString() ?? '',
-        map['option_c_image_url']?.toString() ?? '',
-        map['option_d_image_url']?.toString() ?? '',
-      ];
+    } else if (map['option_images'] != null) {
+      optImgs = List<String>.from(map['option_images']);
     }
 
     int cIdx = 0;
@@ -635,9 +690,9 @@ class Question {
       subjectName: rawSubjectName,
       difficulty: map['difficulty'] ?? 'Medium',
       isBookmarked: map['isBookmarked'] == 1 || map['isBookmarked'] == true,
-      questionImageUrl: map['question_image_url'] ?? map['questionImageUrl'],
+      questionImageUrl: map['questionImageUrl'] ?? map['question_image_url'] ?? map['imageUrl'],
       optionImages: optImgs,
-      explanationImageUrl: map['explanation_image_url'] ?? map['explanationImageUrl'],
+      explanationImageUrl: map['explanationImageUrl'] ?? map['explanation_image_url'],
       positiveMarks: (map['positive_marks'] as num?)?.toDouble() ?? 2.0,
       negativeMarks: (map['negative_marks'] as num?)?.toDouble() ?? 0.5,
       usageType: () {

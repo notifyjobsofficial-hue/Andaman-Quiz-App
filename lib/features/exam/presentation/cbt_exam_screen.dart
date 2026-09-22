@@ -13,6 +13,7 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/widgets/question_text_view.dart';
+import '../../../core/widgets/question_image_widget.dart';
 import '../../../core/services/firestore_service.dart';
 import '../../../core/ads/ad_service.dart';
 
@@ -748,32 +749,12 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                         fontWeight: FontWeight.w600,
                                         height: 1.45,
                                       ),
-                                    if (currentQ.questionImageUrl != null && currentQ.questionImageUrl!.isNotEmpty) ...[
+                                    if (currentQ.hasQuestionImage) ...[
                                       if (questionText.isNotEmpty) const SizedBox(height: 12),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          currentQ.questionImageUrl!,
-                                          fit: BoxFit.contain,
-                                          errorBuilder: (context, error, stackTrace) => Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            child: const Row(
-                                              children: [
-                                                Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                                                SizedBox(width: 8),
-                                                Text('Image could not be loaded', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                              ],
-                                            ),
-                                          ),
-                                          loadingBuilder: (context, child, progress) {
-                                            if (progress == null) return child;
-                                            return const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)));
-                                          },
-                                        ),
+                                      QuestionImageWidget(
+                                        imageUrl: currentQ.questionImageUrl,
+                                        maxHeight: 250,
+                                        enableZoom: true,
                                       ),
                                     ],
                                     // Compact source metadata row below question text
@@ -847,14 +828,12 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
                                                   ),
                                                 if (hasOptionImg) ...[
                                                   if (optionText.isNotEmpty) const SizedBox(height: 8),
-                                                  ClipRRect(
-                                                    borderRadius: BorderRadius.circular(6),
-                                                    child: Image.network(
-                                                      currentQ.optionImages![index],
-                                                      height: 90,
-                                                      fit: BoxFit.contain,
-                                                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                                                    ),
+                                                  QuestionImageWidget(
+                                                    imageUrl: currentQ.optionImageAt(index),
+                                                    maxHeight: 90,
+                                                    borderRadius: 6,
+                                                    enableZoom: false,
+                                                    isOption: true,
                                                   ),
                                                 ],
                                               ],
