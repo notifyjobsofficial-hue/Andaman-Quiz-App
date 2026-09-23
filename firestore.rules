@@ -121,31 +121,60 @@ service cloud.firestore {
     // 14. Practice Topic Stats & Sessions (Atomic session counter & audit)
     // NOTE & SECURITY DISCLOSURE:
     // Because student app usage is completely login-free and unauthenticated,
-    // Firestore rules constrain the payload invariants (only allowing +1 increments and
+    // Firestore rules constrain the payload invariants (only allowing +1 increments coupled with
     // immutable session document creation) but cannot cryptographically prove human identity
     // or prevent fabricated requests without a verified authentication/attestation layer.
     match /practice_topic_stats/{topicId} {
       allow read: if true;
-      // Allow create only if initial totalSessions is 1
+
+      // Allow create only if initial totalSessions is 1 and created atomically with its session doc
       allow create: if request.resource.data.topicId == topicId
         && request.resource.data.totalSessions == 1
-        && request.resource.data.updatedAt is timestamp;
-      // Allow update only if totalSessions increments by exactly 1
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastSessionId is string
+        && request.resource.data.lastSessionId.size() > 0
+        && request.resource.data.lastSessionId.size() < 100
+        && request.resource.data.keys().hasOnly(['topicId', 'totalSessions', 'updatedAt', 'lastSessionId'])
+        && !exists(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId))
+        && existsAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId))
+        && getAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId)).data.sessionId == request.resource.data.lastSessionId
+        && getAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId)).data.topicId == topicId;
+
+      // Allow update only if totalSessions increments by exactly 1 and coupled with new session doc
       allow update: if isAdmin() || (
         request.resource.data.topicId == topicId
         && request.resource.data.totalSessions == resource.data.totalSessions + 1
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastSessionId is string
+        && request.resource.data.lastSessionId.size() > 0
+        && request.resource.data.lastSessionId.size() < 100
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalSessions', 'updatedAt', 'lastSessionId'])
+        && !exists(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId))
+        && existsAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId))
+        && getAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId)).data.sessionId == request.resource.data.lastSessionId
+        && getAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)/sessions/$(request.resource.data.lastSessionId)).data.topicId == topicId
       );
+
       allow delete: if isAdmin();
 
       // Session event subcollection (immutable audit / deduplication)
       match /sessions/{sessionId} {
-        allow read: if true;
-        // Create only once per unique sessionId; cannot be modified or deleted by students
+        // PRIVACY HARDENING: Student app does not read individual session audits or installation UUIDs
+        allow read: if isAdmin();
+
+        // Create only once per unique sessionId; strictly validate fields and couple with parent counter write
         allow create: if request.resource.data.sessionId == sessionId
+          && request.resource.data.sessionId.size() > 0
+          && request.resource.data.sessionId.size() < 100
           && request.resource.data.topicId == topicId
           && request.resource.data.installationId is string
-          && request.resource.data.createdAt is timestamp;
+          && request.resource.data.installationId.size() > 0
+          && request.resource.data.installationId.size() < 100
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.keys().hasOnly(['sessionId', 'topicId', 'installationId', 'createdAt'])
+          && existsAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId))
+          && getAfter(/databases/$(database)/documents/practice_topic_stats/$(topicId)).data.lastSessionId == sessionId;
+
         allow update, delete: if isAdmin();
       }
     }
