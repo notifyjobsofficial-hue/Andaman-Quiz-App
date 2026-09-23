@@ -490,3 +490,29 @@ export async function fetchRecentActivities(count: number = 10): Promise<AdminAc
     return [];
   }
 }
+
+export interface TopicPracticeStats {
+  topicId: string;
+  totalSessions: number;
+  updatedAt?: any;
+}
+
+export async function fetchPracticeTopicStats(): Promise<Record<string, TopicPracticeStats>> {
+  try {
+    const snap = await getDocs(collection(db, 'practice_topic_stats'));
+    const result: Record<string, TopicPracticeStats> = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      result[d.id] = {
+        topicId: d.id,
+        totalSessions: typeof data.totalSessions === 'number' ? data.totalSessions : 0,
+        updatedAt: data.updatedAt,
+      };
+    }
+    return result;
+  } catch (err) {
+    console.warn('Error fetching practice_topic_stats:', err);
+    return {};
+  }
+}
+

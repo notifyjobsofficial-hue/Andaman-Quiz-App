@@ -1490,6 +1490,8 @@ class TopicPracticeSession {
   final int totalQuestions;
   final DateTime updatedAt;
 
+  final String? practiceSessionId;
+
   const TopicPracticeSession({
     required this.topicId,
     required this.topicName,
@@ -1502,6 +1504,7 @@ class TopicPracticeSession {
     required this.correctCount,
     required this.totalQuestions,
     required this.updatedAt,
+    this.practiceSessionId,
   });
 
   int get attemptedCount => attemptedQuestionIds.length;
@@ -1527,6 +1530,23 @@ class TopicPracticeSession {
     return 'AN ${code.toUpperCase()}';
   }
 
+  /// Formats practice sessions count compactly (e.g. "327 practiced", "1.2K practiced")
+  static String formatPracticeCount(int count) {
+    if (count <= 0) return '0 practiced';
+    if (count < 1000) return '$count practiced';
+    if (count < 10000) {
+      final val = count / 1000.0;
+      final formatted = val.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+      return '${formatted}K practiced';
+    }
+    if (count < 1000000) {
+      final val = (count / 1000.0).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+      return '${val}K practiced';
+    }
+    final val = (count / 1000000.0).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+    return '${val}M practiced';
+  }
+
   TopicPracticeSession copyWith({
     String? topicId,
     String? topicName,
@@ -1539,6 +1559,7 @@ class TopicPracticeSession {
     int? correctCount,
     int? totalQuestions,
     DateTime? updatedAt,
+    String? practiceSessionId,
   }) {
     return TopicPracticeSession(
       topicId: topicId ?? this.topicId,
@@ -1552,6 +1573,7 @@ class TopicPracticeSession {
       correctCount: correctCount ?? this.correctCount,
       totalQuestions: totalQuestions ?? this.totalQuestions,
       updatedAt: updatedAt ?? this.updatedAt,
+      practiceSessionId: practiceSessionId ?? this.practiceSessionId,
     );
   }
 
@@ -1567,6 +1589,7 @@ class TopicPracticeSession {
     'correctCount': correctCount,
     'totalQuestions': totalQuestions,
     'updatedAt': updatedAt.toIso8601String(),
+    if (practiceSessionId != null) 'practiceSessionId': practiceSessionId,
   };
 
   factory TopicPracticeSession.fromMap(Map<String, dynamic> map) => TopicPracticeSession(
@@ -1581,6 +1604,7 @@ class TopicPracticeSession {
     correctCount: (map['correctCount'] as num?)?.toInt() ?? 0,
     totalQuestions: (map['totalQuestions'] as num?)?.toInt() ?? 0,
     updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) ?? DateTime.now() : DateTime.now(),
+    practiceSessionId: map['practiceSessionId'],
   );
 }
 

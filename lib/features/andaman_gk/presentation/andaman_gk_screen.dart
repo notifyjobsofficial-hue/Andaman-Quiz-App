@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
@@ -8,6 +7,7 @@ import '../../../core/models/models.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/widgets/animated_pressable.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../practice/presentation/widgets/practice_start_bottom_sheet.dart';
 
 class AndamanGkScreen extends ConsumerStatefulWidget {
   const AndamanGkScreen({super.key});
@@ -200,9 +200,11 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
                         final accuracy = LocalDatabase.instance.getTopicAccuracy(topic.id);
                         final progress = questionCount > 0 ? (attemptedCount / questionCount).clamp(0.0, 1.0) : 0.0;
 
+                        final sessionCount = LocalDatabase.instance.getTopicSessionCount(topic.id);
+
                         return AnimatedPressable(
                           onTap: () async {
-                            await context.push('/practice/mcq/${topic.id}');
+                            await openPracticeTopic(context, topic);
                             if (mounted) setState(() {});
                           },
                           child: AppCard(
@@ -238,12 +240,45 @@ class _AndamanGkScreenState extends ConsumerState<AndamanGkScreen> {
                                             ),
                                           ),
                                           const SizedBox(height: 2),
-                                          Text(
-                                            '$questionCount Questions • ${accuracy.toInt()}% Accuracy',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
-                                            ),
+                                          Row(
+                                            children: [
+                                              Text(
+                                                '$questionCount Questions',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                                ),
+                                              ),
+                                              Text(
+                                                ' • ',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                                ),
+                                              ),
+                                              Icon(
+                                                Icons.remove_red_eye_outlined,
+                                                size: 13,
+                                                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                TopicPracticeSession.formatPracticeCount(sessionCount),
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                                ),
+                                              ),
+                                              if (attemptedCount > 0) ...[
+                                                Text(
+                                                  ' • ${accuracy.toInt()}%',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
                                           ),
                                         ],
                                       ),

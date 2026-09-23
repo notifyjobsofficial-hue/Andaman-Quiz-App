@@ -118,7 +118,39 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
-    // 14. Admins collection:
+    // 14. Practice Topic Stats & Sessions (Atomic session counter & audit)
+    // NOTE & SECURITY DISCLOSURE:
+    // Because student app usage is completely login-free and unauthenticated,
+    // Firestore rules constrain the payload invariants (only allowing +1 increments and
+    // immutable session document creation) but cannot cryptographically prove human identity
+    // or prevent fabricated requests without a verified authentication/attestation layer.
+    match /practice_topic_stats/{topicId} {
+      allow read: if true;
+      // Allow create only if initial totalSessions is 1
+      allow create: if request.resource.data.topicId == topicId
+        && request.resource.data.totalSessions == 1
+        && request.resource.data.updatedAt is timestamp;
+      // Allow update only if totalSessions increments by exactly 1
+      allow update: if isAdmin() || (
+        request.resource.data.topicId == topicId
+        && request.resource.data.totalSessions == resource.data.totalSessions + 1
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['totalSessions', 'updatedAt', 'lastSessionId'])
+      );
+      allow delete: if isAdmin();
+
+      // Session event subcollection (immutable audit / deduplication)
+      match /sessions/{sessionId} {
+        allow read: if true;
+        // Create only once per unique sessionId; cannot be modified or deleted by students
+        allow create: if request.resource.data.sessionId == sessionId
+          && request.resource.data.topicId == topicId
+          && request.resource.data.installationId is string
+          && request.resource.data.createdAt is timestamp;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // 15. Admins collection:
     // Any authenticated user can read their own admin document (admins/{uid}) to verify role on login.
     // Full roster listing and all admin modifications are strictly restricted to verified administrators.
     match /admins/{uid} {

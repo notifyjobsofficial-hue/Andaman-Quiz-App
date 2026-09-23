@@ -30,6 +30,10 @@ class LocalDatabase {
   final List<LiveTestItem> _liveTests = [];
   final Map<String, QuestionOfTheDay> _cachedQotdByDate = {};
   final Map<String, TopicPracticeSession> _practiceSessions = {};
+  final Map<String, int> _topicSessionCounts = {};
+  final Set<String> _syncedSessionIds = {};
+  final List<Map<String, dynamic>> _pendingPracticeSessions = [];
+  String? _installationId;
   RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
   bool _isInitialized = false;
@@ -58,6 +62,10 @@ class LocalDatabase {
     _liveTests.clear();
     _cachedQotdByDate.clear();
     _practiceSessions.clear();
+    _topicSessionCounts.clear();
+    _syncedSessionIds.clear();
+    _pendingPracticeSessions.clear();
+    _installationId = null;
     _questions.clear();
     _categories.clear();
     _exams.clear();
@@ -285,6 +293,49 @@ class LocalDatabase {
     } else {
       _practiceSessions.clear();
     }
+
+    // 10. Anonymous Installation UUID (No hardware / IMEI / ad tracking)
+    _installationId = prefs.getString('client_installation_uuid');
+    if (_installationId == null || _installationId!.isEmpty) {
+      _installationId = 'inst_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (DateTime.now().microsecondsSinceEpoch % 9000))}';
+      await prefs.setString('client_installation_uuid', _installationId!);
+    }
+
+    // 11. Cached Global Practice Topic Session Counts
+    final countsRaw = prefs.getString('db_topic_session_counts');
+    if (countsRaw != null && countsRaw.isNotEmpty) {
+      try {
+        final map = jsonDecode(countsRaw) as Map<String, dynamic>;
+        _topicSessionCounts.clear();
+        for (final entry in map.entries) {
+          _topicSessionCounts[entry.key] = (entry.value as num).toInt();
+        }
+      } catch (_) {
+        _topicSessionCounts.clear();
+      }
+    } else {
+      _topicSessionCounts.clear();
+    }
+
+    // 12. Synced & Pending Practice Sessions
+    final syncedList = prefs.getStringList('synced_practice_session_ids') ?? [];
+    _syncedSessionIds.clear();
+    _syncedSessionIds.addAll(syncedList);
+
+    final pendingRaw = prefs.getString('pending_practice_sessions');
+    if (pendingRaw != null && pendingRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(pendingRaw) as List;
+        _pendingPracticeSessions.clear();
+        for (final item in list) {
+          _pendingPracticeSessions.add(Map<String, dynamic>.from(item));
+        }
+      } catch (_) {
+        _pendingPracticeSessions.clear();
+      }
+    } else {
+      _pendingPracticeSessions.clear();
+    }
   }
 
   Future<void> _persistQuestions() async {
@@ -447,6 +498,7 @@ class LocalDatabase {
   }
 
   bool isBookmarked(String questionId) => _bookmarkedIds.contains(questionId);
+  bool isWrongQuestion(String questionId) => _wrongQuestionIds.contains(questionId);
 
   List<Question> getBookmarkedQuestions() {
     return _questions.where((q) => _bookmarkedIds.contains(q.id)).toList();
@@ -663,6 +715,109 @@ class LocalDatabase {
       return lastIdx;
     }
     return 0;
+  }
+
+  /// Returns the 0-based index of the first currently unattempted question in [questions]
+  /// using question IDs. Returns -1 if all questions in [questions] are already attempted.
+  int getFirstUnattemptedQuestionIndex(String topicId, List<Question> questions) {
+    if (questions.isEmpty) return 0;
+    final attemptedIds = getTopicAttemptedQids(topicId).toSet();
+    if (attemptedIds.isEmpty) return 0;
+    return questions.indexWhere((q) => !attemptedIds.contains(q.id));
+  }
+
+  /// Checks if all questions for a topic have been attempted based on question IDs.
+  bool isTopicPracticeCompleted(String topicId, List<Question> questions) {
+    if (questions.isEmpty) return false;
+    final attemptedIds = getTopicAttemptedQids(topicId).toSet();
+    if (attemptedIds.isEmpty) return false;
+    return questions.every((q) => attemptedIds.contains(q.id));
+  }
+
+  /// Resets all local progress for a specific topic (answers, attempted questions, last index)
+  /// without affecting Question Bank, Bookmarks, Wrong Questions, or Mock/Live attempts.
+  Future<void> resetTopicPracticeProgress(String topicId) async {
+    final tid = topicId.trim();
+    await _prefs?.remove('user_topic_${tid}_last_index');
+    await _prefs?.remove('user_topic_${tid}_attempted_qids');
+    await _prefs?.remove('user_topic_${tid}_answers');
+    await _prefs?.remove('user_topic_${tid}_correct_count');
+    _practiceSessions.remove(tid);
+    await _persistPracticeSessions();
+  }
+
+  // --- Practice Analytics & Global Session Counting ---
+
+  /// Anonymous installation UUID (stable per app install, no hardware/ad identifiers)
+  String get installationId {
+    if (_installationId != null && _installationId!.isNotEmpty) {
+      return _installationId!;
+    }
+    _installationId = _prefs?.getString('client_installation_uuid');
+    if (_installationId == null || _installationId!.isEmpty) {
+      _installationId = 'inst_${DateTime.now().millisecondsSinceEpoch}_${(1000 + (DateTime.now().microsecondsSinceEpoch % 9000))}';
+      _prefs?.setString('client_installation_uuid', _installationId!);
+    }
+    return _installationId!;
+  }
+
+  /// Retrieves the cached global practice session count for a topic
+  int getTopicSessionCount(String topicId) => _topicSessionCounts[topicId.trim()] ?? 0;
+
+  /// Batch updates cached topic session counts
+  Future<void> setTopicSessionCounts(Map<String, int> counts) async {
+    _topicSessionCounts.addAll(counts);
+    await _prefs?.setString('db_topic_session_counts', jsonEncode(_topicSessionCounts));
+  }
+
+  /// Updates single cached topic session count
+  Future<void> updateTopicSessionCount(String topicId, int count) async {
+    _topicSessionCounts[topicId.trim()] = count;
+    await _prefs?.setString('db_topic_session_counts', jsonEncode(_topicSessionCounts));
+  }
+
+  /// Checks if a practice session ID has already been recorded locally
+  bool isPracticeSessionRecorded(String sessionId) {
+    final sid = sessionId.trim();
+    if (_syncedSessionIds.contains(sid)) return true;
+    return _pendingPracticeSessions.any((s) => s['sessionId'] == sid);
+  }
+
+  /// Enqueues a new practice session for atomic Firestore sync
+  Future<void> enqueuePracticeSession({
+    required String topicId,
+    required String sessionId,
+  }) async {
+    final tid = topicId.trim();
+    final sid = sessionId.trim();
+    if (sid.isEmpty || isPracticeSessionRecorded(sid)) return;
+
+    final event = {
+      'topicId': tid,
+      'sessionId': sid,
+      'installationId': installationId,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    _pendingPracticeSessions.add(event);
+    await _prefs?.setString('pending_practice_sessions', jsonEncode(_pendingPracticeSessions));
+
+    // Optimistically increment locally so UI updates with 0ms lag
+    final current = getTopicSessionCount(tid);
+    _topicSessionCounts[tid] = current + 1;
+    await _prefs?.setString('db_topic_session_counts', jsonEncode(_topicSessionCounts));
+  }
+
+  /// Retrieves unmodifiable list of pending offline practice sessions
+  List<Map<String, dynamic>> getPendingPracticeSessions() =>
+      List.unmodifiable(_pendingPracticeSessions);
+
+  /// Marks a practice session as successfully synced to Firestore
+  Future<void> markPracticeSessionSynced(String sessionId) async {
+    final sid = sessionId.trim();
+    _pendingPracticeSessions.removeWhere((s) => s['sessionId'] == sid);
+    _syncedSessionIds.add(sid);
+    await _prefs?.setString('pending_practice_sessions', jsonEncode(_pendingPracticeSessions));
+    await _prefs?.setStringList('synced_practice_session_ids', _syncedSessionIds.toList());
   }
 
   /// Saves a topic practice session

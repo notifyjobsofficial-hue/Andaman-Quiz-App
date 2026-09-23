@@ -16,8 +16,9 @@ import '../../../core/ads/ad_service.dart';
 
 class McqPracticeScreen extends ConsumerStatefulWidget {
   final String topicId;
+  final String? mode;
 
-  const McqPracticeScreen({super.key, required this.topicId});
+  const McqPracticeScreen({super.key, required this.topicId, this.mode});
 
   @override
   ConsumerState<McqPracticeScreen> createState() => _McqPracticeScreenState();
@@ -28,6 +29,7 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
   Topic? _topic;
   int _currentIndex = 0;
   bool _isLoading = true;
+  bool _sessionCounted = false;
 
   // Stored state for current session: questionId -> selectedOptionIndex
   final Map<String, int> _selectedAnswers = {};
@@ -44,26 +46,45 @@ class _McqPracticeScreenState extends ConsumerState<McqPracticeScreen> {
     // On-demand fetch from Firestore — never falls back to entire question bank
     final fetched = await FirestoreService.instance.fetchQuestionsForTopic(widget.topicId);
     if (mounted) {
-      // Restore previously saved answers and submitted status
-      final savedAnswers = LocalDatabase.instance.getTopicAnswers(widget.topicId);
+      final isRestart = widget.mode == 'restart';
       final attemptedIds = LocalDatabase.instance.getTopicAttemptedQids(widget.topicId);
+      final bool isFreshStart = isRestart || attemptedIds.isEmpty;
 
-      for (final entry in savedAnswers.entries) {
-        _selectedAnswers[entry.key] = entry.value;
-        _submitted[entry.key] = true;
-      }
-      for (final qid in attemptedIds) {
-        _submitted[qid] = true;
+      if (!isRestart) {
+        // Restore previously saved answers and submitted status
+        final savedAnswers = LocalDatabase.instance.getTopicAnswers(widget.topicId);
+        for (final entry in savedAnswers.entries) {
+          _selectedAnswers[entry.key] = entry.value;
+          _submitted[entry.key] = true;
+        }
+        for (final qid in attemptedIds) {
+          _submitted[qid] = true;
+        }
       }
 
-      // Resume at the next appropriate question in that same topic (never restart from Q1 unless reset)
-      final resumeIndex = LocalDatabase.instance.getResumeQuestionIndex(widget.topicId, fetched);
+      // Resume at the first unattempted question based on question IDs, or 0 if restarting
+      final resumeIndex = isRestart
+          ? 0
+          : LocalDatabase.instance.getResumeQuestionIndex(widget.topicId, fetched);
 
       setState(() {
         _questions = fetched;
-        _currentIndex = resumeIndex;
+        _currentIndex = (resumeIndex >= 0 && resumeIndex < fetched.length) ? resumeIndex : 0;
         _isLoading = false;
       });
+
+      // Increment practice session counter ONLY when student enters a fresh session
+      if (fetched.isNotEmpty && !_sessionCounted) {
+        _sessionCounted = true;
+        if (isFreshStart) {
+          final iid = LocalDatabase.instance.installationId;
+          final newSessionId = 'ps_${iid}_${widget.topicId}_${DateTime.now().millisecondsSinceEpoch}';
+          FirestoreService.instance.recordNewPracticeSession(
+            topicId: widget.topicId,
+            sessionId: newSessionId,
+          );
+        }
+      }
     }
   }
 

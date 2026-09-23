@@ -22,6 +22,7 @@ class FirestoreService {
   static const String colQotd = 'qotd';
   static const String colBanners = 'banners';
   static const String colNotices = 'notices';
+  static const String colPracticeTopicStats = 'practice_topic_stats';
 
   // Broadcast stream controllers for reactive UI updates
   final _categoriesController = StreamController<List<ExamCategory>>.broadcast();
@@ -621,6 +622,129 @@ class FirestoreService {
       debugPrint('Error fetching topic questions on demand: $e');
       return LocalDatabase.instance.getQuestionsByTopic(topicId);
     }
+  }
+
+  // --- Global Practice Session Stats ---
+
+  /// Fetches global practice session stats for all topics in a single efficient collection read.
+  /// Caches the results in LocalDatabase for instant 60 FPS offline access.
+  Future<Map<String, int>> fetchAllTopicPracticeStats() async {
+    if (Firebase.apps.isEmpty) {
+      return {};
+    }
+    try {
+      final snap = await _firestore.collection(colPracticeTopicStats).get();
+      final Map<String, int> counts = {};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final sessions = (data['totalSessions'] as num?)?.toInt() ?? 0;
+        counts[doc.id] = sessions;
+      }
+      await LocalDatabase.instance.setTopicSessionCounts(counts);
+      return counts;
+    } catch (e) {
+      debugPrint('Error fetching topic practice stats: $e');
+      return {};
+    }
+  }
+
+  /// Commits a single practice session increment atomically using a batched write:
+  /// 1. Creates an immutable session document under /practice_topic_stats/{topicId}/sessions/{sessionId}
+  /// 2. Increments totalSessions by exactly 1 on /practice_topic_stats/{topicId}
+  Future<bool> commitPracticeSessionIncrement({
+    required String topicId,
+    required String sessionId,
+    required String installationId,
+  }) async {
+    if (Firebase.apps.isEmpty) {
+      return false;
+    }
+    try {
+      final tid = topicId.trim();
+      final sid = sessionId.trim();
+      final statsRef = _firestore.collection(colPracticeTopicStats).doc(tid);
+      final sessionRef = statsRef.collection('sessions').doc(sid);
+
+      final batch = _firestore.batch();
+      batch.set(sessionRef, {
+        'sessionId': sid,
+        'topicId': tid,
+        'installationId': installationId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      batch.set(statsRef, {
+        'topicId': tid,
+        'totalSessions': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastSessionId': sid,
+      }, SetOptions(merge: true));
+
+      await batch.commit();
+      return true;
+    } catch (e) {
+      debugPrint('Error committing practice session increment for $topicId ($sessionId): $e');
+      return false;
+    }
+  }
+
+  /// Flushes any locally queued offline practice sessions to Firestore.
+  /// Exactly-once client behavior: successfully committed sessions are marked as synced.
+  Future<void> syncPendingPracticeSessions() async {
+    if (Firebase.apps.isEmpty) return;
+
+    final pending = LocalDatabase.instance.getPendingPracticeSessions();
+    if (pending.isEmpty) return;
+
+    for (final event in pending) {
+      final tid = event['topicId'] as String?;
+      final sid = event['sessionId'] as String?;
+      final iid = event['installationId'] as String?;
+      if (tid == null || sid == null || iid == null) continue;
+
+      final success = await commitPracticeSessionIncrement(
+        topicId: tid,
+        sessionId: sid,
+        installationId: iid,
+      );
+      if (success) {
+        await LocalDatabase.instance.markPracticeSessionSynced(sid);
+      } else {
+        // Stop flushing on network error to preserve queue order and prevent excessive retries
+        break;
+      }
+    }
+  }
+
+  /// Registers and starts a new practice session:
+  /// 1. Enqueues locally (optimistic local counter increment with 0ms lag)
+  /// 2. Triggers background atomic commit to Firestore (never blocks the student UI)
+  Future<void> recordNewPracticeSession({
+    required String topicId,
+    required String sessionId,
+  }) async {
+    final tid = topicId.trim();
+    final sid = sessionId.trim();
+    if (sid.isEmpty || LocalDatabase.instance.isPracticeSessionRecorded(sid)) return;
+
+    // 1. Enqueue & update local database optimistically
+    await LocalDatabase.instance.enqueuePracticeSession(
+      topicId: tid,
+      sessionId: sid,
+    );
+
+    // 2. Attempt asynchronous network commit (non-blocking)
+    final iid = LocalDatabase.instance.installationId;
+    commitPracticeSessionIncrement(
+      topicId: tid,
+      sessionId: sid,
+      installationId: iid,
+    ).then((success) {
+      if (success) {
+        LocalDatabase.instance.markPracticeSessionSynced(sid);
+      }
+    }).catchError((e) {
+      debugPrint('Background session commit failed, remains in offline queue: $e');
+    });
   }
 
   void disposeSync() {

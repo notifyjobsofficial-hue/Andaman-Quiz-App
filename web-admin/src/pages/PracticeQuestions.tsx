@@ -33,7 +33,9 @@ import {
   fetchSubjects,
   fetchTopics,
   fetchMockTests,
+  fetchPracticeTopicStats,
   saveQuestion,
+  TopicPracticeStats,
 } from '../firebase/firestore';
 import { Question, Exam, Subject, Topic, MockTest } from '../types';
 import { Badge } from '../components/common/Badge';
@@ -72,6 +74,7 @@ export const PracticeQuestions: React.FC<PracticeQuestionsProps> = ({ onNavigate
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [mockTests, setMockTests] = useState<MockTest[]>([]);
+  const [topicStats, setTopicStats] = useState<Record<string, TopicPracticeStats>>({});
   const [loading, setLoading] = useState(true);
 
   // Filters & Search
@@ -100,18 +103,20 @@ export const PracticeQuestions: React.FC<PracticeQuestionsProps> = ({ onNavigate
   const loadData = async () => {
     setLoading(true);
     try {
-      const [q, e, s, t, m] = await Promise.all([
+      const [q, e, s, t, m, stats] = await Promise.all([
         fetchQuestions(3000),
         fetchExams().catch(() => []),
         fetchSubjects().catch(() => []),
         fetchTopics().catch(() => []),
         fetchMockTests().catch(() => []),
+        fetchPracticeTopicStats().catch(() => ({})),
       ]);
       setQuestions(q);
       setExams(e);
       setSubjects(s);
       setTopics(t);
       setMockTests(m);
+      setTopicStats(stats);
     } catch (err) {
       console.error('Failed to load practice questions data:', err);
       setActionFeedback({ type: 'error', message: 'Failed to load database records.' });
@@ -771,15 +776,21 @@ export const PracticeQuestions: React.FC<PracticeQuestionsProps> = ({ onNavigate
                             <p className="text-xs text-slate-400 mt-0.5">{topic.hindiName}</p>
                           )}
                         </div>
-                        <span
-                          className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${
-                            metrics.total > 0
-                              ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                              : 'bg-slate-100 text-slate-400'
-                          }`}
-                        >
-                          {metrics.total} Questions
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          <span
+                            className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${
+                              metrics.total > 0
+                                ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            {metrics.total} Questions
+                          </span>
+                          <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                            <Eye size={11} className="text-slate-500" />
+                            <span>{topicStats[topic.id]?.totalSessions ?? 0} Sessions</span>
+                          </span>
+                        </div>
                       </div>
 
                       {/* Status Breakdown Pills */}

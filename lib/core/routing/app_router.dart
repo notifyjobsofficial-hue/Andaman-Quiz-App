@@ -232,10 +232,11 @@ final GoRouter appRouter = GoRouter(
       path: '/practice/mcq/:topicId',
       pageBuilder: (context, state) {
         final topicId = state.pathParameters['topicId'] ?? '';
+        final mode = state.uri.queryParameters['mode'];
         return _buildSmoothPage(
           context: context,
           state: state,
-          child: McqPracticeScreen(topicId: topicId),
+          child: McqPracticeScreen(topicId: topicId, mode: mode),
         );
       },
     ),
