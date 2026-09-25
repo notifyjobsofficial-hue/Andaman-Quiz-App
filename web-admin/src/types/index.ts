@@ -188,6 +188,23 @@ export interface LiveTestItem {
   updated_at?: string;
 }
 
+export interface LiveTestRegistration {
+  id: string;
+  liveTestId: string;
+  testId: string;
+  studentName: string;
+  mobile?: string;
+  studentPhone?: string;
+  installationId: string;
+  registeredAt: string;
+  paymentType: 'FREE' | 'PAID';
+  entitlementStatus: string;
+  status: 'REGISTERED' | 'STARTED' | 'SUBMITTED';
+  startedAt?: string;
+  submittedAt?: string;
+  score?: number;
+}
+
 export interface QuestionOfTheDay {
   id: string;
   date: string; // YYYY-MM-DD
@@ -213,20 +230,285 @@ export interface QuestionOfTheDay {
   active?: boolean;
 }
 
+export interface FeatureFlags {
+  practiceEnabled: boolean;
+  mockEnabled: boolean;
+  liveTestEnabled: boolean;
+  reportingEnabled: boolean;
+  battleEnabled: boolean;
+  studyEnabled: boolean;
+  careerEnabled: boolean;
+  currentAffairsEnabled: boolean;
+}
+
 export interface AppConfig {
   id: string;
+  appName?: string;
   maintenanceMode: boolean;
   maintenanceMessage?: string;
   supportEmail: string;
+  supportPhone?: string;
   whatsappUrl?: string;
   telegramUrl?: string;
   officialWebsiteUrl?: string;
+  privacyPolicyUrl?: string;
+  termsConditionsUrl?: string;
+  minSupportedVersion?: string;
+  latestVersion?: string;
+  forceUpdateEnabled?: boolean;
+  playStoreUrl?: string;
+  defaultExamCode?: string;
+  dailyQuestionGoalDefault?: number;
   adsEnabled: boolean;
   freeTestResultAdEnabled: boolean;
   quizResultAdEnabled: boolean;
   adFrequency: number;
   admobBannerId?: string;
   admobInterstitialId?: string;
+  featureFlags?: FeatureFlags;
+}
+
+// ==========================================
+// Phase A: Admin-Controlled LMS Types
+// ==========================================
+
+// --- 1. Test Series & Folders ---
+export interface TestSeries {
+  id: string;
+  title: string;
+  examCode: string;
+  description: string;
+  thumbnailUrl?: string;
+  bannerUrl?: string;
+  isFree: boolean;
+  price?: number;
+  originalPrice?: number;
+  offerPrice?: number;
+  productId?: string;
+  validityDays: number;
+  isFeatured: boolean;
+  sortOrder: number;
+  status: 'draft' | 'published' | 'archived';
+  totalTests: number;
+  totalFolders: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestSeriesFolder {
+  id: string;
+  seriesId: string;
+  title: string;
+  iconName?: string;
+  sortOrder: number;
+  isFree: boolean;
+  itemCount: number;
+  status: 'draft' | 'published';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TestSeriesItem {
+  id: string;
+  seriesId: string;
+  folderId: string;
+  testId: string; // References canonical MockTest
+  sortOrder: number;
+  accessMode: 'FREE' | 'PAID' | 'SERIES_ONLY';
+  unlockAt?: string;
+  status: 'draft' | 'published';
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- 2. Study Library ---
+export interface StudyFolder {
+  id: string;
+  examCode: string;
+  title: string;
+  description?: string;
+  iconName?: string;
+  sortOrder: number;
+  isFree: boolean;
+  itemCount: number;
+  status: 'draft' | 'published';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StudyMaterialType =
+  | 'PDF'
+  | 'ARTICLE'
+  | 'EXTERNAL_LINK'
+  | 'IMAGE_NOTE'
+  | 'SYLLABUS'
+  | 'STRATEGY';
+
+export interface StudyMaterial {
+  id: string;
+  folderId: string;
+  examCode: string;
+  subjectId?: string;
+  topicId?: string;
+  title: string;
+  description?: string;
+  thumbnailUrl?: string;
+  materialType: StudyMaterialType;
+  fileUrl?: string;
+  articleContent?: string;
+  externalUrl?: string;
+  isFree: boolean;
+  downloadAllowed: boolean;
+  sortOrder: number;
+  isFeatured: boolean;
+  status: 'draft' | 'published' | 'archived';
+  publishDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- 3. Battle / Competition Mode ---
+export interface BattleItem {
+  id: string;
+  title: string;
+  examCode: string;
+  canonicalTestId: string;
+  startAt: string;
+  registrationDeadline: string;
+  durationMinutes: number;
+  maxParticipants?: number;
+  isFree: boolean;
+  entryFee?: number;
+  prizeDescription?: string;
+  leaderboardVisible: boolean;
+  status: 'UPCOMING' | 'LIVE' | 'ENDED' | 'CANCELLED';
+  instructions?: string;
+  participantCount: number;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BattleRegistration {
+  id: string;
+  battleId: string;
+  testId: string;
+  studentName: string;
+  mobile?: string;
+  installationId: string;
+  registeredAt: string;
+  status: 'REGISTERED' | 'LOBBY' | 'STARTED' | 'SUBMITTED';
+  startedAt?: string;
+  submittedAt?: string;
+  score?: number;
+  accuracy?: number;
+  timeTakenSeconds?: number;
+}
+
+// --- 4. Question Reporting System ---
+export type QuestionReportIssueType =
+  | 'INCORRECT_QUESTION'
+  | 'WRONG_ANSWER'
+  | 'FORMATTING_ISSUE'
+  | 'IMAGE_ISSUE'
+  | 'EXPLANATION_ISSUE'
+  | 'OTHER';
+
+export type QuestionReportStatus = 'OPEN' | 'REVIEWING' | 'RESOLVED' | 'REJECTED';
+
+export interface QuestionReport {
+  id: string;
+  questionId: string;
+  testId?: string;
+  topicId?: string;
+  issueType: QuestionReportIssueType;
+  details?: string;
+  installationId: string;
+  status: QuestionReportStatus;
+  adminNotes?: string;
+  resolvedBy?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+// --- 5. Career Goal & Roadmap ---
+export interface CareerSelectionStage {
+  stageNumber: number;
+  title: string;
+  description: string;
+}
+
+export interface CareerExamPatternSection {
+  name: string;
+  questions: number;
+  marks: number;
+}
+
+export interface CareerExamPattern {
+  totalMarks: number;
+  durationMinutes: number;
+  negativeMarking: string;
+  sections: CareerExamPatternSection[];
+}
+
+export interface CareerGoal {
+  id: string;
+  examCode: string;
+  title: string;
+  department: string;
+  overview: string;
+  eligibilityAge: string;
+  eligibilityQualification: string;
+  domicileNotice?: string;
+  selectionStages: CareerSelectionStage[];
+  examPattern: CareerExamPattern;
+  syllabusSummary: string;
+  syllabusPdfUrl?: string;
+  recommendedSeriesIds: string[];
+  recommendedMaterialIds: string[];
+  officialNotificationUrl?: string;
+  applyOnlineUrl?: string;
+  status: 'draft' | 'published';
+  updatedAt: string;
+}
+
+// --- 6. Current Affairs ---
+export interface CurrentAffairsItem {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  category: string;
+  summary: string;
+  content: string;
+  imageUrl?: string;
+  pdfUrl?: string;
+  canonicalQuestionIds: string[];
+  isFree: boolean;
+  status: 'draft' | 'published' | 'archived';
+  publishDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- 7. Dynamic Home Section Config ---
+export interface HomeSectionConfig {
+  id: string;
+  sectionType: string;
+  titleOverride?: string;
+  enabled: boolean;
+  sortOrder: number;
+  itemLimit?: number;
+  examFilter?: string;
+}
+
+// --- 8. Entitlement Verification Item ---
+export interface EntitlementItem {
+  id: string;
+  entitlementType: 'TEST' | 'SERIES' | 'STUDY_MATERIAL' | 'BUNDLE';
+  isVerifiedOnServer: boolean;
+  unlockedAt: string;
+  orderId?: string;
 }
 
 export interface AdminActivity {

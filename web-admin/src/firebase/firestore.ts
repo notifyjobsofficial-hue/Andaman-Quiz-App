@@ -26,8 +26,20 @@ import {
   HomeBanner,
   AppNotice,
   LiveTestItem,
+  LiveTestRegistration,
   AppConfig,
-  AdminActivity
+  AdminActivity,
+  TestSeries,
+  TestSeriesFolder,
+  TestSeriesItem,
+  StudyFolder,
+  StudyMaterial,
+  BattleItem,
+  BattleRegistration,
+  QuestionReport,
+  CareerGoal,
+  CurrentAffairsItem,
+  HomeSectionConfig
 } from '../types';
 
 /**
@@ -395,6 +407,18 @@ export async function deleteLiveTest(id: string): Promise<void> {
   await logActivity('Delete Live Test', `Deleted live test ID: ${id}`);
 }
 
+export async function fetchLiveTestRegistrations(liveTestId: string): Promise<LiveTestRegistration[]> {
+  try {
+    const snap = await getDocs(collection(db, 'live_tests', liveTestId, 'registrations'));
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LiveTestRegistration));
+    list.sort((a, b) => new Date(b.registeredAt || 0).getTime() - new Date(a.registeredAt || 0).getTime());
+    return list;
+  } catch (err) {
+    console.warn('Failed to fetch live test registrations:', err);
+    return [];
+  }
+}
+
 export async function fetchAppConfig(): Promise<AppConfig | null> {
   const snap = await getDoc(doc(db, 'app_config', 'main'));
   if (snap.exists()) {
@@ -515,4 +539,253 @@ export async function fetchPracticeTopicStats(): Promise<Record<string, TopicPra
     return {};
   }
 }
+
+// ==========================================
+// Phase A: Admin-Controlled LMS Functions
+// ==========================================
+
+// --- 1. Test Series, Folders & Items ---
+export async function fetchTestSeries(): Promise<TestSeries[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'test_series'), orderBy('sortOrder', 'asc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TestSeries));
+  } catch (err) {
+    console.warn('Error fetching test_series:', err);
+    return [];
+  }
+}
+
+export async function saveTestSeries(series: TestSeries): Promise<void> {
+  await safeSetDoc(doc(db, 'test_series', series.id), series, { merge: true });
+  await logActivity('Save Test Series', `Test Series "${series.title}" (${series.id}) saved`);
+}
+
+export async function deleteTestSeries(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'test_series', id));
+  await logActivity('Delete Test Series', `Deleted Test Series ID: ${id}`);
+}
+
+export async function fetchTestSeriesFolders(seriesId: string): Promise<TestSeriesFolder[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'test_series', seriesId, 'folders'), orderBy('sortOrder', 'asc'))
+    );
+    return snap.docs.map((d) => ({ id: d.id, seriesId, ...d.data() } as TestSeriesFolder));
+  } catch (err) {
+    console.warn(`Error fetching folders for series ${seriesId}:`, err);
+    return [];
+  }
+}
+
+export async function saveTestSeriesFolder(folder: TestSeriesFolder): Promise<void> {
+  await safeSetDoc(doc(db, 'test_series', folder.seriesId, 'folders', folder.id), folder, {
+    merge: true,
+  });
+  await logActivity('Save Test Series Folder', `Folder "${folder.title}" in series ${folder.seriesId} saved`);
+}
+
+export async function deleteTestSeriesFolder(seriesId: string, folderId: string): Promise<void> {
+  await deleteDoc(doc(db, 'test_series', seriesId, 'folders', folderId));
+  await logActivity('Delete Test Series Folder', `Deleted folder ${folderId} from series ${seriesId}`);
+}
+
+export async function fetchTestSeriesItems(
+  seriesId: string,
+  folderId: string
+): Promise<TestSeriesItem[]> {
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, 'test_series', seriesId, 'folders', folderId, 'items'),
+        orderBy('sortOrder', 'asc')
+      )
+    );
+    return snap.docs.map((d) => ({ id: d.id, seriesId, folderId, ...d.data() } as TestSeriesItem));
+  } catch (err) {
+    console.warn(`Error fetching items for folder ${folderId}:`, err);
+    return [];
+  }
+}
+
+export async function saveTestSeriesItem(item: TestSeriesItem): Promise<void> {
+  await safeSetDoc(
+    doc(db, 'test_series', item.seriesId, 'folders', item.folderId, 'items', item.id),
+    item,
+    { merge: true }
+  );
+  await logActivity('Save Test Series Item', `Item test ${item.testId} saved in series ${item.seriesId}`);
+}
+
+export async function deleteTestSeriesItem(
+  seriesId: string,
+  folderId: string,
+  itemId: string
+): Promise<void> {
+  await deleteDoc(doc(db, 'test_series', seriesId, 'folders', folderId, 'items', itemId));
+  await logActivity('Delete Test Series Item', `Deleted item ${itemId} from folder ${folderId}`);
+}
+
+// --- 2. Study Library ---
+export async function fetchStudyFolders(): Promise<StudyFolder[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'study_folders'), orderBy('sortOrder', 'asc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StudyFolder));
+  } catch (err) {
+    console.warn('Error fetching study_folders:', err);
+    return [];
+  }
+}
+
+export async function saveStudyFolder(folder: StudyFolder): Promise<void> {
+  await safeSetDoc(doc(db, 'study_folders', folder.id), folder, { merge: true });
+  await logActivity('Save Study Folder', `Study folder "${folder.title}" saved`);
+}
+
+export async function deleteStudyFolder(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'study_folders', id));
+  await logActivity('Delete Study Folder', `Deleted study folder ID: ${id}`);
+}
+
+export async function fetchStudyMaterials(folderId?: string): Promise<StudyMaterial[]> {
+  try {
+    const coll = collection(db, 'study_materials');
+    const q = folderId
+      ? query(coll, where('folderId', '==', folderId), orderBy('sortOrder', 'asc'))
+      : query(coll, orderBy('sortOrder', 'asc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StudyMaterial));
+  } catch (err) {
+    console.warn('Error fetching study_materials:', err);
+    return [];
+  }
+}
+
+export async function saveStudyMaterial(material: StudyMaterial): Promise<void> {
+  await safeSetDoc(doc(db, 'study_materials', material.id), material, { merge: true });
+  await logActivity('Save Study Material', `Study material "${material.title}" saved`);
+}
+
+export async function deleteStudyMaterial(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'study_materials', id));
+  await logActivity('Delete Study Material', `Deleted study material ID: ${id}`);
+}
+
+// --- 3. Battles ---
+export async function fetchBattles(): Promise<BattleItem[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'battles'), orderBy('startAt', 'desc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as BattleItem));
+  } catch (err) {
+    console.warn('Error fetching battles:', err);
+    return [];
+  }
+}
+
+export async function saveBattle(battle: BattleItem): Promise<void> {
+  await safeSetDoc(doc(db, 'battles', battle.id), battle, { merge: true });
+  await logActivity('Save Battle', `Battle "${battle.title}" saved`);
+}
+
+export async function deleteBattle(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'battles', id));
+  await logActivity('Delete Battle', `Deleted battle ID: ${id}`);
+}
+
+export async function fetchBattleRegistrations(battleId: string): Promise<BattleRegistration[]> {
+  try {
+    const snap = await getDocs(collection(db, 'battles', battleId, 'registrations'));
+    return snap.docs.map((d) => ({ id: d.id, battleId, ...d.data() } as BattleRegistration));
+  } catch (err) {
+    console.warn(`Error fetching registrations for battle ${battleId}:`, err);
+    return [];
+  }
+}
+
+// --- 4. Question Reports ---
+export async function fetchQuestionReports(): Promise<QuestionReport[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'question_reports'), orderBy('createdAt', 'desc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as QuestionReport));
+  } catch (err) {
+    console.warn('Error fetching question_reports:', err);
+    return [];
+  }
+}
+
+export async function updateQuestionReport(
+  id: string,
+  updates: Partial<QuestionReport>
+): Promise<void> {
+  await safeSetDoc(doc(db, 'question_reports', id), updates, { merge: true });
+  await logActivity('Update Question Report', `Report ${id} updated status: ${updates.status || 'modified'}`);
+}
+
+export async function deleteQuestionReport(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'question_reports', id));
+  await logActivity('Delete Question Report', `Deleted question report ID: ${id}`);
+}
+
+// --- 5. Career Goals ---
+export async function fetchCareerGoals(): Promise<CareerGoal[]> {
+  try {
+    const snap = await getDocs(collection(db, 'career_goals'));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CareerGoal));
+  } catch (err) {
+    console.warn('Error fetching career_goals:', err);
+    return [];
+  }
+}
+
+export async function saveCareerGoal(goal: CareerGoal): Promise<void> {
+  await safeSetDoc(doc(db, 'career_goals', goal.id), goal, { merge: true });
+  await logActivity('Save Career Goal', `Career goal "${goal.title}" saved`);
+}
+
+export async function deleteCareerGoal(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'career_goals', id));
+  await logActivity('Delete Career Goal', `Deleted career goal ID: ${id}`);
+}
+
+// --- 6. Current Affairs ---
+export async function fetchCurrentAffairs(): Promise<CurrentAffairsItem[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'current_affairs'), orderBy('date', 'desc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CurrentAffairsItem));
+  } catch (err) {
+    console.warn('Error fetching current_affairs:', err);
+    return [];
+  }
+}
+
+export async function saveCurrentAffairs(item: CurrentAffairsItem): Promise<void> {
+  await safeSetDoc(doc(db, 'current_affairs', item.id), item, { merge: true });
+  await logActivity('Save Current Affairs', `Current affairs "${item.title}" saved`);
+}
+
+export async function deleteCurrentAffairs(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'current_affairs', id));
+  await logActivity('Delete Current Affairs', `Deleted current affairs ID: ${id}`);
+}
+
+// --- 7. Dynamic Home Sections ---
+export async function fetchHomeSections(): Promise<HomeSectionConfig[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'app_home_sections'), orderBy('sortOrder', 'asc')));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as HomeSectionConfig));
+  } catch (err) {
+    console.warn('Error fetching app_home_sections:', err);
+    return [];
+  }
+}
+
+export async function saveHomeSections(sections: HomeSectionConfig[]): Promise<void> {
+  const batch = writeBatch(db);
+  for (const section of sections) {
+    const ref = doc(db, 'app_home_sections', section.id);
+    batch.set(ref, sanitizeForFirestore(section), { merge: true });
+  }
+  await batch.commit();
+  await logActivity('Save Home Sections', `Saved ${sections.length} home section configurations`);
+}
+
 

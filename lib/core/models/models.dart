@@ -1413,67 +1413,160 @@ class LiveTestItem {
   }
 }
 
+class FeatureFlags {
+  final bool practiceEnabled;
+  final bool mockEnabled;
+  final bool liveTestEnabled;
+  final bool reportingEnabled;
+  final bool battleEnabled;
+  final bool studyEnabled;
+  final bool careerEnabled;
+  final bool currentAffairsEnabled;
+
+  const FeatureFlags({
+    this.practiceEnabled = true,
+    this.mockEnabled = true,
+    this.liveTestEnabled = true,
+    this.reportingEnabled = true,
+    this.battleEnabled = false,
+    this.studyEnabled = false,
+    this.careerEnabled = false,
+    this.currentAffairsEnabled = false,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'practiceEnabled': practiceEnabled,
+    'mockEnabled': mockEnabled,
+    'liveTestEnabled': liveTestEnabled,
+    'reportingEnabled': reportingEnabled,
+    'battleEnabled': battleEnabled,
+    'studyEnabled': studyEnabled,
+    'careerEnabled': careerEnabled,
+    'currentAffairsEnabled': currentAffairsEnabled,
+  };
+
+  factory FeatureFlags.fromMap(Map<String, dynamic>? map) {
+    if (map == null) return const FeatureFlags();
+    return FeatureFlags(
+      practiceEnabled: map['practiceEnabled'] ?? true,
+      mockEnabled: map['mockEnabled'] ?? true,
+      liveTestEnabled: map['liveTestEnabled'] ?? true,
+      reportingEnabled: map['reportingEnabled'] ?? true,
+      battleEnabled: map['battleEnabled'] ?? false,
+      studyEnabled: map['studyEnabled'] ?? false,
+      careerEnabled: map['careerEnabled'] ?? false,
+      currentAffairsEnabled: map['currentAffairsEnabled'] ?? false,
+    );
+  }
+}
+
 class RemoteAppConfig {
   final String id;
+  final String appName;
   final bool maintenanceMode;
   final String? maintenanceMessage;
   final String supportEmail;
+  final String? supportPhone;
   final String? whatsappUrl;
   final String? telegramUrl;
   final String? officialWebsiteUrl;
+  final String? privacyPolicyUrl;
+  final String? termsConditionsUrl;
+  final String minSupportedVersion;
+  final String latestVersion;
+  final bool forceUpdateEnabled;
+  final String? playStoreUrl;
+  final String defaultExamCode;
+  final int dailyQuestionGoalDefault;
   final bool adsEnabled;
   final bool freeTestResultAdEnabled;
   final bool quizResultAdEnabled;
   final int adFrequency;
   final String? admobBannerId;
   final String? admobInterstitialId;
+  final FeatureFlags featureFlags;
 
   const RemoteAppConfig({
     this.id = 'main',
+    this.appName = 'Andaman Quiz',
     this.maintenanceMode = false,
     this.maintenanceMessage,
     this.supportEmail = 'support@andamanquiz.com',
+    this.supportPhone,
     this.whatsappUrl,
     this.telegramUrl,
     this.officialWebsiteUrl,
+    this.privacyPolicyUrl,
+    this.termsConditionsUrl,
+    this.minSupportedVersion = '1.0.0',
+    this.latestVersion = '1.0.3',
+    this.forceUpdateEnabled = false,
+    this.playStoreUrl,
+    this.defaultExamCode = 'AN CHSL',
+    this.dailyQuestionGoalDefault = 25,
     this.adsEnabled = true,
     this.freeTestResultAdEnabled = true,
     this.quizResultAdEnabled = true,
     this.adFrequency = 1,
     this.admobBannerId,
     this.admobInterstitialId,
+    this.featureFlags = const FeatureFlags(),
   });
 
   Map<String, dynamic> toMap() => {
     'id': id,
+    'appName': appName,
     'maintenanceMode': maintenanceMode,
     if (maintenanceMessage != null) 'maintenanceMessage': maintenanceMessage,
     'supportEmail': supportEmail,
+    if (supportPhone != null) 'supportPhone': supportPhone,
     if (whatsappUrl != null) 'whatsappUrl': whatsappUrl,
     if (telegramUrl != null) 'telegramUrl': telegramUrl,
     if (officialWebsiteUrl != null) 'officialWebsiteUrl': officialWebsiteUrl,
+    if (privacyPolicyUrl != null) 'privacyPolicyUrl': privacyPolicyUrl,
+    if (termsConditionsUrl != null) 'termsConditionsUrl': termsConditionsUrl,
+    'minSupportedVersion': minSupportedVersion,
+    'latestVersion': latestVersion,
+    'forceUpdateEnabled': forceUpdateEnabled,
+    if (playStoreUrl != null) 'playStoreUrl': playStoreUrl,
+    'defaultExamCode': defaultExamCode,
+    'dailyQuestionGoalDefault': dailyQuestionGoalDefault,
     'adsEnabled': adsEnabled,
     'freeTestResultAdEnabled': freeTestResultAdEnabled,
     'quizResultAdEnabled': quizResultAdEnabled,
     'adFrequency': adFrequency,
     if (admobBannerId != null) 'admobBannerId': admobBannerId,
     if (admobInterstitialId != null) 'admobInterstitialId': admobInterstitialId,
+    'featureFlags': featureFlags.toMap(),
   };
 
   factory RemoteAppConfig.fromMap(Map<String, dynamic> map) => RemoteAppConfig(
     id: map['id'] ?? 'main',
+    appName: map['appName'] ?? 'Andaman Quiz',
     maintenanceMode: map['maintenanceMode'] ?? false,
     maintenanceMessage: map['maintenanceMessage'],
     supportEmail: map['supportEmail'] ?? 'support@andamanquiz.com',
+    supportPhone: map['supportPhone'],
     whatsappUrl: map['whatsappUrl'],
     telegramUrl: map['telegramUrl'],
     officialWebsiteUrl: map['officialWebsiteUrl'],
+    privacyPolicyUrl: map['privacyPolicyUrl'],
+    termsConditionsUrl: map['termsConditionsUrl'],
+    minSupportedVersion: map['minSupportedVersion'] ?? '1.0.0',
+    latestVersion: map['latestVersion'] ?? '1.0.3',
+    forceUpdateEnabled: map['forceUpdateEnabled'] ?? false,
+    playStoreUrl: map['playStoreUrl'],
+    defaultExamCode: map['defaultExamCode'] ?? 'AN CHSL',
+    dailyQuestionGoalDefault: (map['dailyQuestionGoalDefault'] as num?)?.toInt() ?? 25,
     adsEnabled: map['adsEnabled'] ?? true,
     freeTestResultAdEnabled: map['freeTestResultAdEnabled'] ?? true,
     quizResultAdEnabled: map['quizResultAdEnabled'] ?? true,
     adFrequency: (map['adFrequency'] as num?)?.toInt() ?? 1,
     admobBannerId: map['admobBannerId'],
     admobInterstitialId: map['admobInterstitialId'],
+    featureFlags: FeatureFlags.fromMap(
+      map['featureFlags'] != null ? Map<String, dynamic>.from(map['featureFlags']) : null,
+    ),
   );
 }
 
@@ -1607,5 +1700,1019 @@ class TopicPracticeSession {
     practiceSessionId: map['practiceSessionId'],
   );
 }
+
+class LiveTestRegistration {
+  final String id;
+  final String liveTestId;
+  final String testId;
+  final String studentName;
+  final String? mobile;
+  final String installationId;
+  final DateTime registeredAt;
+  final String paymentType; // 'FREE' or 'PAID'
+  final String entitlementStatus; // 'ACTIVE' or 'NONE'
+  final String status; // 'REGISTERED', 'STARTED', 'SUBMITTED'
+  final DateTime? startedAt;
+  final DateTime? submittedAt;
+  final double? score;
+
+  const LiveTestRegistration({
+    required this.id,
+    required this.liveTestId,
+    required this.testId,
+    required this.studentName,
+    this.mobile,
+    required this.installationId,
+    required this.registeredAt,
+    this.paymentType = 'FREE',
+    this.entitlementStatus = 'ACTIVE',
+    this.status = 'REGISTERED',
+    this.startedAt,
+    this.submittedAt,
+    this.score,
+  });
+
+  bool get isRegistered => status == 'REGISTERED';
+  bool get isStarted => status == 'STARTED';
+  bool get isSubmitted => status == 'SUBMITTED';
+
+  LiveTestRegistration copyWith({
+    String? id,
+    String? liveTestId,
+    String? testId,
+    String? studentName,
+    String? mobile,
+    String? installationId,
+    DateTime? registeredAt,
+    String? paymentType,
+    String? entitlementStatus,
+    String? status,
+    DateTime? startedAt,
+    DateTime? submittedAt,
+    double? score,
+  }) {
+    return LiveTestRegistration(
+      id: id ?? this.id,
+      liveTestId: liveTestId ?? this.liveTestId,
+      testId: testId ?? this.testId,
+      studentName: studentName ?? this.studentName,
+      mobile: mobile ?? this.mobile,
+      installationId: installationId ?? this.installationId,
+      registeredAt: registeredAt ?? this.registeredAt,
+      paymentType: paymentType ?? this.paymentType,
+      entitlementStatus: entitlementStatus ?? this.entitlementStatus,
+      status: status ?? this.status,
+      startedAt: startedAt ?? this.startedAt,
+      submittedAt: submittedAt ?? this.submittedAt,
+      score: score ?? this.score,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'liveTestId': liveTestId,
+    'testId': testId,
+    'studentName': studentName,
+    if (mobile != null && mobile!.isNotEmpty) 'mobile': mobile,
+    'installationId': installationId,
+    'registeredAt': registeredAt.toIso8601String(),
+    'paymentType': paymentType,
+    'entitlementStatus': entitlementStatus,
+    'status': status,
+    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+    if (submittedAt != null) 'submittedAt': submittedAt!.toIso8601String(),
+    if (score != null) 'score': score,
+  };
+
+  factory LiveTestRegistration.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val is DateTime) return val;
+      if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      try {
+        final toDate = (val as dynamic).toDate();
+        if (toDate is DateTime) return toDate;
+      } catch (_) {}
+      return DateTime.now();
+    }
+
+    return LiveTestRegistration(
+      id: map['id'] ?? '',
+      liveTestId: map['liveTestId'] ?? '',
+      testId: map['testId'] ?? '',
+      studentName: map['studentName'] ?? '',
+      mobile: map['mobile'],
+      installationId: map['installationId'] ?? '',
+      registeredAt: map['registeredAt'] != null ? parseDate(map['registeredAt']) : DateTime.now(),
+      paymentType: map['paymentType'] ?? 'FREE',
+      entitlementStatus: map['entitlementStatus'] ?? 'ACTIVE',
+      status: map['status'] ?? 'REGISTERED',
+      startedAt: map['startedAt'] != null ? parseDate(map['startedAt']) : null,
+      submittedAt: map['submittedAt'] != null ? parseDate(map['submittedAt']) : null,
+      score: (map['score'] as num?)?.toDouble(),
+    );
+  }
+}
+
+// ============================================================================
+// PHASE A: ADMIN-CONTROLLED LMS DATA MODELS
+// ============================================================================
+
+DateTime _parseLmsDate(dynamic val) {
+  if (val is DateTime) return val;
+  if (val is num) return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+  if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+  try {
+    final toDate = (val as dynamic).toDate();
+    if (toDate is DateTime) return toDate;
+  } catch (_) {}
+  return DateTime.now();
+}
+
+// --- 1. Test Series & Folders ---
+class TestSeries {
+  final String id;
+  final String title;
+  final String examCode;
+  final String description;
+  final String? thumbnailUrl;
+  final String? bannerUrl;
+  final bool isFree;
+  final double? price;
+  final double? originalPrice;
+  final double? offerPrice;
+  final String? productId; // Google Play Product SKU
+  final int validityDays;
+  final bool isFeatured;
+  final int sortOrder;
+  final String status; // 'draft', 'published', 'archived'
+  final int totalTests;
+  final int totalFolders;
+  final List<String> tags;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const TestSeries({
+    required this.id,
+    required this.title,
+    required this.examCode,
+    this.description = '',
+    this.thumbnailUrl,
+    this.bannerUrl,
+    this.isFree = true,
+    this.price,
+    this.originalPrice,
+    this.offerPrice,
+    this.productId,
+    this.validityDays = 365,
+    this.isFeatured = false,
+    this.sortOrder = 0,
+    this.status = 'published',
+    this.totalTests = 0,
+    this.totalFolders = 0,
+    this.tags = const [],
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'examCode': examCode,
+    'description': description,
+    if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
+    if (bannerUrl != null) 'bannerUrl': bannerUrl,
+    'isFree': isFree,
+    if (price != null) 'price': price,
+    if (originalPrice != null) 'originalPrice': originalPrice,
+    if (offerPrice != null) 'offerPrice': offerPrice,
+    if (productId != null) 'productId': productId,
+    'validityDays': validityDays,
+    'isFeatured': isFeatured,
+    'sortOrder': sortOrder,
+    'status': status,
+    'totalTests': totalTests,
+    'totalFolders': totalFolders,
+    'tags': tags,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory TestSeries.fromMap(Map<String, dynamic> map) => TestSeries(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    examCode: map['examCode'] ?? '',
+    description: map['description'] ?? '',
+    thumbnailUrl: map['thumbnailUrl'],
+    bannerUrl: map['bannerUrl'],
+    isFree: map['isFree'] ?? true,
+    price: (map['price'] as num?)?.toDouble(),
+    originalPrice: (map['originalPrice'] as num?)?.toDouble(),
+    offerPrice: (map['offerPrice'] as num?)?.toDouble(),
+    productId: map['productId'],
+    validityDays: (map['validityDays'] as num?)?.toInt() ?? 365,
+    isFeatured: map['isFeatured'] ?? false,
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    status: map['status'] ?? 'published',
+    totalTests: (map['totalTests'] as num?)?.toInt() ?? 0,
+    totalFolders: (map['totalFolders'] as num?)?.toInt() ?? 0,
+    tags: List<String>.from(map['tags'] ?? []),
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+class TestSeriesFolder {
+  final String id;
+  final String seriesId;
+  final String title;
+  final String? iconName;
+  final int sortOrder;
+  final bool isFree;
+  final int itemCount;
+  final String status; // 'draft', 'published'
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const TestSeriesFolder({
+    required this.id,
+    required this.seriesId,
+    required this.title,
+    this.iconName,
+    this.sortOrder = 0,
+    this.isFree = true,
+    this.itemCount = 0,
+    this.status = 'published',
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'seriesId': seriesId,
+    'title': title,
+    if (iconName != null) 'iconName': iconName,
+    'sortOrder': sortOrder,
+    'isFree': isFree,
+    'itemCount': itemCount,
+    'status': status,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory TestSeriesFolder.fromMap(Map<String, dynamic> map) => TestSeriesFolder(
+    id: map['id'] ?? '',
+    seriesId: map['seriesId'] ?? '',
+    title: map['title'] ?? '',
+    iconName: map['iconName'],
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    isFree: map['isFree'] ?? true,
+    itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
+    status: map['status'] ?? 'published',
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+class TestSeriesItem {
+  final String id;
+  final String seriesId;
+  final String folderId;
+  final String testId; // Canonical MockTest reference
+  final int sortOrder;
+  final String accessMode; // 'FREE', 'PAID', 'SERIES_ONLY'
+  final DateTime? unlockAt;
+  final String status; // 'draft', 'published'
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const TestSeriesItem({
+    required this.id,
+    required this.seriesId,
+    required this.folderId,
+    required this.testId,
+    this.sortOrder = 0,
+    this.accessMode = 'FREE',
+    this.unlockAt,
+    this.status = 'published',
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'seriesId': seriesId,
+    'folderId': folderId,
+    'testId': testId,
+    'sortOrder': sortOrder,
+    'accessMode': accessMode,
+    if (unlockAt != null) 'unlockAt': unlockAt!.toIso8601String(),
+    'status': status,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory TestSeriesItem.fromMap(Map<String, dynamic> map) => TestSeriesItem(
+    id: map['id'] ?? '',
+    seriesId: map['seriesId'] ?? '',
+    folderId: map['folderId'] ?? '',
+    testId: map['testId'] ?? '',
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    accessMode: map['accessMode'] ?? 'FREE',
+    unlockAt: map['unlockAt'] != null ? _parseLmsDate(map['unlockAt']) : null,
+    status: map['status'] ?? 'published',
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+// --- 2. Study Library (Folders & Materials) ---
+class StudyFolder {
+  final String id;
+  final String examCode;
+  final String title;
+  final String? description;
+  final String? iconName;
+  final int sortOrder;
+  final bool isFree;
+  final int itemCount;
+  final String status; // 'draft', 'published'
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const StudyFolder({
+    required this.id,
+    required this.examCode,
+    required this.title,
+    this.description,
+    this.iconName,
+    this.sortOrder = 0,
+    this.isFree = true,
+    this.itemCount = 0,
+    this.status = 'published',
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'examCode': examCode,
+    'title': title,
+    if (description != null) 'description': description,
+    if (iconName != null) 'iconName': iconName,
+    'sortOrder': sortOrder,
+    'isFree': isFree,
+    'itemCount': itemCount,
+    'status': status,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory StudyFolder.fromMap(Map<String, dynamic> map) => StudyFolder(
+    id: map['id'] ?? '',
+    examCode: map['examCode'] ?? '',
+    title: map['title'] ?? '',
+    description: map['description'],
+    iconName: map['iconName'],
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    isFree: map['isFree'] ?? true,
+    itemCount: (map['itemCount'] as num?)?.toInt() ?? 0,
+    status: map['status'] ?? 'published',
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+class StudyMaterial {
+  final String id;
+  final String folderId;
+  final String examCode;
+  final String? subjectId;
+  final String? topicId;
+  final String title;
+  final String? description;
+  final String? thumbnailUrl;
+  final String materialType; // 'PDF', 'ARTICLE', 'EXTERNAL_LINK', 'IMAGE_NOTE', 'SYLLABUS', 'STRATEGY'
+  final String? fileUrl;
+  final String? articleContent;
+  final String? externalUrl;
+  final bool isFree;
+  final bool downloadAllowed;
+  final int sortOrder;
+  final bool isFeatured;
+  final String status; // 'draft', 'published', 'archived'
+  final DateTime publishDate;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const StudyMaterial({
+    required this.id,
+    required this.folderId,
+    required this.examCode,
+    this.subjectId,
+    this.topicId,
+    required this.title,
+    this.description,
+    this.thumbnailUrl,
+    required this.materialType,
+    this.fileUrl,
+    this.articleContent,
+    this.externalUrl,
+    this.isFree = true,
+    this.downloadAllowed = false,
+    this.sortOrder = 0,
+    this.isFeatured = false,
+    this.status = 'published',
+    required this.publishDate,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'folderId': folderId,
+    'examCode': examCode,
+    if (subjectId != null) 'subjectId': subjectId,
+    if (topicId != null) 'topicId': topicId,
+    'title': title,
+    if (description != null) 'description': description,
+    if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
+    'materialType': materialType,
+    if (fileUrl != null) 'fileUrl': fileUrl,
+    if (articleContent != null) 'articleContent': articleContent,
+    if (externalUrl != null) 'externalUrl': externalUrl,
+    'isFree': isFree,
+    'downloadAllowed': downloadAllowed,
+    'sortOrder': sortOrder,
+    'isFeatured': isFeatured,
+    'status': status,
+    'publishDate': publishDate.toIso8601String(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory StudyMaterial.fromMap(Map<String, dynamic> map) => StudyMaterial(
+    id: map['id'] ?? '',
+    folderId: map['folderId'] ?? '',
+    examCode: map['examCode'] ?? '',
+    subjectId: map['subjectId'],
+    topicId: map['topicId'],
+    title: map['title'] ?? '',
+    description: map['description'],
+    thumbnailUrl: map['thumbnailUrl'],
+    materialType: map['materialType'] ?? 'PDF',
+    fileUrl: map['fileUrl'],
+    articleContent: map['articleContent'],
+    externalUrl: map['externalUrl'],
+    isFree: map['isFree'] ?? true,
+    downloadAllowed: map['downloadAllowed'] ?? false,
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    isFeatured: map['isFeatured'] ?? false,
+    status: map['status'] ?? 'published',
+    publishDate: map['publishDate'] != null ? _parseLmsDate(map['publishDate']) : DateTime.now(),
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+// --- 3. Battle / Competition Mode ---
+class BattleItem {
+  final String id;
+  final String title;
+  final String examCode;
+  final String canonicalTestId;
+  final DateTime startAt;
+  final DateTime registrationDeadline;
+  final int durationMinutes;
+  final int? maxParticipants;
+  final bool isFree;
+  final double? entryFee;
+  final String? prizeDescription;
+  final bool leaderboardVisible;
+  final String status; // 'UPCOMING', 'LIVE', 'ENDED', 'CANCELLED'
+  final String? instructions;
+  final int participantCount;
+  final bool isPublished;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const BattleItem({
+    required this.id,
+    required this.title,
+    required this.examCode,
+    required this.canonicalTestId,
+    required this.startAt,
+    required this.registrationDeadline,
+    required this.durationMinutes,
+    this.maxParticipants,
+    this.isFree = true,
+    this.entryFee,
+    this.prizeDescription,
+    this.leaderboardVisible = true,
+    this.status = 'UPCOMING',
+    this.instructions,
+    this.participantCount = 0,
+    this.isPublished = true,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isUpcoming => DateTime.now().isBefore(startAt);
+  bool get isLive => DateTime.now().isAfter(startAt) && DateTime.now().isBefore(startAt.add(Duration(minutes: durationMinutes)));
+  bool get isEnded => DateTime.now().isAfter(startAt.add(Duration(minutes: durationMinutes))) || status == 'ENDED';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'examCode': examCode,
+    'canonicalTestId': canonicalTestId,
+    'startAt': startAt.toIso8601String(),
+    'registrationDeadline': registrationDeadline.toIso8601String(),
+    'durationMinutes': durationMinutes,
+    if (maxParticipants != null) 'maxParticipants': maxParticipants,
+    'isFree': isFree,
+    if (entryFee != null) 'entryFee': entryFee,
+    if (prizeDescription != null) 'prizeDescription': prizeDescription,
+    'leaderboardVisible': leaderboardVisible,
+    'status': status,
+    if (instructions != null) 'instructions': instructions,
+    'participantCount': participantCount,
+    'isPublished': isPublished,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory BattleItem.fromMap(Map<String, dynamic> map) => BattleItem(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    examCode: map['examCode'] ?? '',
+    canonicalTestId: map['canonicalTestId'] ?? map['testId'] ?? '',
+    startAt: map['startAt'] != null ? _parseLmsDate(map['startAt']) : DateTime.now(),
+    registrationDeadline: map['registrationDeadline'] != null ? _parseLmsDate(map['registrationDeadline']) : DateTime.now(),
+    durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 60,
+    maxParticipants: (map['maxParticipants'] as num?)?.toInt(),
+    isFree: map['isFree'] ?? true,
+    entryFee: (map['entryFee'] as num?)?.toDouble(),
+    prizeDescription: map['prizeDescription'],
+    leaderboardVisible: map['leaderboardVisible'] ?? true,
+    status: map['status'] ?? 'UPCOMING',
+    instructions: map['instructions'],
+    participantCount: (map['participantCount'] as num?)?.toInt() ?? 0,
+    isPublished: map['isPublished'] ?? true,
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+class BattleRegistration {
+  final String id;
+  final String battleId;
+  final String testId;
+  final String studentName;
+  final String? mobile;
+  final String installationId;
+  final DateTime registeredAt;
+  final String status; // 'REGISTERED', 'LOBBY', 'STARTED', 'SUBMITTED'
+  final DateTime? startedAt;
+  final DateTime? submittedAt;
+  final double? score;
+  final double? accuracy;
+  final int? timeTakenSeconds;
+
+  const BattleRegistration({
+    required this.id,
+    required this.battleId,
+    required this.testId,
+    required this.studentName,
+    this.mobile,
+    required this.installationId,
+    required this.registeredAt,
+    this.status = 'REGISTERED',
+    this.startedAt,
+    this.submittedAt,
+    this.score,
+    this.accuracy,
+    this.timeTakenSeconds,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'battleId': battleId,
+    'testId': testId,
+    'studentName': studentName,
+    if (mobile != null && mobile!.isNotEmpty) 'mobile': mobile,
+    'installationId': installationId,
+    'registeredAt': registeredAt.toIso8601String(),
+    'status': status,
+    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+    if (submittedAt != null) 'submittedAt': submittedAt!.toIso8601String(),
+    if (score != null) 'score': score,
+    if (accuracy != null) 'accuracy': accuracy,
+    if (timeTakenSeconds != null) 'timeTakenSeconds': timeTakenSeconds,
+  };
+
+  factory BattleRegistration.fromMap(Map<String, dynamic> map) => BattleRegistration(
+    id: map['id'] ?? '',
+    battleId: map['battleId'] ?? '',
+    testId: map['testId'] ?? '',
+    studentName: map['studentName'] ?? '',
+    mobile: map['mobile'],
+    installationId: map['installationId'] ?? '',
+    registeredAt: map['registeredAt'] != null ? _parseLmsDate(map['registeredAt']) : DateTime.now(),
+    status: map['status'] ?? 'REGISTERED',
+    startedAt: map['startedAt'] != null ? _parseLmsDate(map['startedAt']) : null,
+    submittedAt: map['submittedAt'] != null ? _parseLmsDate(map['submittedAt']) : null,
+    score: (map['score'] as num?)?.toDouble(),
+    accuracy: (map['accuracy'] as num?)?.toDouble(),
+    timeTakenSeconds: (map['timeTakenSeconds'] as num?)?.toInt(),
+  );
+}
+
+// --- 4. Question Reporting System ---
+class QuestionReport {
+  final String id;
+  final String questionId;
+  final String? testId;
+  final String? topicId;
+  final String issueType; // 'INCORRECT_QUESTION', 'WRONG_ANSWER', 'FORMATTING_ISSUE', 'IMAGE_ISSUE', 'EXPLANATION_ISSUE', 'OTHER'
+  final String? details;
+  final String installationId;
+  final String status; // 'OPEN', 'REVIEWING', 'RESOLVED', 'REJECTED'
+  final String? adminNotes;
+  final String? resolvedBy;
+  final DateTime createdAt;
+  final DateTime? resolvedAt;
+
+  const QuestionReport({
+    required this.id,
+    required this.questionId,
+    this.testId,
+    this.topicId,
+    required this.issueType,
+    this.details,
+    required this.installationId,
+    this.status = 'OPEN',
+    this.adminNotes,
+    this.resolvedBy,
+    required this.createdAt,
+    this.resolvedAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'questionId': questionId,
+    if (testId != null) 'testId': testId,
+    if (topicId != null) 'topicId': topicId,
+    'issueType': issueType,
+    if (details != null && details!.isNotEmpty) 'details': details,
+    'installationId': installationId,
+    'status': status,
+    if (adminNotes != null) 'adminNotes': adminNotes,
+    if (resolvedBy != null) 'resolvedBy': resolvedBy,
+    'createdAt': createdAt.toIso8601String(),
+    if (resolvedAt != null) 'resolvedAt': resolvedAt!.toIso8601String(),
+  };
+
+  factory QuestionReport.fromMap(Map<String, dynamic> map) => QuestionReport(
+    id: map['id'] ?? '',
+    questionId: map['questionId'] ?? '',
+    testId: map['testId'],
+    topicId: map['topicId'],
+    issueType: map['issueType'] ?? 'OTHER',
+    details: map['details'],
+    installationId: map['installationId'] ?? '',
+    status: map['status'] ?? 'OPEN',
+    adminNotes: map['adminNotes'],
+    resolvedBy: map['resolvedBy'],
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    resolvedAt: map['resolvedAt'] != null ? _parseLmsDate(map['resolvedAt']) : null,
+  );
+}
+
+// --- 5. Career Goal & Roadmap ---
+class CareerSelectionStage {
+  final int stageNumber;
+  final String title;
+  final String description;
+
+  const CareerSelectionStage({
+    required this.stageNumber,
+    required this.title,
+    required this.description,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'stageNumber': stageNumber,
+    'title': title,
+    'description': description,
+  };
+
+  factory CareerSelectionStage.fromMap(Map<String, dynamic> map) => CareerSelectionStage(
+    stageNumber: (map['stageNumber'] as num?)?.toInt() ?? 1,
+    title: map['title'] ?? '',
+    description: map['description'] ?? '',
+  );
+}
+
+class CareerExamPatternSection {
+  final String name;
+  final int questions;
+  final double marks;
+
+  const CareerExamPatternSection({
+    required this.name,
+    required this.questions,
+    required this.marks,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'questions': questions,
+    'marks': marks,
+  };
+
+  factory CareerExamPatternSection.fromMap(Map<String, dynamic> map) => CareerExamPatternSection(
+    name: map['name'] ?? '',
+    questions: (map['questions'] as num?)?.toInt() ?? 0,
+    marks: (map['marks'] as num?)?.toDouble() ?? 0.0,
+  );
+}
+
+class CareerExamPattern {
+  final double totalMarks;
+  final int durationMinutes;
+  final String negativeMarking;
+  final List<CareerExamPatternSection> sections;
+
+  const CareerExamPattern({
+    this.totalMarks = 100.0,
+    this.durationMinutes = 120,
+    this.negativeMarking = '0.25',
+    this.sections = const [],
+  });
+
+  Map<String, dynamic> toMap() => {
+    'totalMarks': totalMarks,
+    'durationMinutes': durationMinutes,
+    'negativeMarking': negativeMarking,
+    'sections': sections.map((s) => s.toMap()).toList(),
+  };
+
+  factory CareerExamPattern.fromMap(Map<String, dynamic>? map) {
+    if (map == null) return const CareerExamPattern();
+    final rawSections = map['sections'] as List? ?? [];
+    return CareerExamPattern(
+      totalMarks: (map['totalMarks'] as num?)?.toDouble() ?? 100.0,
+      durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 120,
+      negativeMarking: map['negativeMarking'] ?? '0.25',
+      sections: rawSections.map((s) => CareerExamPatternSection.fromMap(Map<String, dynamic>.from(s))).toList(),
+    );
+  }
+}
+
+class CareerGoal {
+  final String id;
+  final String examCode;
+  final String title;
+  final String department;
+  final String overview;
+  final String eligibilityAge;
+  final String eligibilityQualification;
+  final String? domicileNotice;
+  final List<CareerSelectionStage> selectionStages;
+  final CareerExamPattern examPattern;
+  final String syllabusSummary;
+  final String? syllabusPdfUrl;
+  final List<String> recommendedSeriesIds;
+  final List<String> recommendedMaterialIds;
+  final String? officialNotificationUrl;
+  final String? applyOnlineUrl;
+  final String status; // 'draft', 'published'
+  final DateTime updatedAt;
+
+  const CareerGoal({
+    required this.id,
+    required this.examCode,
+    required this.title,
+    this.department = 'Andaman & Nicobar Administration',
+    this.overview = '',
+    this.eligibilityAge = '',
+    this.eligibilityQualification = '',
+    this.domicileNotice,
+    this.selectionStages = const [],
+    this.examPattern = const CareerExamPattern(),
+    this.syllabusSummary = '',
+    this.syllabusPdfUrl,
+    this.recommendedSeriesIds = const [],
+    this.recommendedMaterialIds = const [],
+    this.officialNotificationUrl,
+    this.applyOnlineUrl,
+    this.status = 'published',
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'examCode': examCode,
+    'title': title,
+    'department': department,
+    'overview': overview,
+    'eligibilityAge': eligibilityAge,
+    'eligibilityQualification': eligibilityQualification,
+    if (domicileNotice != null) 'domicileNotice': domicileNotice,
+    'selectionStages': selectionStages.map((s) => s.toMap()).toList(),
+    'examPattern': examPattern.toMap(),
+    'syllabusSummary': syllabusSummary,
+    if (syllabusPdfUrl != null) 'syllabusPdfUrl': syllabusPdfUrl,
+    'recommendedSeriesIds': recommendedSeriesIds,
+    'recommendedMaterialIds': recommendedMaterialIds,
+    if (officialNotificationUrl != null) 'officialNotificationUrl': officialNotificationUrl,
+    if (applyOnlineUrl != null) 'applyOnlineUrl': applyOnlineUrl,
+    'status': status,
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory CareerGoal.fromMap(Map<String, dynamic> map) {
+    final rawStages = map['selectionStages'] as List? ?? [];
+    return CareerGoal(
+      id: map['id'] ?? '',
+      examCode: map['examCode'] ?? '',
+      title: map['title'] ?? '',
+      department: map['department'] ?? 'Andaman & Nicobar Administration',
+      overview: map['overview'] ?? '',
+      eligibilityAge: map['eligibilityAge'] ?? '',
+      eligibilityQualification: map['eligibilityQualification'] ?? '',
+      domicileNotice: map['domicileNotice'],
+      selectionStages: rawStages.map((s) => CareerSelectionStage.fromMap(Map<String, dynamic>.from(s))).toList(),
+      examPattern: CareerExamPattern.fromMap(map['examPattern'] != null ? Map<String, dynamic>.from(map['examPattern']) : null),
+      syllabusSummary: map['syllabusSummary'] ?? '',
+      syllabusPdfUrl: map['syllabusPdfUrl'],
+      recommendedSeriesIds: List<String>.from(map['recommendedSeriesIds'] ?? []),
+      recommendedMaterialIds: List<String>.from(map['recommendedMaterialIds'] ?? []),
+      officialNotificationUrl: map['officialNotificationUrl'],
+      applyOnlineUrl: map['applyOnlineUrl'],
+      status: map['status'] ?? 'published',
+      updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+    );
+  }
+}
+
+// --- 6. Current Affairs ---
+class CurrentAffairsItem {
+  final String id;
+  final String title;
+  final String date; // YYYY-MM-DD
+  final String category; // e.g. 'National', 'International', 'Andaman', 'Science', 'Sports'
+  final String summary;
+  final String content;
+  final String? imageUrl;
+  final String? pdfUrl;
+  final List<String> canonicalQuestionIds; // References canonical questions from Question Bank
+  final bool isFree;
+  final String status; // 'draft', 'published', 'archived'
+  final DateTime publishDate;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const CurrentAffairsItem({
+    required this.id,
+    required this.title,
+    required this.date,
+    required this.category,
+    this.summary = '',
+    required this.content,
+    this.imageUrl,
+    this.pdfUrl,
+    this.canonicalQuestionIds = const [],
+    this.isFree = true,
+    this.status = 'published',
+    required this.publishDate,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isPublished => status.trim().toLowerCase() == 'published';
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'date': date,
+    'category': category,
+    'summary': summary,
+    'content': content,
+    if (imageUrl != null) 'imageUrl': imageUrl,
+    if (pdfUrl != null) 'pdfUrl': pdfUrl,
+    'canonicalQuestionIds': canonicalQuestionIds,
+    'isFree': isFree,
+    'status': status,
+    'publishDate': publishDate.toIso8601String(),
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory CurrentAffairsItem.fromMap(Map<String, dynamic> map) => CurrentAffairsItem(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    date: map['date'] ?? '',
+    category: map['category'] ?? 'General',
+    summary: map['summary'] ?? '',
+    content: map['content'] ?? '',
+    imageUrl: map['imageUrl'],
+    pdfUrl: map['pdfUrl'],
+    canonicalQuestionIds: List<String>.from(map['canonicalQuestionIds'] ?? []),
+    isFree: map['isFree'] ?? true,
+    status: map['status'] ?? 'published',
+    publishDate: map['publishDate'] != null ? _parseLmsDate(map['publishDate']) : DateTime.now(),
+    createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
+    updatedAt: map['updatedAt'] != null ? _parseLmsDate(map['updatedAt']) : DateTime.now(),
+  );
+}
+
+// --- 7. Dynamic Home Section Configuration ---
+class HomeSectionConfig {
+  final String id;
+  final String sectionType;
+  final String? titleOverride;
+  final bool enabled;
+  final int sortOrder;
+  final int? itemLimit;
+  final String? examFilter;
+
+  const HomeSectionConfig({
+    required this.id,
+    required this.sectionType,
+    this.titleOverride,
+    this.enabled = true,
+    this.sortOrder = 0,
+    this.itemLimit,
+    this.examFilter,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'sectionType': sectionType,
+    if (titleOverride != null) 'titleOverride': titleOverride,
+    'enabled': enabled,
+    'sortOrder': sortOrder,
+    if (itemLimit != null) 'itemLimit': itemLimit,
+    if (examFilter != null) 'examFilter': examFilter,
+  };
+
+  factory HomeSectionConfig.fromMap(Map<String, dynamic> map) => HomeSectionConfig(
+    id: map['id'] ?? '',
+    sectionType: map['sectionType'] ?? '',
+    titleOverride: map['titleOverride'],
+    enabled: map['enabled'] ?? true,
+    sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+    itemLimit: (map['itemLimit'] as num?)?.toInt(),
+    examFilter: map['examFilter'],
+  );
+}
+
+// --- 8. Entitlement Verification Model (Separation of UI Cache from Server Verification) ---
+class EntitlementItem {
+  final String id; // productId, seriesId, testId, or materialId
+  final String entitlementType; // 'TEST', 'SERIES', 'STUDY_MATERIAL', 'BUNDLE'
+  final bool isVerifiedOnServer;
+  final DateTime unlockedAt;
+  final String? orderId;
+
+  const EntitlementItem({
+    required this.id,
+    this.entitlementType = 'TEST',
+    this.isVerifiedOnServer = false,
+    required this.unlockedAt,
+    this.orderId,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'entitlementType': entitlementType,
+    'isVerifiedOnServer': isVerifiedOnServer,
+    'unlockedAt': unlockedAt.toIso8601String(),
+    if (orderId != null) 'orderId': orderId,
+  };
+
+  factory EntitlementItem.fromMap(Map<String, dynamic> map) => EntitlementItem(
+    id: map['id'] ?? '',
+    entitlementType: map['entitlementType'] ?? 'TEST',
+    isVerifiedOnServer: map['isVerifiedOnServer'] ?? false,
+    unlockedAt: map['unlockedAt'] != null ? _parseLmsDate(map['unlockedAt']) : DateTime.now(),
+    orderId: map['orderId'],
+  );
+}
+
 
 

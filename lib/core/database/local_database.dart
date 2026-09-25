@@ -28,6 +28,7 @@ class LocalDatabase {
   final List<HomeBanner> _banners = [];
   final List<AppNotice> _notices = [];
   final List<LiveTestItem> _liveTests = [];
+  final Map<String, LiveTestRegistration> _liveTestRegistrations = {};
   final Map<String, QuestionOfTheDay> _cachedQotdByDate = {};
   final Map<String, TopicPracticeSession> _practiceSessions = {};
   final Map<String, int> _topicSessionCounts = {};
@@ -36,10 +37,23 @@ class LocalDatabase {
   String? _installationId;
   RemoteAppConfig _remoteConfig = const RemoteAppConfig();
 
+  // LMS Phase A in-memory caches
+  final List<TestSeries> _testSeries = [];
+  final List<TestSeriesFolder> _testSeriesFolders = [];
+  final List<TestSeriesItem> _testSeriesItems = [];
+  final List<StudyFolder> _studyFolders = [];
+  final List<StudyMaterial> _studyMaterials = [];
+  final List<BattleItem> _battles = [];
+  final Map<String, BattleRegistration> _battleRegistrations = {};
+  final List<CareerGoal> _careerGoals = [];
+  final List<CurrentAffairsItem> _currentAffairs = [];
+  final List<HomeSectionConfig> _homeSections = [];
+  final List<EntitlementItem> _entitlements = [];
+
   bool _isInitialized = false;
 
   // Increment when the cache schema changes to force a migration on existing devices
-  static const int _kCurrentDbVersion = 4;
+  static const int _kCurrentDbVersion = 5;
 
   Future<void> init({bool force = false}) async {
     if (_isInitialized && !force) return;
@@ -60,6 +74,7 @@ class LocalDatabase {
     _banners.clear();
     _notices.clear();
     _liveTests.clear();
+    _liveTestRegistrations.clear();
     _cachedQotdByDate.clear();
     _practiceSessions.clear();
     _topicSessionCounts.clear();
@@ -73,11 +88,22 @@ class LocalDatabase {
     _topics.clear();
     _mockTests.clear();
     _attempts.clear();
+    _testSeries.clear();
+    _testSeriesFolders.clear();
+    _testSeriesItems.clear();
+    _studyFolders.clear();
+    _studyMaterials.clear();
+    _battles.clear();
+    _battleRegistrations.clear();
+    _careerGoals.clear();
+    _currentAffairs.clear();
+    _homeSections.clear();
+    _entitlements.clear();
     _questionsStreamController.add([]);
   }
 
-  /// One-time migration: purges all legacy seeded/dev content while preserving
-  /// genuine student data (attempts, bookmarks, wrong questions, purchases).
+  /// One-time migration: purges legacy seeded/dev content for pre-v4 while preserving
+  /// 100% genuine student data (attempts, bookmarks, wrong questions, purchases, practice sessions, registrations).
   Future<void> _runMigrationIfNeeded() async {
     final prefs = _prefs!;
     final savedVersion = prefs.getInt('local_db_version') ?? 0;
@@ -85,25 +111,34 @@ class LocalDatabase {
 
     debugPrint('LocalDatabase: migrating from v$savedVersion → v$_kCurrentDbVersion');
 
-    // Purge all legacy seeded/cached content keys (Firestore is now the source of truth)
-    await prefs.remove('db_questions');
-    await prefs.remove('db_categories');
-    await prefs.remove('db_exams');
-    await prefs.remove('db_subjects');
-    await prefs.remove('db_topics');
-    await prefs.remove('db_mock_tests');
-    await prefs.remove('db_banners');
-    await prefs.remove('db_notices');
-    await prefs.remove('db_app_config');
+    if (savedVersion < 4) {
+      // Purge all legacy seeded/cached content keys (Firestore is now the source of truth)
+      await prefs.remove('db_questions');
+      await prefs.remove('db_categories');
+      await prefs.remove('db_exams');
+      await prefs.remove('db_subjects');
+      await prefs.remove('db_topics');
+      await prefs.remove('db_mock_tests');
+      await prefs.remove('db_banners');
+      await prefs.remove('db_notices');
+      await prefs.remove('db_app_config');
 
-    // Purge legacy hardcoded accumulator keys entirely (seeded with 328/7 in old builds)
-    // Real metrics are derived dynamically from genuine attempt and practice history.
-    await prefs.remove('user_total_questions');
-    await prefs.remove('user_streak_days');
-    await prefs.remove('user_last_active_date');
+      // Purge legacy hardcoded accumulator keys entirely (seeded with 328/7 in old builds)
+      // Real metrics are derived dynamically from genuine attempt and practice history.
+      await prefs.remove('user_total_questions');
+      await prefs.remove('user_streak_days');
+      await prefs.remove('user_last_active_date');
+    }
+
+    if (savedVersion < 5) {
+      // v5 migration: LMS Phase A architecture integration.
+      // ZERO DATABASE WIPE: All student attempts, bookmarks, wrong questions, purchases,
+      // practice sessions, installation UUID, and settings are 100% preserved.
+      debugPrint('LocalDatabase: applying v5 LMS schema migration with 100% student data preservation.');
+    }
 
     await prefs.setInt('local_db_version', _kCurrentDbVersion);
-    debugPrint('LocalDatabase: migration complete.');
+    debugPrint('LocalDatabase: migration to v$_kCurrentDbVersion complete.');
   }
 
   Future<void> _loadCachedData() async {
@@ -251,13 +286,36 @@ class LocalDatabase {
         final list = jsonDecode(mocksRaw) as List;
         _mockTests.clear();
         for (final item in list) {
-          _mockTests.add(MockTest.fromMap(Map<String, dynamic>.from(item)));
+          final m = MockTest.fromMap(Map<String, dynamic>.from(item));
+          // Canonical status rule: DRAFT mocks must NEVER be visible to students
+          if (m.status.toLowerCase() == 'published') {
+            _mockTests.add(m);
+          }
         }
       } catch (e) {
         _mockTests.clear();
       }
     } else {
       _mockTests.clear();
+    }
+
+    // Reconcile loaded Live Tests: A Live Test is valid ONLY if its linked Mock exists and is published
+    _liveTests.removeWhere((t) => !t.isPublished || !_mockTests.any((m) => m.id == t.testId));
+
+    // 7.5 Live Test Registrations
+    final registrationsRaw = prefs.getString('db_live_test_registrations');
+    if (registrationsRaw != null && registrationsRaw.isNotEmpty) {
+      try {
+        final map = jsonDecode(registrationsRaw) as Map<String, dynamic>;
+        _liveTestRegistrations.clear();
+        for (final entry in map.entries) {
+          _liveTestRegistrations[entry.key] = LiveTestRegistration.fromMap(Map<String, dynamic>.from(entry.value));
+        }
+      } catch (_) {
+        _liveTestRegistrations.clear();
+      }
+    } else {
+      _liveTestRegistrations.clear();
     }
 
     // 8. Attempts
@@ -335,6 +393,179 @@ class LocalDatabase {
       }
     } else {
       _pendingPracticeSessions.clear();
+    }
+
+    // 13. LMS Phase A: Test Series
+    final testSeriesRaw = prefs.getString('db_test_series');
+    if (testSeriesRaw != null && testSeriesRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(testSeriesRaw) as List;
+        _testSeries.clear();
+        for (final item in list) {
+          _testSeries.add(TestSeries.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _testSeries.clear();
+      }
+    } else {
+      _testSeries.clear();
+    }
+
+    final testFoldersRaw = prefs.getString('db_test_series_folders');
+    if (testFoldersRaw != null && testFoldersRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(testFoldersRaw) as List;
+        _testSeriesFolders.clear();
+        for (final item in list) {
+          _testSeriesFolders.add(TestSeriesFolder.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _testSeriesFolders.clear();
+      }
+    } else {
+      _testSeriesFolders.clear();
+    }
+
+    final testItemsRaw = prefs.getString('db_test_series_items');
+    if (testItemsRaw != null && testItemsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(testItemsRaw) as List;
+        _testSeriesItems.clear();
+        for (final item in list) {
+          _testSeriesItems.add(TestSeriesItem.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _testSeriesItems.clear();
+      }
+    } else {
+      _testSeriesItems.clear();
+    }
+
+    // 14. Study Library
+    final studyFoldersRaw = prefs.getString('db_study_folders');
+    if (studyFoldersRaw != null && studyFoldersRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(studyFoldersRaw) as List;
+        _studyFolders.clear();
+        for (final item in list) {
+          _studyFolders.add(StudyFolder.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _studyFolders.clear();
+      }
+    } else {
+      _studyFolders.clear();
+    }
+
+    final studyMaterialsRaw = prefs.getString('db_study_materials');
+    if (studyMaterialsRaw != null && studyMaterialsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(studyMaterialsRaw) as List;
+        _studyMaterials.clear();
+        for (final item in list) {
+          _studyMaterials.add(StudyMaterial.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _studyMaterials.clear();
+      }
+    } else {
+      _studyMaterials.clear();
+    }
+
+    // 15. Battles & Registrations
+    final battlesRaw = prefs.getString('db_battles');
+    if (battlesRaw != null && battlesRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(battlesRaw) as List;
+        _battles.clear();
+        for (final item in list) {
+          _battles.add(BattleItem.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _battles.clear();
+      }
+    } else {
+      _battles.clear();
+    }
+
+    final battleRegsRaw = prefs.getString('db_battle_registrations');
+    if (battleRegsRaw != null && battleRegsRaw.isNotEmpty) {
+      try {
+        final map = jsonDecode(battleRegsRaw) as Map<String, dynamic>;
+        _battleRegistrations.clear();
+        for (final entry in map.entries) {
+          _battleRegistrations[entry.key] = BattleRegistration.fromMap(Map<String, dynamic>.from(entry.value));
+        }
+      } catch (_) {
+        _battleRegistrations.clear();
+      }
+    } else {
+      _battleRegistrations.clear();
+    }
+
+    // 16. Career Goals
+    final careerRaw = prefs.getString('db_career_goals');
+    if (careerRaw != null && careerRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(careerRaw) as List;
+        _careerGoals.clear();
+        for (final item in list) {
+          _careerGoals.add(CareerGoal.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _careerGoals.clear();
+      }
+    } else {
+      _careerGoals.clear();
+    }
+
+    // 17. Current Affairs
+    final currentAffairsRaw = prefs.getString('db_current_affairs');
+    if (currentAffairsRaw != null && currentAffairsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(currentAffairsRaw) as List;
+        _currentAffairs.clear();
+        for (final item in list) {
+          _currentAffairs.add(CurrentAffairsItem.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _currentAffairs.clear();
+      }
+    } else {
+      _currentAffairs.clear();
+    }
+
+    // 18. Dynamic Home Sections
+    final homeSectionsRaw = prefs.getString('db_home_sections');
+    if (homeSectionsRaw != null && homeSectionsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(homeSectionsRaw) as List;
+        _homeSections.clear();
+        for (final item in list) {
+          _homeSections.add(HomeSectionConfig.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _homeSections.clear();
+      }
+    } else {
+      _homeSections.clear();
+      _homeSections.addAll(getDefaultHomeSections());
+    }
+
+    // 19. Verified Entitlements
+    final entitlementsRaw = prefs.getString('saved_entitlements');
+    if (entitlementsRaw != null && entitlementsRaw.isNotEmpty) {
+      try {
+        final list = jsonDecode(entitlementsRaw) as List;
+        _entitlements.clear();
+        for (final item in list) {
+          _entitlements.add(EntitlementItem.fromMap(Map<String, dynamic>.from(item)));
+        }
+      } catch (_) {
+        _entitlements.clear();
+      }
+    } else {
+      _entitlements.clear();
     }
   }
 
@@ -517,7 +748,7 @@ class LocalDatabase {
 
   // --- Mock Tests ---
   List<MockTest> getMockTests({String? examCode, String? filter}) {
-    var list = _mockTests;
+    var list = _mockTests.where((m) => m.status.toLowerCase() == 'published').toList();
     if (examCode != null && examCode != 'ALL') {
       list = list.where((m) => m.examCode.toUpperCase() == examCode.toUpperCase()).toList();
     }
@@ -533,7 +764,9 @@ class LocalDatabase {
 
   MockTest? getMockTestById(String id) {
     try {
-      return _mockTests.firstWhere((m) => m.id == id);
+      final m = _mockTests.firstWhere((item) => item.id == id);
+      if (m.status.toLowerCase() != 'published') return null;
+      return m;
     } catch (_) {
       return null;
     }
@@ -1073,9 +1306,17 @@ class LocalDatabase {
   }
 
   Future<void> syncMockTestsFromFirestore(List<MockTest> mockTests) async {
+    final publishedMocks = mockTests.where((m) => m.status.toLowerCase() == 'published').toList();
     _mockTests.clear();
-    _mockTests.addAll(mockTests);
+    _mockTests.addAll(publishedMocks);
     await _persistMockTests();
+
+    // Cache reconciliation: evict any cached live tests whose linked mock is no longer published
+    final beforeCount = _liveTests.length;
+    _liveTests.removeWhere((t) => !_mockTests.any((m) => m.id == t.testId));
+    if (_liveTests.length != beforeCount) {
+      await _persistLiveTests();
+    }
   }
 
   Future<void> syncQuestionsFromFirestore(List<Question> firestoreQuestions) async {
@@ -1199,7 +1440,37 @@ class LocalDatabase {
   // --- Banners, Notices, Live Tests, Remote Config ---
   List<HomeBanner> getBanners() => List.unmodifiable(_banners);
   List<AppNotice> getNotices() => List.unmodifiable(_notices);
-  List<LiveTestItem> getLiveTests() => List.unmodifiable(_liveTests);
+  List<LiveTestItem> getLiveTests() {
+    return List.unmodifiable(_liveTests.where((t) {
+      if (!t.isPublished) return false;
+      final mock = getMockTestById(t.testId);
+      return mock != null && mock.status.toLowerCase() == 'published';
+    }));
+  }
+
+  LiveTestItem? getLiveTestById(String id) {
+    try {
+      final t = _liveTests.firstWhere((item) => item.id == id);
+      if (!t.isPublished) return null;
+      final mock = getMockTestById(t.testId);
+      if (mock == null || mock.status.toLowerCase() != 'published') return null;
+      return t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  LiveTestItem? getLiveTestByTestId(String testId) {
+    try {
+      final t = _liveTests.firstWhere((item) => item.testId == testId);
+      if (!t.isPublished) return null;
+      final mock = getMockTestById(t.testId);
+      if (mock == null || mock.status.toLowerCase() != 'published') return null;
+      return t;
+    } catch (_) {
+      return null;
+    }
+  }
   RemoteAppConfig getRemoteConfig() => _remoteConfig;
 
   List<AppNotice> getActiveNotices() {
@@ -1216,7 +1487,13 @@ class LocalDatabase {
   }
 
   LiveTestItem? getActiveOrUpcomingLiveTest() {
-    final valid = _liveTests.where((t) => t.isPublished && t.status != LiveTestStatus.ended).toList();
+    final valid = _liveTests.where((t) {
+      if (!t.isPublished) return false;
+      if (t.status == LiveTestStatus.ended) return false;
+      final mock = getMockTestById(t.testId);
+      if (mock == null || mock.status.toLowerCase() != 'published') return false;
+      return true;
+    }).toList();
     if (valid.isEmpty) return null;
     valid.sort((a, b) {
       // Live tests take precedence over upcoming tests
@@ -1245,10 +1522,48 @@ class LocalDatabase {
   }
 
   Future<void> syncLiveTestsFromFirestore(List<LiveTestItem> liveTests) async {
+    // A Live Test is valid ONLY if it is published AND its linked Mock exists in published mocks
+    final valid = liveTests.where((t) {
+      if (!t.isPublished) return false;
+      final mock = getMockTestById(t.testId);
+      return mock != null && mock.status.toLowerCase() == 'published';
+    }).toList();
     _liveTests.clear();
-    _liveTests.addAll(liveTests);
+    _liveTests.addAll(valid);
+    await _persistLiveTests();
+  }
+
+  Future<void> _persistLiveTests() async {
     final raw = jsonEncode(_liveTests.map((t) => t.toMap()).toList());
     await _prefs?.setString('db_live_tests', raw);
+  }
+
+  // --- Live Test Registrations ---
+  LiveTestRegistration? getLiveTestRegistration(String liveTestId) => _liveTestRegistrations[liveTestId];
+
+  Future<void> saveLiveTestRegistration(LiveTestRegistration reg) async {
+    _liveTestRegistrations[reg.liveTestId] = reg;
+    final map = {for (final e in _liveTestRegistrations.entries) e.key: e.value.toMap()};
+    await _prefs?.setString('db_live_test_registrations', jsonEncode(map));
+  }
+
+  Future<void> updateLiveTestRegistrationStatus(
+    String liveTestId,
+    String status, {
+    DateTime? startedAt,
+    DateTime? submittedAt,
+    double? score,
+  }) async {
+    final existing = _liveTestRegistrations[liveTestId];
+    if (existing != null) {
+      final updated = existing.copyWith(
+        status: status,
+        startedAt: startedAt ?? existing.startedAt,
+        submittedAt: submittedAt ?? existing.submittedAt,
+        score: score ?? existing.score,
+      );
+      await saveLiveTestRegistration(updated);
+    }
   }
 
   Future<void> syncRemoteConfigFromFirestore(RemoteAppConfig config) async {
@@ -1330,4 +1645,243 @@ class LocalDatabase {
   Future<void> clearExamDraft(String testId) async {
     await _prefs?.remove('exam_draft_$testId');
   }
+
+  // ============================================================================
+  // PHASE A: ADMIN-CONTROLLED LMS ACCESSORS & LOCAL PERSISTENCE
+  // ============================================================================
+
+  // --- 1. Test Series & Folders ---
+  List<TestSeries> getTestSeries({String? examCode, bool publishedOnly = true}) {
+    return _testSeries.where((s) {
+      if (publishedOnly && !s.isPublished) return false;
+      if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+        if (s.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  TestSeries? getTestSeriesById(String id) {
+    try {
+      return _testSeries.firstWhere((s) => s.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<TestSeriesFolder> getTestSeriesFolders(String seriesId, {bool publishedOnly = true}) {
+    return _testSeriesFolders.where((f) {
+      if (f.seriesId != seriesId) return false;
+      if (publishedOnly && !f.isPublished) return false;
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  List<TestSeriesItem> getTestSeriesItems(String seriesId, String folderId, {bool publishedOnly = true}) {
+    return _testSeriesItems.where((i) {
+      if (i.seriesId != seriesId || i.folderId != folderId) return false;
+      if (publishedOnly && !i.isPublished) return false;
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  Future<void> saveTestSeriesList(List<TestSeries> list) async {
+    _testSeries.clear();
+    _testSeries.addAll(list);
+    await _prefs?.setString('db_test_series', jsonEncode(list.map((s) => s.toMap()).toList()));
+  }
+
+  Future<void> saveTestSeriesFolders(List<TestSeriesFolder> list) async {
+    _testSeriesFolders.clear();
+    _testSeriesFolders.addAll(list);
+    await _prefs?.setString('db_test_series_folders', jsonEncode(list.map((f) => f.toMap()).toList()));
+  }
+
+  Future<void> saveTestSeriesItems(List<TestSeriesItem> list) async {
+    _testSeriesItems.clear();
+    _testSeriesItems.addAll(list);
+    await _prefs?.setString('db_test_series_items', jsonEncode(list.map((i) => i.toMap()).toList()));
+  }
+
+  // --- 2. Study Library ---
+  List<StudyFolder> getStudyFolders({String? examCode, bool publishedOnly = true}) {
+    return _studyFolders.where((f) {
+      if (publishedOnly && !f.isPublished) return false;
+      if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+        if (f.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  List<StudyMaterial> getStudyMaterials({String? folderId, String? examCode, bool publishedOnly = true}) {
+    return _studyMaterials.where((m) {
+      if (publishedOnly && !m.isPublished) return false;
+      if (folderId != null && m.folderId != folderId) return false;
+      if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+        if (m.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  StudyMaterial? getStudyMaterialById(String id) {
+    try {
+      return _studyMaterials.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveStudyFolders(List<StudyFolder> list) async {
+    _studyFolders.clear();
+    _studyFolders.addAll(list);
+    await _prefs?.setString('db_study_folders', jsonEncode(list.map((f) => f.toMap()).toList()));
+  }
+
+  Future<void> saveStudyMaterials(List<StudyMaterial> list) async {
+    _studyMaterials.clear();
+    _studyMaterials.addAll(list);
+    await _prefs?.setString('db_study_materials', jsonEncode(list.map((m) => m.toMap()).toList()));
+  }
+
+  // --- 3. Battle / Competition Mode ---
+  List<BattleItem> getBattles({String? examCode, bool publishedOnly = true}) {
+    return _battles.where((b) {
+      if (publishedOnly && !b.isPublished) return false;
+      if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+        if (b.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.startAt.compareTo(b.startAt));
+  }
+
+  BattleItem? getBattleById(String id) {
+    try {
+      return _battles.firstWhere((b) => b.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  BattleRegistration? getBattleRegistration(String battleId) {
+    return _battleRegistrations[battleId];
+  }
+
+  Future<void> saveBattles(List<BattleItem> list) async {
+    _battles.clear();
+    _battles.addAll(list);
+    await _prefs?.setString('db_battles', jsonEncode(list.map((b) => b.toMap()).toList()));
+  }
+
+  Future<void> saveBattleRegistration(BattleRegistration registration) async {
+    _battleRegistrations[registration.battleId] = registration;
+    final map = <String, dynamic>{};
+    for (final e in _battleRegistrations.entries) {
+      map[e.key] = e.value.toMap();
+    }
+    await _prefs?.setString('db_battle_registrations', jsonEncode(map));
+  }
+
+  // --- 4. Career Goals & Roadmap ---
+  List<CareerGoal> getCareerGoals({String? examCode, bool publishedOnly = true}) {
+    return _careerGoals.where((g) {
+      if (publishedOnly && !g.isPublished) return false;
+      if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+        if (g.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  CareerGoal? getCareerGoalByExam(String examCode) {
+    try {
+      return _careerGoals.firstWhere(
+        (g) => g.examCode.toUpperCase() == examCode.toUpperCase() && g.isPublished,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveCareerGoals(List<CareerGoal> list) async {
+    _careerGoals.clear();
+    _careerGoals.addAll(list);
+    await _prefs?.setString('db_career_goals', jsonEncode(list.map((g) => g.toMap()).toList()));
+  }
+
+  // --- 5. Current Affairs ---
+  List<CurrentAffairsItem> getCurrentAffairs({String? category, bool publishedOnly = true}) {
+    return _currentAffairs.where((a) {
+      if (publishedOnly && !a.isPublished) return false;
+      if (category != null && category.isNotEmpty && category.toUpperCase() != 'ALL') {
+        if (a.category.toUpperCase() != category.toUpperCase()) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => b.publishDate.compareTo(a.publishDate));
+  }
+
+  CurrentAffairsItem? getCurrentAffairsById(String id) {
+    try {
+      return _currentAffairs.firstWhere((a) => a.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveCurrentAffairs(List<CurrentAffairsItem> list) async {
+    _currentAffairs.clear();
+    _currentAffairs.addAll(list);
+    await _prefs?.setString('db_current_affairs', jsonEncode(list.map((a) => a.toMap()).toList()));
+  }
+
+  // --- 6. Dynamic Home Section Config ---
+  static List<HomeSectionConfig> getDefaultHomeSections() => const [
+    HomeSectionConfig(id: 'qotd', sectionType: 'qotd', sortOrder: 1, enabled: true),
+    HomeSectionConfig(id: 'banners', sectionType: 'banners', sortOrder: 2, enabled: true),
+    HomeSectionConfig(id: 'notices', sectionType: 'notices', sortOrder: 3, enabled: true),
+    HomeSectionConfig(id: 'live_tests', sectionType: 'live_tests', sortOrder: 4, enabled: true),
+    HomeSectionConfig(id: 'test_series', sectionType: 'test_series', sortOrder: 5, enabled: true),
+    HomeSectionConfig(id: 'practice', sectionType: 'practice', sortOrder: 6, enabled: true),
+    HomeSectionConfig(id: 'study_material', sectionType: 'study_material', sortOrder: 7, enabled: true),
+    HomeSectionConfig(id: 'current_affairs', sectionType: 'current_affairs', sortOrder: 8, enabled: true),
+    HomeSectionConfig(id: 'career_goals', sectionType: 'career_goals', sortOrder: 9, enabled: true),
+    HomeSectionConfig(id: 'battles', sectionType: 'battles', sortOrder: 10, enabled: false),
+  ];
+
+  List<HomeSectionConfig> getHomeSections() {
+    if (_homeSections.isEmpty) {
+      return getDefaultHomeSections();
+    }
+    final sorted = List<HomeSectionConfig>.from(_homeSections)
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return sorted;
+  }
+
+  Future<void> saveHomeSections(List<HomeSectionConfig> list) async {
+    _homeSections.clear();
+    _homeSections.addAll(list);
+    await _prefs?.setString('db_home_sections', jsonEncode(list.map((s) => s.toMap()).toList()));
+  }
+
+  // --- 7. Entitlements & Verification vs UI Cache ---
+  // ARCHITECTURAL CORRECTION 1:
+  // UI entitlement cache is separated from server-verified entitlement records.
+  List<EntitlementItem> getEntitlements() => List.unmodifiable(_entitlements);
+
+  bool hasEntitlement(String targetId) {
+    if (_purchasedProductIds.contains(targetId)) return true;
+    return _entitlements.any((e) => e.id == targetId);
+  }
+
+  Future<void> unlockProduct(String productId) => unlockTest(productId);
+
+  Future<void> recordEntitlement(EntitlementItem item) async {
+    _entitlements.removeWhere((e) => e.id == item.id);
+    _entitlements.add(item);
+    await unlockTest(item.id);
+    await _prefs?.setString('saved_entitlements', jsonEncode(_entitlements.map((e) => e.toMap()).toList()));
+  }
 }
+
+

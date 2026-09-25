@@ -56,10 +56,54 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 7. Live Tests: Public read for students, Admin write
-    match /live_tests/{testId} {
+    // 7. Live Tests & Registrations
+    // NOTE & SECURITY DISCLOSURE:
+    // The student app is unauthenticated / login-free.
+    // The installation UUID is a pseudonymous client identifier, NOT a verified identity
+    // and cannot provide cryptographic ownership or authentication.
+    match /live_tests/{liveTestId} {
       allow read: if true;
       allow write: if isAdmin();
+
+      match /registrations/{regId} {
+        // Privacy: Only Admin can read all registrations (protects participant list from public scraping)
+        allow read: if isAdmin();
+
+        // Create: Unauthenticated student registration with strict schema validation
+        allow create: if request.resource.data.liveTestId == liveTestId
+          && request.resource.data.testId is string
+          && request.resource.data.studentName is string
+          && request.resource.data.studentName.size() > 0
+          && request.resource.data.studentName.size() <= 100
+          && request.resource.data.installationId is string
+          && request.resource.data.installationId.size() > 0
+          && request.resource.data.installationId.size() <= 100
+          && request.resource.data.registeredAt is timestamp
+          && request.resource.data.paymentType in ['FREE', 'PAID']
+          && request.resource.data.status == 'REGISTERED'
+          && request.resource.data.keys().hasOnly([
+            'id', 'liveTestId', 'testId', 'studentName', 'mobile',
+            'installationId', 'registeredAt', 'paymentType',
+            'entitlementStatus', 'status'
+          ]);
+
+        // Update: Status transitions (REGISTERED -> STARTED -> SUBMITTED)
+        allow update: if isAdmin() || (
+          // Status transition to STARTED
+          (request.resource.data.status == 'STARTED'
+            && resource.data.status == 'REGISTERED'
+            && request.resource.data.startedAt is timestamp
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt']))
+          ||
+          // Status transition to SUBMITTED
+          (request.resource.data.status == 'SUBMITTED'
+            && (resource.data.status == 'STARTED' || resource.data.status == 'REGISTERED')
+            && request.resource.data.submittedAt is timestamp
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'submittedAt', 'score']))
+        );
+
+        allow delete: if isAdmin();
+      }
     }
 
     // 8. Question of the Day (QOTD): Public read, Admin write
@@ -188,9 +232,131 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 16. Test Series, Folders & Items: Public read for students, Admin write
+    match /test_series/{seriesId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /folders/{folderId} {
+        allow read: if true;
+        allow write: if isAdmin();
+
+        match /items/{itemId} {
+          allow read: if true;
+          allow write: if isAdmin();
+        }
+      }
+    }
+
+    // 17. Study Library: Public read, Admin write
+    // SECURITY CONSTRAINT: No public client-writable viewCount or counters. Writes strictly restricted to Admin.
+    match /study_folders/{folderId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /study_materials/{materialId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 18. Battle / Competition Mode & Registrations
+    // NOTE & SECURITY DISCLOSURE:
+    // Student app usage is login-free. The installation UUID is a pseudonymous client identifier.
+    // In accordance with Architectural Correction 8, battle rank is NEVER client-written;
+    // rank is computed on the server/admin/leaderboard.
+    match /battles/{battleId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /registrations/{regId} {
+        // Privacy: Only Admin can read all registrations (protects participant list from public scraping)
+        allow read: if isAdmin();
+
+        // Create: Unauthenticated student registration with strict schema validation
+        allow create: if request.resource.data.battleId == battleId
+          && request.resource.data.testId is string
+          && request.resource.data.studentName is string
+          && request.resource.data.studentName.size() > 0
+          && request.resource.data.studentName.size() <= 100
+          && request.resource.data.installationId is string
+          && request.resource.data.installationId.size() > 0
+          && request.resource.data.installationId.size() <= 100
+          && request.resource.data.registeredAt is timestamp
+          && request.resource.data.status == 'REGISTERED'
+          && request.resource.data.keys().hasOnly([
+            'id', 'battleId', 'testId', 'studentName', 'mobile',
+            'installationId', 'registeredAt', 'status'
+          ]);
+
+        // Update: Status transitions (REGISTERED -> LOBBY/STARTED -> SUBMITTED)
+        // Strictly prevents client tampering with other registrations, and forbids rank write.
+        allow update: if isAdmin() || (
+          // Transition to LOBBY or STARTED
+          ((request.resource.data.status == 'LOBBY' || request.resource.data.status == 'STARTED')
+            && (resource.data.status == 'REGISTERED' || resource.data.status == 'LOBBY')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'startedAt']))
+          ||
+          // Transition to SUBMITTED
+          (request.resource.data.status == 'SUBMITTED'
+            && (resource.data.status == 'STARTED' || resource.data.status == 'LOBBY' || resource.data.status == 'REGISTERED')
+            && request.resource.data.submittedAt is timestamp
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'submittedAt', 'score', 'accuracy', 'timeTakenSeconds']))
+        );
+
+        allow delete: if isAdmin();
+      }
+    }
+
+    // 19. Question Reports: Student submit, Admin read & moderate
+    // NOTE & LIMITATION: Unauthenticated reporting cannot enforce cryptographic per-user rate limits
+    // in Firestore security rules. Rules enforce strict schema validation; client enforces cooldown;
+    // admin dashboard provides bulk moderation and deduplication.
+    match /question_reports/{reportId} {
+      allow read: if isAdmin();
+
+      allow create: if request.resource.data.questionId is string
+        && request.resource.data.questionId.size() > 0
+        && request.resource.data.questionId.size() <= 100
+        && request.resource.data.issueType in [
+          'INCORRECT_QUESTION', 'WRONG_ANSWER', 'FORMATTING_ISSUE',
+          'IMAGE_ISSUE', 'EXPLANATION_ISSUE', 'OTHER'
+        ]
+        && request.resource.data.installationId is string
+        && request.resource.data.installationId.size() > 0
+        && request.resource.data.installationId.size() <= 100
+        && request.resource.data.status == 'OPEN'
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly([
+          'id', 'questionId', 'testId', 'topicId', 'issueType',
+          'details', 'installationId', 'status', 'createdAt'
+        ]);
+
+      allow update, delete: if isAdmin();
+    }
+
+    // 20. Career Goals & Roadmap: Public read, Admin write
+    match /career_goals/{goalId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 21. Current Affairs: Public read, Admin write
+    match /current_affairs/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 22. App Home Dynamic Sections: Public read, Admin write
+    match /app_home_sections/{sectionId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
+

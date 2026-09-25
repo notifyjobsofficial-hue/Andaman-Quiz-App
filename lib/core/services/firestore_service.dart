@@ -23,6 +23,14 @@ class FirestoreService {
   static const String colBanners = 'banners';
   static const String colNotices = 'notices';
   static const String colPracticeTopicStats = 'practice_topic_stats';
+  static const String colTestSeries = 'test_series';
+  static const String colStudyFolders = 'study_folders';
+  static const String colStudyMaterials = 'study_materials';
+  static const String colBattles = 'battles';
+  static const String colQuestionReports = 'question_reports';
+  static const String colCareerGoals = 'career_goals';
+  static const String colCurrentAffairs = 'current_affairs';
+  static const String colHomeSections = 'app_home_sections';
 
   // Broadcast stream controllers for reactive UI updates
   final _categoriesController = StreamController<List<ExamCategory>>.broadcast();
@@ -36,6 +44,13 @@ class FirestoreService {
   final _remoteConfigController = StreamController<RemoteAppConfig>.broadcast();
   final _qotdController = StreamController<QuestionOfTheDay?>.broadcast();
   final _practiceQuestionsController = StreamController<List<Question>>.broadcast();
+  final _testSeriesController = StreamController<List<TestSeries>>.broadcast();
+  final _studyFoldersController = StreamController<List<StudyFolder>>.broadcast();
+  final _studyMaterialsController = StreamController<List<StudyMaterial>>.broadcast();
+  final _battlesController = StreamController<List<BattleItem>>.broadcast();
+  final _careerGoalsController = StreamController<List<CareerGoal>>.broadcast();
+  final _currentAffairsController = StreamController<List<CurrentAffairsItem>>.broadcast();
+  final _homeSectionsController = StreamController<List<HomeSectionConfig>>.broadcast();
 
   // Public streams for Riverpod providers to subscribe to
   Stream<List<ExamCategory>> get categoriesStream => _categoriesController.stream;
@@ -49,6 +64,16 @@ class FirestoreService {
   Stream<RemoteAppConfig> get remoteConfigStream => _remoteConfigController.stream;
   Stream<QuestionOfTheDay?> get qotdStream => _qotdController.stream;
   Stream<List<Question>> get practiceQuestionsStream => _practiceQuestionsController.stream;
+  Stream<List<TestSeries>> get testSeriesStream => _testSeriesController.stream;
+  Stream<List<StudyFolder>> get studyFoldersStream => _studyFoldersController.stream;
+  Stream<List<StudyMaterial>> get studyMaterialsStream => _studyMaterialsController.stream;
+  Stream<List<BattleItem>> get battlesStream => _battlesController.stream;
+  Stream<List<CareerGoal>> get careerGoalsStream => _careerGoalsController.stream;
+  Stream<List<CurrentAffairsItem>> get currentAffairsStream => _currentAffairsController.stream;
+  Stream<List<HomeSectionConfig>> get homeSectionsStream => _homeSectionsController.stream;
+
+  // Question report rate limiting cooldown cache (client-side 60s cooldown per question)
+  final Map<String, DateTime> _reportCooldowns = {};
 
   // Active subscriptions
   final List<StreamSubscription> _subscriptions = [];
@@ -95,20 +120,30 @@ class FirestoreService {
   }
 
   // --- Mock Tests ---
-  Future<MockTest?> fetchMockTest(String testId) async {
+  Future<MockTest?> fetchMockTest(String testId, {bool allowDraft = false}) async {
     if (testId.trim().isEmpty) return null;
     try {
       final docMocks = await _firestore.collection(colMocks).doc(testId).get();
       if (docMocks.exists && docMocks.data() != null) {
         final data = docMocks.data()!;
         data['id'] = docMocks.id;
-        return MockTest.fromMap(data);
+        final mock = MockTest.fromMap(data);
+        if (!allowDraft && mock.status.toLowerCase() != 'published') {
+          debugPrint('fetchMockTest: Test $testId is in ${mock.status} - rejected for student catalog.');
+          return null;
+        }
+        return mock;
       }
       final docMockTests = await _firestore.collection('mock_tests').doc(testId).get();
       if (docMockTests.exists && docMockTests.data() != null) {
         final data = docMockTests.data()!;
         data['id'] = docMockTests.id;
-        return MockTest.fromMap(data);
+        final mock = MockTest.fromMap(data);
+        if (!allowDraft && mock.status.toLowerCase() != 'published') {
+          debugPrint('fetchMockTest: Test $testId is in ${mock.status} - rejected for student catalog.');
+          return null;
+        }
+        return mock;
       }
       return null;
     } catch (e) {
@@ -254,6 +289,21 @@ class FirestoreService {
     _subscriptions.add(sub);
   }
 
+  final Map<String, MockTest> _publishedMocksById = {};
+  List<LiveTestItem> _rawLiveTests = [];
+
+  void _reconcileAndEmitLiveTests() async {
+    // Only emit live tests whose linked mock exists in published mocks
+    final validLiveTests = _rawLiveTests.where((t) {
+      if (!t.isPublished) return false;
+      final mock = _publishedMocksById[t.testId] ?? LocalDatabase.instance.getMockTestById(t.testId);
+      return mock != null && mock.status.toLowerCase() == 'published';
+    }).toList();
+
+    await LocalDatabase.instance.syncLiveTestsFromFirestore(validLiveTests);
+    _liveTestsController.add(validLiveTests);
+  }
+
   void _subscribeToMockTests() {
     final Map<String, MockTest> mergedMocks = {};
 
@@ -262,8 +312,13 @@ class FirestoreService {
           .where((m) => m.status.toLowerCase() == 'published')
           .toList()
         ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+      _publishedMocksById.clear();
+      for (final m in list) {
+        _publishedMocksById[m.id] = m;
+      }
       await LocalDatabase.instance.syncMockTestsFromFirestore(list);
       _mockTestsController.add(list);
+      _reconcileAndEmitLiveTests();
     }
 
     final sub1 = _firestore.collection(colMocks).snapshots().listen((snapshot) {
@@ -341,9 +396,8 @@ class FirestoreService {
         .snapshots()
         .listen((snapshot) async {
       try {
-        final tests = snapshot.docs.map((d) => LiveTestItem.fromMap(d.data())).toList();
-        await LocalDatabase.instance.syncLiveTestsFromFirestore(tests);
-        _liveTestsController.add(tests);
+        _rawLiveTests = snapshot.docs.map((d) => LiveTestItem.fromMap(d.data())).toList();
+        _reconcileAndEmitLiveTests();
       } catch (e) {
         debugPrint('LiveTests sync error: $e');
       }
@@ -747,6 +801,352 @@ class FirestoreService {
     });
   }
 
+  // --- Live Test Registrations & Trusted Time ---
+  Duration _serverTimeOffset = Duration.zero;
+
+  void updateServerTimeOffset(DateTime serverTime) {
+    _serverTimeOffset = serverTime.difference(DateTime.now());
+  }
+
+  DateTime getTrustedNow() {
+    return DateTime.now().add(_serverTimeOffset);
+  }
+
+  /// Submits student registration for a live test.
+  /// Note & Security Disclosure: The student app is unauthenticated / login-free.
+  /// installationId is a pseudonymous device identifier, NOT a verified identity.
+  Future<bool> registerForLiveTest(LiveTestRegistration registration) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final ref = _firestore
+          .collection(colLiveTests)
+          .doc(registration.liveTestId)
+          .collection('registrations')
+          .doc(registration.id);
+
+      final map = registration.toMap();
+      map['registeredAt'] = FieldValue.serverTimestamp();
+
+      await ref.set(map);
+      return true;
+    } catch (e) {
+      debugPrint('Error registering for live test: $e');
+      return false;
+    }
+  }
+
+  /// Updates registration status: REGISTERED -> STARTED -> SUBMITTED.
+  Future<bool> updateLiveTestRegistrationStatus(
+    String liveTestId,
+    String registrationId,
+    String status, {
+    DateTime? startedAt,
+    DateTime? submittedAt,
+    double? score,
+  }) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final ref = _firestore
+          .collection(colLiveTests)
+          .doc(liveTestId)
+          .collection('registrations')
+          .doc(registrationId);
+
+      final Map<String, dynamic> updateData = {'status': status};
+      if (status == 'STARTED') {
+        updateData['startedAt'] = FieldValue.serverTimestamp();
+      } else if (status == 'SUBMITTED') {
+        updateData['submittedAt'] = FieldValue.serverTimestamp();
+        if (score != null) updateData['score'] = score;
+      }
+
+      await ref.update(updateData);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating registration status: $e');
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // PHASE A: LMS CLOUD FIRESTORE ACCESSORS & DRAFT-ISOLATED SYNC
+  // ============================================================================
+
+  // --- 1. Test Series ---
+  Future<List<TestSeries>> fetchTestSeries({String? examCode, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore.collection(colTestSeries).get();
+      return snap.docs
+          .map((d) => TestSeries.fromMap({...d.data(), 'id': d.id}))
+          .where((s) {
+            if (!allowDraft && !s.isPublished) return false;
+            if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+              if (s.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching test series: $e');
+      return [];
+    }
+  }
+
+  Future<List<TestSeriesFolder>> fetchTestSeriesFolders(String seriesId, {bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore
+          .collection(colTestSeries)
+          .doc(seriesId)
+          .collection('folders')
+          .get();
+      return snap.docs
+          .map((d) => TestSeriesFolder.fromMap({...d.data(), 'id': d.id, 'seriesId': seriesId}))
+          .where((f) => allowDraft || f.isPublished)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching test series folders for $seriesId: $e');
+      return [];
+    }
+  }
+
+  Future<List<TestSeriesItem>> fetchTestSeriesItems(String seriesId, String folderId, {bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore
+          .collection(colTestSeries)
+          .doc(seriesId)
+          .collection('folders')
+          .doc(folderId)
+          .collection('items')
+          .get();
+      return snap.docs
+          .map((d) => TestSeriesItem.fromMap({
+                ...d.data(),
+                'id': d.id,
+                'seriesId': seriesId,
+                'folderId': folderId,
+              }))
+          .where((i) => allowDraft || i.isPublished)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching test series items: $e');
+      return [];
+    }
+  }
+
+  // --- 2. Study Library ---
+  Future<List<StudyFolder>> fetchStudyFolders({String? examCode, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore.collection(colStudyFolders).get();
+      return snap.docs
+          .map((d) => StudyFolder.fromMap({...d.data(), 'id': d.id}))
+          .where((f) {
+            if (!allowDraft && !f.isPublished) return false;
+            if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+              if (f.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching study folders: $e');
+      return [];
+    }
+  }
+
+  Future<List<StudyMaterial>> fetchStudyMaterials({String? folderId, String? examCode, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      Query query = _firestore.collection(colStudyMaterials);
+      if (folderId != null && folderId.isNotEmpty) {
+        query = query.where('folderId', isEqualTo: folderId);
+      }
+      final snap = await query.get();
+      return snap.docs
+          .map((d) => StudyMaterial.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
+          .where((m) {
+            if (!allowDraft && !m.isPublished) return false;
+            if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+              if (m.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching study materials: $e');
+      return [];
+    }
+  }
+
+  // --- 3. Battle Mode ---
+  Future<List<BattleItem>> fetchBattles({String? examCode}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore.collection(colBattles).get();
+      return snap.docs
+          .map((d) => BattleItem.fromMap({...d.data(), 'id': d.id}))
+          .where((b) {
+            if (!b.isPublished) return false;
+            if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+              if (b.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList()
+        ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    } catch (e) {
+      debugPrint('Error fetching battles: $e');
+      return [];
+    }
+  }
+
+  Future<bool> registerForBattle(BattleRegistration registration) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final ref = _firestore
+          .collection(colBattles)
+          .doc(registration.battleId)
+          .collection('registrations')
+          .doc(registration.id);
+
+      final map = registration.toMap();
+      map['registeredAt'] = FieldValue.serverTimestamp();
+
+      await ref.set(map);
+      return true;
+    } catch (e) {
+      debugPrint('Error registering for battle: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateBattleRegistrationStatus(
+    String battleId,
+    String registrationId,
+    String status, {
+    int? timeTakenSeconds,
+    double? score,
+    double? accuracy,
+  }) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final ref = _firestore
+          .collection(colBattles)
+          .doc(battleId)
+          .collection('registrations')
+          .doc(registrationId);
+
+      final Map<String, dynamic> updateData = {'status': status};
+      if (status == 'STARTED' || status == 'LOBBY') {
+        updateData['startedAt'] = FieldValue.serverTimestamp();
+      } else if (status == 'SUBMITTED') {
+        updateData['submittedAt'] = FieldValue.serverTimestamp();
+        if (score != null) updateData['score'] = score;
+        if (accuracy != null) updateData['accuracy'] = accuracy;
+        if (timeTakenSeconds != null) updateData['timeTakenSeconds'] = timeTakenSeconds;
+      }
+
+      await ref.update(updateData);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating battle registration status: $e');
+      return false;
+    }
+  }
+
+  // --- 4. Question Reporting System ---
+  Future<bool> submitQuestionReport(QuestionReport report) async {
+    if (Firebase.apps.isEmpty) return false;
+
+    // Client-side cooldown (60 seconds per question to protect network and prevent spam)
+    final lastReported = _reportCooldowns[report.questionId];
+    if (lastReported != null && DateTime.now().difference(lastReported).inSeconds < 60) {
+      debugPrint('Report throttled: already reported question ${report.questionId} within 60s cooldown.');
+      return false;
+    }
+
+    try {
+      final ref = _firestore.collection(colQuestionReports).doc(report.id);
+      final map = report.toMap();
+      map['createdAt'] = FieldValue.serverTimestamp();
+      await ref.set(map);
+      _reportCooldowns[report.questionId] = DateTime.now();
+      return true;
+    } catch (e) {
+      debugPrint('Error submitting question report: $e');
+      return false;
+    }
+  }
+
+  // --- 5. Career Goals ---
+  Future<List<CareerGoal>> fetchCareerGoals({String? examCode, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore.collection(colCareerGoals).get();
+      return snap.docs
+          .map((d) => CareerGoal.fromMap({...d.data(), 'id': d.id}))
+          .where((g) {
+            if (!allowDraft && !g.isPublished) return false;
+            if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+              if (g.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching career goals: $e');
+      return [];
+    }
+  }
+
+  // --- 6. Current Affairs ---
+  Future<List<CurrentAffairsItem>> fetchCurrentAffairs({String? category, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final snap = await _firestore.collection(colCurrentAffairs).get();
+      return snap.docs
+          .map((d) => CurrentAffairsItem.fromMap({...d.data(), 'id': d.id}))
+          .where((a) {
+            if (!allowDraft && !a.isPublished) return false;
+            if (category != null && category.isNotEmpty && category.toUpperCase() != 'ALL') {
+              if (a.category.toUpperCase() != category.toUpperCase()) return false;
+            }
+            return true;
+          })
+          .toList()
+        ..sort((a, b) => b.publishDate.compareTo(a.publishDate));
+    } catch (e) {
+      debugPrint('Error fetching current affairs: $e');
+      return [];
+    }
+  }
+
+  // --- 7. Dynamic Home Sections ---
+  Future<List<HomeSectionConfig>> fetchHomeSections() async {
+    if (Firebase.apps.isEmpty) return LocalDatabase.getDefaultHomeSections();
+    try {
+      final snap = await _firestore.collection(colHomeSections).get();
+      if (snap.docs.isEmpty) {
+        return LocalDatabase.getDefaultHomeSections();
+      }
+      return snap.docs
+          .map((d) => HomeSectionConfig.fromMap({...d.data(), 'id': d.id}))
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching home sections: $e');
+      return LocalDatabase.getDefaultHomeSections();
+    }
+  }
+
   void disposeSync() {
     for (final sub in _subscriptions) {
       sub.cancel();
@@ -755,3 +1155,4 @@ class FirestoreService {
     _syncStarted = false;
   }
 }
+
