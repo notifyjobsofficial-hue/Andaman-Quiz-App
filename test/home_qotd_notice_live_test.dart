@@ -407,6 +407,20 @@ void main() {
         endAt: now.add(const Duration(hours: 1, minutes: 45)),
       );
 
+      await LocalDatabase.instance.syncMockTestsFromFirestore([
+        const MockTest(
+          id: 'mock_mega_01',
+          title: 'All-Island Mega Mock 2026',
+          examCode: 'AN CGL',
+          durationMinutes: 120,
+          totalQuestions: 100,
+          totalMarks: 100.0,
+          negativeMarks: 0.25,
+          sections: [],
+          status: 'published',
+        ),
+      ]);
+
       await tester.pumpWidget(
         ProviderScope(
           overrides: [

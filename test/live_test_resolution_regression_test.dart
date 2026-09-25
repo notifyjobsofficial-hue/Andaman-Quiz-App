@@ -136,9 +136,28 @@ void main() {
       expect(find.text('100 Questions • 120 Minutes'), findsOneWidget);
       expect(find.text('JOIN TEST'), findsOneWidget);
 
-      // Tap JOIN TEST
+      // Pre-register student for the live test
+      await LocalDatabase.instance.saveLiveTestRegistration(
+        LiveTestRegistration(
+          id: 'reg_123',
+          liveTestId: liveId,
+          testId: mockId,
+          studentName: 'Test Student',
+          installationId: 'inst_123',
+          registeredAt: now,
+          status: 'REGISTERED',
+        ),
+      );
+
+      // Tap JOIN TEST (opens Details sheet)
       await tester.tap(find.text('JOIN TEST'));
       await tester.pumpAndSettle();
+
+      // Tap ENTER TEST on details sheet to proceed to instructions
+      if (find.text('ENTER TEST').evaluate().isNotEmpty) {
+        await tester.tap(find.text('ENTER TEST'));
+        await tester.pumpAndSettle();
+      }
 
       // MANDATORY ASSERTION: Instructions received mock_123, NOT live_456
       expect(instructionsReceivedTestId, equals('mock_123'));

@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/database/local_database.dart';
 import '../../../../core/models/models.dart';
 import '../../../../core/providers/app_providers.dart';
 import '../../../../core/widgets/animated_pressable.dart';
-import '../../../../core/services/firestore_service.dart';
+import 'live_test_details_sheet.dart';
 
 class LiveTestHomeCard extends ConsumerStatefulWidget {
   const LiveTestHomeCard({super.key});
@@ -19,27 +17,6 @@ class LiveTestHomeCard extends ConsumerStatefulWidget {
 
 class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
   Timer? _countdownTimer;
-  final Set<String> _resolvingTestIds = {};
-  final Set<String> _failedTestIds = {};
-
-  void _resolveLinkedTest(String testId) async {
-    if (testId.isEmpty || _resolvingTestIds.contains(testId) || _failedTestIds.contains(testId)) return;
-    _resolvingTestIds.add(testId);
-    try {
-      final mock = await FirestoreService.instance.fetchMockTest(testId);
-      if (mock != null) {
-        await LocalDatabase.instance.syncMockTestsFromFirestore([mock]);
-        if (mounted) setState(() {});
-      } else {
-        _failedTestIds.add(testId);
-        if (mounted) setState(() {});
-      }
-    } catch (_) {
-      _failedTestIds.add(testId);
-    } finally {
-      _resolvingTestIds.remove(testId);
-    }
-  }
 
   @override
   void initState() {
@@ -65,85 +42,6 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
     return '$hours:$minutes:$seconds';
   }
 
-  void _showUpcomingDetails(BuildContext context, LiveTestItem liveTest, MockTest? linkedMock) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.schedule, color: AppColors.actionBlue, size: 22),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                liveTest.title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              liveTest.instructions != null && liveTest.instructions!.isNotEmpty
-                  ? liveTest.instructions!
-                  : 'This scheduled examination will become active at the specified start time. Please return when the countdown ends.',
-              style: const TextStyle(fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            if (linkedMock != null) ...[
-              Text(
-                'Total Questions: ${linkedMock.totalQuestions}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                'Duration: ${linkedMock.durationMinutes} Minutes',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-            ],
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.actionBlue.withAlpha(20),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.timer_outlined, size: 16, color: AppColors.actionBlue),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Starts in: ${_formatDuration(liveTest.remainingDuration)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.actionBlue,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          if (liveTest.allowEarlyJoin)
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                context.push('/tests/instructions/${liveTest.testId}');
-              },
-              child: const Text('Join Early'),
-            ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -152,11 +50,17 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
         ? streamLiveTests
         : LocalDatabase.instance.getLiveTests();
 
-    // Filter valid published tests whose status is either LIVE or UPCOMING
+    // Canonical publication rule:
+    // A Live Test is candidate ONLY IF:
+    // 1. liveTest.isPublished == true
+    // 2. status is live or upcoming
+    // 3. linked Mock exists in published mocks (mock.status == 'published')
     final candidateTests = allTests.where((t) {
       if (!t.isPublished) return false;
       if (t.status != LiveTestStatus.live && t.status != LiveTestStatus.upcoming) return false;
       if (t.testId.trim().isEmpty) return false;
+      final mock = LocalDatabase.instance.getMockTestById(t.testId);
+      if (mock == null || mock.status.toLowerCase() != 'published') return false;
       return true;
     }).toList();
 
@@ -177,13 +81,12 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
     final linkedMock = LocalDatabase.instance.getMockTestById(liveTest.testId);
 
     if (linkedMock == null) {
-      _resolveLinkedTest(liveTest.testId);
-      // If referenced test resolution failed, card will be hidden via _failedTestIds
+      return const SizedBox.shrink();
     }
 
-    final detailText = (linkedMock != null && linkedMock.totalQuestions > 0 && linkedMock.durationMinutes > 0)
+    final detailText = (linkedMock.totalQuestions > 0 && linkedMock.durationMinutes > 0)
         ? '${linkedMock.totalQuestions} Questions • ${linkedMock.durationMinutes} Minutes'
-        : (linkedMock != null && linkedMock.totalQuestions > 0
+        : (linkedMock.totalQuestions > 0
             ? '${linkedMock.totalQuestions} Questions'
             : 'Live Examination');
 
@@ -198,11 +101,11 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
         const SizedBox(height: 10),
         AnimatedPressable(
           onTap: () {
-            if (isLive) {
-              context.push('/tests/instructions/${liveTest.testId}');
-            } else {
-              _showUpcomingDetails(context, liveTest, linkedMock);
-            }
+            LiveTestDetailsSheet.show(
+              context,
+              liveTest: liveTest,
+              mockTest: linkedMock,
+            );
           },
           child: Container(
             padding: const EdgeInsets.all(AppDimens.space16),
@@ -234,33 +137,35 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top row: Status indicator badge + Countdown
+                // Top row: Status Tag & Timer
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Status Tag
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(45),
-                        borderRadius: BorderRadius.circular(AppDimens.radiusPill),
+                        color: Colors.white.withAlpha(30),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withAlpha(50)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 7,
-                            height: 7,
+                            width: 8,
+                            height: 8,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: isLive ? const Color(0xFFFDE047) : Colors.white,
+                              color: isLive ? Colors.amberAccent : Colors.lightBlueAccent,
                             ),
                           ),
-                          const SizedBox(width: 5),
+                          const SizedBox(width: 6),
                           Text(
-                            isLive ? 'LIVE NOW' : 'UPCOMING',
+                            isLive ? 'LIVE NOW' : 'UPCOMING TEST',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
                             ),
@@ -268,98 +173,92 @@ class _LiveTestHomeCardState extends ConsumerState<LiveTestHomeCard> {
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.timer_outlined, color: Colors.white70, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          isLive
-                              ? 'Ends in ${_formatDuration(liveTest.remainingDuration)}'
-                              : 'Starts in ${_formatDuration(liveTest.remainingDuration)}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
 
-                // Title
-                Text(
-                  liveTest.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 6),
-
-                // Details: Questions & Duration
-                Text(
-                  detailText,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // CTA Button
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+                    // Countdown Display
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(AppDimens.radiusSmall),
+                        color: Colors.black.withAlpha(40),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
+                          const Icon(Icons.timer_outlined, size: 14, color: Colors.white),
+                          const SizedBox(width: 5),
                           Text(
-                            isLive ? 'JOIN TEST' : 'VIEW DETAILS',
-                            style: TextStyle(
-                              color: isLive ? const Color(0xFFDC2626) : AppColors.actionBlue,
-                              fontWeight: FontWeight.w800,
+                            isLive
+                                ? 'Ends: ${_formatDuration(liveTest.remainingDuration)}'
+                                : 'Starts: ${_formatDuration(liveTest.remainingDuration)}',
+                            style: const TextStyle(
+                              color: Colors.white,
                               fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              fontFamily: 'monospace',
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_forward,
-                            size: 14,
-                            color: isLive ? const Color(0xFFDC2626) : AppColors.actionBlue,
                           ),
                         ],
                       ),
                     ),
-                    if (!isLive)
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Test Title
+                Text(
+                  liveTest.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Details Text
+                Text(
+                  detailText,
+                  style: TextStyle(
+                    color: Colors.white.withAlpha(200),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Bottom Action Button / Prompt
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(AppDimens.radiusMedium),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isLive ? Icons.play_arrow_rounded : Icons.info_outline,
+                        size: 18,
+                        color: isLive ? const Color(0xFF991B1B) : const Color(0xFF1E40AF),
+                      ),
+                      const SizedBox(width: 6),
                       Text(
-                        'Scheduled Exam',
+                        isLive ? 'JOIN TEST' : 'VIEW DETAILS & REGISTER',
                         style: TextStyle(
-                          color: Colors.white.withAlpha(180),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                          color: isLive ? const Color(0xFF991B1B) : const Color(0xFF1E40AF),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 20),
       ],
     );
   }

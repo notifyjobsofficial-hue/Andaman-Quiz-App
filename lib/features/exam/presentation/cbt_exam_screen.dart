@@ -15,6 +15,7 @@ import '../../../core/widgets/question_source_metadata.dart';
 import '../../../core/widgets/question_text_view.dart';
 import '../../../core/widgets/question_image_widget.dart';
 import '../../../core/services/firestore_service.dart';
+import '../../../core/services/live_test_gate_service.dart';
 import '../../../core/ads/ad_service.dart';
 
 class CbtExamScreen extends ConsumerStatefulWidget {
@@ -55,26 +56,55 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
   }
 
   Future<void> _initExam() async {
+    // 1. Strict Access Gate (blocks draft mocks, unstarted live tests, unregistered students)
+    final gateDecision = LiveTestGateService.evaluateAccess(testIdOrLiveTestId: widget.testId);
+    if (!gateDecision.isAllowed) {
+      if (mounted) {
+        setState(() {
+          _loadError = gateDecision.message;
+          _isLoadingQuestions = false;
+        });
+      }
+      return;
+    }
+
     MockTest? mock = LocalDatabase.instance.getMockTestById(widget.testId);
     if (mock == null) {
       try {
         mock = await FirestoreService.instance.fetchMockTest(widget.testId);
-        if (mock != null) {
-          await LocalDatabase.instance.syncMockTestsFromFirestore([mock]);
-        }
       } catch (_) {}
     }
 
     if (mock == null) {
       if (mounted) {
         setState(() {
-          _loadError = 'The requested examination could not be loaded. Please return to tests.';
+          _loadError = 'The requested examination is in Draft, inactive, or could not be loaded.';
           _isLoadingQuestions = false;
         });
       }
       return;
     }
     _test = mock;
+
+    // Transition Live Test registration to STARTED if applicable
+    final liveTest = LocalDatabase.instance.getLiveTestByTestId(widget.testId);
+    if (liveTest != null) {
+      final reg = LocalDatabase.instance.getLiveTestRegistration(liveTest.id);
+      if (reg != null && reg.status == 'REGISTERED') {
+        final now = DateTime.now();
+        await LocalDatabase.instance.updateLiveTestRegistrationStatus(
+          liveTest.id,
+          'STARTED',
+          startedAt: now,
+        );
+        FirestoreService.instance.updateLiveTestRegistrationStatus(
+          liveTest.id,
+          reg.id,
+          'STARTED',
+          startedAt: now,
+        );
+      }
+    }
 
     // Collect all question IDs from all sections
     final allQuestionIds = <String>[];
@@ -356,6 +386,28 @@ class _CbtExamScreenState extends ConsumerState<CbtExamScreen> with WidgetsBindi
     await FirestoreService.instance.recordTestAttempt(attempt);
     // Clear persisted draft now that attempt is submitted
     await LocalDatabase.instance.clearExamDraft(_test.id);
+
+    // If linked to a Live Test, transition registration to SUBMITTED with final score
+    final liveTest = LocalDatabase.instance.getLiveTestByTestId(_test.id);
+    if (liveTest != null) {
+      final reg = LocalDatabase.instance.getLiveTestRegistration(liveTest.id);
+      if (reg != null) {
+        final now = DateTime.now();
+        await LocalDatabase.instance.updateLiveTestRegistrationStatus(
+          liveTest.id,
+          'SUBMITTED',
+          submittedAt: now,
+          score: finalScore,
+        );
+        FirestoreService.instance.updateLiveTestRegistrationStatus(
+          liveTest.id,
+          reg.id,
+          'SUBMITTED',
+          submittedAt: now,
+          score: finalScore,
+        );
+      }
+    }
 
     if (mounted) {
       AdService.instance.showResultInterstitial(

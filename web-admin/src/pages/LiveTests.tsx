@@ -8,11 +8,14 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  PlayCircle
+  PlayCircle,
+  Users,
+  Search,
+  AlertTriangle,
 } from 'lucide-react';
-import { fetchLiveTests, saveLiveTest, deleteLiveTest } from '../firebase/firestore';
+import { fetchLiveTests, saveLiveTest, deleteLiveTest, fetchLiveTestRegistrations } from '../firebase/firestore';
 import { fetchMockTests } from '../firebase/firestore';
-import { LiveTestItem, MockTest } from '../types';
+import { LiveTestItem, MockTest, LiveTestRegistration } from '../types';
 import { Modal } from '../components/common/Modal';
 
 export const LiveTests: React.FC = () => {
@@ -38,6 +41,12 @@ export const LiveTests: React.FC = () => {
   const [featured, setFeatured] = useState(false);
   const [isPublished, setIsPublished] = useState(true);
   const [allowEarlyJoin, setAllowEarlyJoin] = useState(false);
+
+  // Participants Modal State
+  const [selectedLiveTestForParticipants, setSelectedLiveTestForParticipants] = useState<LiveTestItem | null>(null);
+  const [participants, setParticipants] = useState<LiveTestRegistration[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [participantsSearch, setParticipantsSearch] = useState('');
 
   useEffect(() => {
     loadData();
@@ -198,6 +207,29 @@ export const LiveTests: React.FC = () => {
     }
   };
 
+  const handleOpenParticipants = async (test: LiveTestItem) => {
+    setSelectedLiveTestForParticipants(test);
+    setParticipantsSearch('');
+    setLoadingParticipants(true);
+    try {
+      const regs = await fetchLiveTestRegistrations(test.id);
+      setParticipants(regs);
+    } catch (err: any) {
+      console.error(err);
+      setActionFeedback({ type: 'error', message: 'Failed to load participants: ' + err.message });
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  const filteredParticipants = participants.filter((p) => {
+    if (!participantsSearch.trim()) return true;
+    const q = participantsSearch.toLowerCase();
+    const name = (p.studentName || '').toLowerCase();
+    const phone = (p.studentPhone || p.mobile || '').toLowerCase();
+    return name.includes(q) || phone.includes(q);
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -292,8 +324,27 @@ export const LiveTests: React.FC = () => {
                       <td className="py-3.5 px-4 text-slate-600">
                         {linkedMock ? (
                           <div>
-                            <span className="font-medium text-slate-700">{linkedMock.title}</span>
-                            <span className="text-xs text-slate-400 ml-1">({linkedMock.examCode})</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-medium text-slate-700">{linkedMock.title}</span>
+                              <span className="text-xs text-slate-400">({linkedMock.examCode})</span>
+                              {linkedMock.status?.toLowerCase() === 'published' ? (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
+                                  PUBLISHED
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
+                                  DRAFT
+                                </span>
+                              )}
+                            </div>
+                            {linkedMock.status?.toLowerCase() !== 'published' && (
+                              <div className="mt-1">
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-800 font-semibold px-2 py-0.5 rounded border border-amber-200">
+                                  <AlertTriangle className="w-3 h-3 text-amber-600 flex-shrink-0" />
+                                  Linked Mock is Draft — Invisible to Students
+                                </span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-xs text-rose-600 font-mono font-bold flex items-center gap-1">
@@ -339,7 +390,14 @@ export const LiveTests: React.FC = () => {
                           <span className="text-xs text-slate-400">Draft</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap text-right space-x-2">
+                      <td className="py-3.5 px-4 whitespace-nowrap text-right space-x-1">
+                        <button
+                          onClick={() => handleOpenParticipants(t)}
+                          className="p-1.5 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded transition"
+                          title="View Registered Students"
+                        >
+                          <Users className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleOpenEditModal(t)}
                           className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-blue-600 rounded transition"
@@ -393,12 +451,34 @@ export const LiveTests: React.FC = () => {
                 <option value="" disabled>
                   -- Select Mock Test --
                 </option>
-                {mockTests.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title} ({m.examCode} • {m.totalQuestions} Qs • {m.durationMinutes}m)
-                  </option>
-                ))}
+                {mockTests.map((m) => {
+                  const isDraft = m.status?.toLowerCase() !== 'published';
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {m.title} ({m.examCode} • {m.totalQuestions} Qs • {m.durationMinutes}m)
+                      {isDraft ? ' — [DRAFT: Invisible to Students]' : ''}
+                    </option>
+                  );
+                })}
               </select>
+
+              {(() => {
+                const selectedMock = mockTests.find((m) => m.id === selectedMockId);
+                if (selectedMock && selectedMock.status?.toLowerCase() !== 'published') {
+                  return (
+                    <div className="mt-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">Linked Mock is in DRAFT Status:</span>
+                        <p className="mt-0.5 text-amber-800 leading-snug">
+                          "{selectedMock.title}" is currently Draft. Even if this Live Test schedule is marked published, students will NOT see or access it until the mock test is published in Mock Tests &amp; Pricing.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {/* Display Title */}
@@ -546,6 +626,143 @@ export const LiveTests: React.FC = () => {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Participants Modal */}
+      {selectedLiveTestForParticipants && (
+        <Modal
+          isOpen={!!selectedLiveTestForParticipants}
+          onClose={() => setSelectedLiveTestForParticipants(null)}
+          maxWidth="2xl"
+          title={`Live Test Participants — ${selectedLiveTestForParticipants.title}`}
+        >
+          <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            {/* Pseudonymous Identity Disclaimer */}
+            <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Student Identity Notice (Login-Free App):</span>
+                <p className="mt-0.5 text-blue-800 leading-relaxed">
+                  The student app runs without user accounts. Registrations are pseudonymous and mapped to client device installation UUIDs. Registrations cannot provide cryptographic ownership or verify physical identity.
+                </p>
+              </div>
+            </div>
+
+            {/* Metrics Cards */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-slate-800">
+                  {participants.length}
+                </div>
+                <div className="text-xs text-slate-500 font-semibold uppercase mt-0.5">Total Registered</div>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-blue-700">
+                  {participants.filter((p) => p.status?.toLowerCase() === 'started').length}
+                </div>
+                <div className="text-xs text-blue-600 font-semibold uppercase mt-0.5">Started Test</div>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold text-emerald-700">
+                  {participants.filter((p) => p.status?.toLowerCase() === 'submitted').length}
+                </div>
+                <div className="text-xs text-emerald-600 font-semibold uppercase mt-0.5">Submitted</div>
+              </div>
+            </div>
+
+            {/* Search Filter */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={participantsSearch}
+                onChange={(e) => setParticipantsSearch(e.target.value)}
+                placeholder="Search registered students by name or phone..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
+            {/* Participants Table */}
+            {loadingParticipants ? (
+              <div className="py-8 text-center text-slate-500 font-medium">Loading participants...</div>
+            ) : filteredParticipants.length === 0 ? (
+              <div className="py-8 text-center text-slate-400">
+                {participants.length === 0
+                  ? 'No students have registered for this test yet.'
+                  : 'No matching participants found.'}
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase">
+                    <tr>
+                      <th className="py-2.5 px-3">Student Name</th>
+                      <th className="py-2.5 px-3">Mobile Number</th>
+                      <th className="py-2.5 px-3 text-center">Lifecycle Status</th>
+                      <th className="py-2.5 px-3">Registered At</th>
+                      <th className="py-2.5 px-3">Installation UUID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredParticipants.map((p) => {
+                      const statusUpper = (p.status || 'REGISTERED').toUpperCase();
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-semibold text-slate-800">
+                            {p.studentName || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600">
+                            {p.studentPhone || p.mobile || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                                statusUpper === 'SUBMITTED'
+                                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                  : statusUpper === 'STARTED'
+                                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {statusUpper}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                            {p.registeredAt
+                              ? new Date(p.registeredAt).toLocaleString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '—'}
+                          </td>
+                          <td
+                            className="py-2.5 px-3 font-mono text-slate-400 text-[10px] truncate max-w-[120px]"
+                            title={p.installationId || p.id}
+                          >
+                            {p.installationId ? `${p.installationId.slice(0, 8)}...` : (p.id ? `${p.id.slice(0, 8)}...` : '—')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setSelectedLiveTestForParticipants(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

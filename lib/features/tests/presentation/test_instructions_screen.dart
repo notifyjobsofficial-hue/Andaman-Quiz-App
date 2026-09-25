@@ -7,6 +7,7 @@ import '../../../core/models/models.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/firestore_service.dart';
+import '../../../core/services/live_test_gate_service.dart';
 
 class TestInstructionsScreen extends StatefulWidget {
   final String testId;
@@ -37,7 +38,6 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
     try {
       final remote = await FirestoreService.instance.fetchMockTest(widget.testId);
       if (remote != null) {
-        await LocalDatabase.instance.syncMockTestsFromFirestore([remote]);
         if (mounted) {
           setState(() {
             _fetchedTest = remote;
@@ -52,6 +52,18 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
 
   void _onStartTest(MockTest test) {
     if (_isStarting) return;
+
+    final decision = LiveTestGateService.evaluateAccess(testIdOrLiveTestId: test.id, mockTest: test);
+    if (!decision.isAllowed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(decision.message),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isStarting = true);
     context.pushReplacement('/tests/cbt/${test.id}');
   }
@@ -94,7 +106,7 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'This test is no longer active or could not be loaded.',
+                  'This examination is in Draft, no longer active, or could not be loaded.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
@@ -105,6 +117,59 @@ class _TestInstructionsScreenState extends State<TestInstructionsScreen> {
                 ElevatedButton(
                   onPressed: () => context.go('/tests'),
                   child: const Text('Browse Available Tests'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Gate Enforcement: Check publication, registration, time window, and entitlement
+    final gateDecision = LiveTestGateService.evaluateAccess(testIdOrLiveTestId: test.id, mockTest: test);
+    if (!gateDecision.isAllowed) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Test Instructions')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  gateDecision.status == LiveTestGateStatus.upcomingBeforeStart
+                      ? Icons.lock_clock
+                      : Icons.block,
+                  size: 52,
+                  color: gateDecision.status == LiveTestGateStatus.upcomingBeforeStart
+                      ? AppColors.actionBlue
+                      : AppColors.error,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  gateDecision.status == LiveTestGateStatus.upcomingBeforeStart
+                      ? 'Test Not Started Yet'
+                      : (gateDecision.status == LiveTestGateStatus.testEnded
+                          ? 'Live Test Ended'
+                          : (gateDecision.status == LiveTestGateStatus.notRegistered
+                              ? 'Registration Required'
+                              : 'Access Blocked')),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  gateDecision.message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.go('/home'),
+                  child: const Text('Return to Home'),
                 ),
               ],
             ),
