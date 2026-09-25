@@ -375,6 +375,7 @@ export interface BattleItem {
   examCode: string;
   canonicalTestId: string;
   startAt: string;
+  endAt?: string;
   registrationDeadline: string;
   durationMinutes: number;
   maxParticipants?: number;

@@ -2264,6 +2264,7 @@ class BattleItem {
   bool get isUpcoming => DateTime.now().isBefore(startAt);
   bool get isLive => DateTime.now().isAfter(startAt) && DateTime.now().isBefore(startAt.add(Duration(minutes: durationMinutes)));
   bool get isEnded => DateTime.now().isAfter(startAt.add(Duration(minutes: durationMinutes))) || status == 'ENDED';
+  DateTime get endAt => startAt.add(Duration(minutes: durationMinutes));
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -2271,6 +2272,7 @@ class BattleItem {
     'examCode': examCode,
     'canonicalTestId': canonicalTestId,
     'startAt': startAt.toIso8601String(),
+    'endAt': endAt.toIso8601String(),
     'registrationDeadline': registrationDeadline.toIso8601String(),
     'durationMinutes': durationMinutes,
     if (maxParticipants != null) 'maxParticipants': maxParticipants,

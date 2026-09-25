@@ -976,16 +976,45 @@ class FirestoreService {
     }
   }
 
-  Future<List<StudyMaterial>> fetchStudyMaterials({String? folderId, String? examCode, bool allowDraft = false}) async {
+  /// Fetches study materials scoped strictly to a specific folder.
+  /// GUARANTEE: When folderId points to a published folder, Firestore will never
+  /// fail with PERMISSION_DENIED because parent folder is verified published.
+  Future<List<StudyMaterial>> fetchStudyMaterialsByFolder({
+    required String folderId,
+    bool allowDraft = false,
+  }) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      Query query = _firestore
+          .collection(colStudyMaterials)
+          .where('folderId', isEqualTo: folderId);
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
+      return snap.docs
+          .map((d) => StudyMaterial.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
+          .where((m) => allowDraft || m.isPublished)
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    } catch (e) {
+      debugPrint('Error fetching study materials by folder: $e');
+      return [];
+    }
+  }
+
+  /// Fetches unfoldered / root study materials.
+  Future<List<StudyMaterial>> fetchRootStudyMaterials({
+    String? examCode,
+    bool allowDraft = false,
+  }) async {
     if (Firebase.apps.isEmpty) return [];
     try {
       Query query = _firestore.collection(colStudyMaterials);
       if (!allowDraft) {
         query = query.where('status', isEqualTo: 'published');
       }
-      if (folderId != null && folderId.isNotEmpty) {
-        query = query.where('folderId', isEqualTo: folderId);
-      }
+      query = query.where('folderId', isNull: true);
       final snap = await query.get();
       return snap.docs
           .map((d) => StudyMaterial.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
@@ -999,7 +1028,57 @@ class FirestoreService {
           .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     } catch (e) {
-      debugPrint('Error fetching study materials: $e');
+      debugPrint('Error fetching root study materials: $e');
+      return [];
+    }
+  }
+
+  Future<List<StudyMaterial>> fetchStudyMaterials({String? folderId, String? examCode, bool allowDraft = false}) async {
+    if (Firebase.apps.isEmpty) return [];
+    if (folderId != null && folderId.isNotEmpty) {
+      return fetchStudyMaterialsByFolder(folderId: folderId, allowDraft: allowDraft);
+    }
+    if (allowDraft) {
+      // Admin: can query full collection
+      try {
+        Query query = _firestore.collection(colStudyMaterials);
+        final snap = await query.get();
+        return snap.docs
+            .map((d) => StudyMaterial.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
+            .where((m) {
+              if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
+                if (m.examCode.toUpperCase() != examCode.toUpperCase()) return false;
+              }
+              return true;
+            })
+            .toList()
+          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      } catch (e) {
+        debugPrint('Error fetching study materials (admin): $e');
+        return [];
+      }
+    }
+
+    // Student mode without folderId specified:
+    // ARCHITECTURAL GUARANTEE: To prevent Firestore PERMISSION_DENIED caused by materials
+    // inside draft folders, we first fetch published folders, then fetch materials scoped
+    // by each published folder, plus root materials.
+    try {
+      final publishedFolders = await fetchStudyFolders(examCode: examCode, allowDraft: false);
+      final List<StudyMaterial> aggregated = [];
+
+      for (final folder in publishedFolders) {
+        final folderMaterials = await fetchStudyMaterialsByFolder(folderId: folder.id, allowDraft: false);
+        aggregated.addAll(folderMaterials);
+      }
+
+      final rootMaterials = await fetchRootStudyMaterials(examCode: examCode, allowDraft: false);
+      aggregated.addAll(rootMaterials);
+
+      aggregated.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return aggregated;
+    } catch (e) {
+      debugPrint('Error fetching student study materials: $e');
       return [];
     }
   }

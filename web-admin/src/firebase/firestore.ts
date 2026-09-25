@@ -682,8 +682,12 @@ export async function fetchBattles(): Promise<BattleItem[]> {
 }
 
 export async function saveBattle(battle: BattleItem): Promise<void> {
-  await safeSetDoc(doc(db, 'battles', battle.id), battle, { merge: true });
-  await logActivity('Save Battle', `Battle "${battle.title}" saved`);
+  const payload = { ...battle };
+  if (payload.status === 'CANCELLED') {
+    payload.isPublished = false;
+  }
+  await safeSetDoc(doc(db, 'battles', battle.id), payload, { merge: true });
+  await logActivity('Save Battle', `Battle "${battle.title}" saved (status: ${payload.status}, isPublished: ${payload.isPublished})`);
 }
 
 export async function deleteBattle(id: string): Promise<void> {

@@ -70,10 +70,10 @@ const mockDb = {
     ca_draft: { id: 'ca_draft', title: 'Draft CA Article', status: 'draft' },
   },
   battles: {
-    battle_pub_upcoming: { id: 'battle_pub_upcoming', title: 'Sunday Battle', isPublished: true, status: 'UPCOMING' },
-    battle_pub_live: { id: 'battle_pub_live', title: 'Live Battle', isPublished: true, status: 'LIVE' },
-    battle_draft: { id: 'battle_draft', title: 'Draft Battle', isPublished: false, status: 'UPCOMING' },
-    battle_cancelled: { id: 'battle_cancelled', title: 'Cancelled Battle', isPublished: true, status: 'CANCELLED' },
+    battle_pub_upcoming: { id: 'battle_pub_upcoming', title: 'Sunday Battle', isPublished: true, status: 'UPCOMING', startAt: new Date(Date.now() + 3600000), durationMinutes: 90 },
+    battle_pub_live: { id: 'battle_pub_live', title: 'Live Battle', isPublished: true, status: 'LIVE', startAt: new Date(Date.now() - 300000), durationMinutes: 60 },
+    battle_draft: { id: 'battle_draft', title: 'Draft Battle', isPublished: false, status: 'UPCOMING', startAt: new Date(Date.now() + 3600000), durationMinutes: 60 },
+    battle_cancelled: { id: 'battle_cancelled', title: 'Cancelled Battle', isPublished: false, status: 'CANCELLED', startAt: new Date(Date.now() + 3600000), durationMinutes: 60 },
   }
 };
 
@@ -160,7 +160,7 @@ function canReadBattle(auth, battleId) {
   const b = mockDb.battles[battleId];
   if (!b) return false;
   if (isAdmin(auth)) return true;
-  return b.isPublished === true && b.status !== 'CANCELLED';
+  return b.isPublished === true;
 }
 
 // Battle Registration Create Rule
@@ -188,23 +188,38 @@ function canCreateBattleRegistration(auth, battleId, data) {
 }
 
 // Battle Registration Update Rule
-function canUpdateBattleRegistration(auth, currentData, updatedData) {
+function canUpdateBattleRegistration(auth, currentData, updatedData, requestTime = new Date()) {
   if (isAdmin(auth)) return true;
 
   const affectedKeys = Object.keys(updatedData).filter(k => updatedData[k] !== currentData[k]);
+  const battle = mockDb.battles[currentData.battleId];
 
-  // Transition to LOBBY or STARTED
+  // Transition to LOBBY
   if (
-    (updatedData.status === 'LOBBY' || updatedData.status === 'STARTED') &&
-    (currentData.status === 'REGISTERED' || currentData.status === 'LOBBY')
+    updatedData.status === 'LOBBY' &&
+    currentData.status === 'REGISTERED'
   ) {
-    return affectedKeys.every(k => ['status', 'startedAt'].includes(k));
+    return affectedKeys.every(k => ['status'].includes(k));
   }
 
-  // Transition to SUBMITTED
+  // Transition to STARTED: requires server requestTime within battle window
+  if (
+    updatedData.status === 'STARTED' &&
+    (currentData.status === 'REGISTERED' || currentData.status === 'LOBBY')
+  ) {
+    if (!affectedKeys.every(k => ['status', 'startedAt'].includes(k))) return false;
+    if (battle) {
+      if (requestTime < battle.startAt) return false;
+      const endAt = battle.endAt || new Date(battle.startAt.getTime() + (battle.durationMinutes || 60) * 60000);
+      if (requestTime >= endAt) return false;
+    }
+    return true;
+  }
+
+  // Transition to SUBMITTED: STRICT REQUIREMENT: previous status MUST be 'STARTED'
   if (
     updatedData.status === 'SUBMITTED' &&
-    ['STARTED', 'LOBBY', 'REGISTERED'].includes(currentData.status)
+    currentData.status === 'STARTED'
   ) {
     if (!updatedData.submittedAt) return false;
     if (updatedData.resultStatus && updatedData.resultStatus !== 'PENDING_VERIFICATION') return false;
@@ -358,7 +373,29 @@ assert.strictEqual(canUpdateBattleRegistration(studentAuth, initialReg, submissi
 console.log('  ✓ DENIED: Student cannot inject rank or verifiedScore on battle submission.\n');
 
 // Scenario 18: Battle Registration: unverified client telemetry submission (PENDING_VERIFICATION) -> ALLOW
-console.log('Scenario 18: Battle Registration - Legitimate telemetry submission (PENDING_VERIFICATION)');
+console.log('Scenario 18: Battle Registration - Hardened Lifecycle & Server-Time Window');
+
+// 18.1: REGISTERED -> SUBMITTED is strictly DENIED
+const registeredReg = { ...initialReg, status: 'REGISTERED' };
+assert.strictEqual(canUpdateBattleRegistration(studentAuth, registeredReg, { ...registeredReg, status: 'SUBMITTED', submittedAt: new Date().toISOString() }), false, 'REGISTERED -> SUBMITTED must be denied');
+console.log('  ✓ DENIED: REGISTERED -> SUBMITTED is blocked (must be STARTED).');
+
+// 18.2: LOBBY -> SUBMITTED is strictly DENIED
+const lobbyReg = { ...initialReg, status: 'LOBBY' };
+assert.strictEqual(canUpdateBattleRegistration(studentAuth, lobbyReg, { ...lobbyReg, status: 'SUBMITTED', submittedAt: new Date().toISOString() }), false, 'LOBBY -> SUBMITTED must be denied');
+console.log('  ✓ DENIED: LOBBY -> SUBMITTED is blocked (must be STARTED).');
+
+// 18.3: START before battle.startAt is strictly DENIED by request.time
+const futureBattleReg = { id: 'reg_fut', battleId: 'battle_pub_upcoming', testId: 't1', studentName: 'Dan', installationId: 'i1', status: 'REGISTERED' };
+assert.strictEqual(canUpdateBattleRegistration(studentAuth, futureBattleReg, { ...futureBattleReg, status: 'STARTED', startedAt: new Date().toISOString() }, new Date()), false, 'START before startAt must be denied');
+console.log('  ✓ DENIED: START before startAt is blocked by request.time.');
+
+// 18.4: START within live window is ALLOWED
+const liveBattleReg = { id: 'reg_live', battleId: 'battle_pub_live', testId: 't1', studentName: 'Dan', installationId: 'i1', status: 'REGISTERED' };
+assert.strictEqual(canUpdateBattleRegistration(studentAuth, liveBattleReg, { ...liveBattleReg, status: 'STARTED', startedAt: new Date().toISOString() }, new Date()), true, 'START within live window must be allowed');
+console.log('  ✓ ALLOWED: START within live window permitted.');
+
+// 18.5: Legitimate telemetry submission from STARTED
 const validSubmission = {
   ...initialReg,
   status: 'SUBMITTED',
@@ -369,8 +406,8 @@ const validSubmission = {
   answers: { q1: 2, q2: 4 },
   resultStatus: 'PENDING_VERIFICATION',
 };
-assert.strictEqual(canUpdateBattleRegistration(studentAuth, initialReg, validSubmission), true, 'Valid telemetry submission must be allowed');
-console.log('  ✓ ALLOWED: Unauthenticated client can submit raw telemetry with PENDING_VERIFICATION status.\n');
+assert.strictEqual(canUpdateBattleRegistration(studentAuth, initialReg, validSubmission), true, 'Valid telemetry submission from STARTED must be allowed');
+console.log('  ✓ ALLOWED: Unauthenticated client in STARTED state can submit raw telemetry with PENDING_VERIFICATION status.\n');
 
 // Scenario 19: Admin: authorized admin can read/write draft content across all collections -> ALLOW
 console.log('Scenario 19: Admin - Authorized admin read/write access across all collections');

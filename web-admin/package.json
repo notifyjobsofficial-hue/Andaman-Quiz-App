@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs && node test_timeout_resilience.mjs && node test_question_usage_and_review.mjs && node test_qa_practice_status.mjs && node test_practice_questions_hierarchy.mjs && node test_assignment_transitions_state_machine.mjs && node test_qa_usage_state_test.mjs && node test_practice_assignment_architecture.mjs && node test_question_image_pipeline.mjs && node test_practice_session_stats.mjs && node test_live_test_lifecycle_and_draft_isolation.mjs && node test_lms_phase_a_rules.mjs"
+    "test": "node test_zero_cost_pipeline.mjs && node test_comprehensive_suite.mjs && node verify_real_pdf_pipeline.mjs && node test_timeout_resilience.mjs && node test_question_usage_and_review.mjs && node test_qa_practice_status.mjs && node test_practice_questions_hierarchy.mjs && node test_assignment_transitions_state_machine.mjs && node test_qa_usage_state_test.mjs && node test_practice_assignment_architecture.mjs && node test_question_image_pipeline.mjs && node test_practice_session_stats.mjs && node test_live_test_lifecycle_and_draft_isolation.mjs && node test_lms_phase_a_rules.mjs",
+    "test:emulator": "firebase-tools emulators:exec --only firestore \"node test_real_firestore_emulator_rules.mjs\""
   },
   "dependencies": {
     "firebase": "^10.13.2",
@@ -20,6 +21,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.0",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
