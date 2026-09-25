@@ -1572,6 +1572,8 @@ class LocalDatabase {
     await _prefs?.setString('db_app_config', raw);
   }
 
+  Future<void> saveRemoteConfig(RemoteAppConfig config) => syncRemoteConfigFromFirestore(config);
+
   // --- QOTD Local Attempt Persistence ---
   Future<void> saveQotdAttempt({
     required String date,
@@ -1843,19 +1845,31 @@ class LocalDatabase {
     HomeSectionConfig(id: 'live_tests', sectionType: 'live_tests', sortOrder: 4, enabled: true),
     HomeSectionConfig(id: 'test_series', sectionType: 'test_series', sortOrder: 5, enabled: true),
     HomeSectionConfig(id: 'practice', sectionType: 'practice', sortOrder: 6, enabled: true),
-    HomeSectionConfig(id: 'study_material', sectionType: 'study_material', sortOrder: 7, enabled: true),
-    HomeSectionConfig(id: 'current_affairs', sectionType: 'current_affairs', sortOrder: 8, enabled: true),
-    HomeSectionConfig(id: 'career_goals', sectionType: 'career_goals', sortOrder: 9, enabled: true),
+    HomeSectionConfig(id: 'study_material', sectionType: 'study_material', sortOrder: 7, enabled: false),
+    HomeSectionConfig(id: 'current_affairs', sectionType: 'current_affairs', sortOrder: 8, enabled: false),
+    HomeSectionConfig(id: 'career_goals', sectionType: 'career_goals', sortOrder: 9, enabled: false),
     HomeSectionConfig(id: 'battles', sectionType: 'battles', sortOrder: 10, enabled: false),
   ];
 
-  List<HomeSectionConfig> getHomeSections() {
-    if (_homeSections.isEmpty) {
-      return getDefaultHomeSections();
-    }
-    final sorted = List<HomeSectionConfig>.from(_homeSections)
-      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    return sorted;
+  /// Returns dynamic home sections with strict FeatureFlag suppression:
+  /// Final visibility = HomeSection.enabled AND corresponding FeatureFlag.enabled
+  List<HomeSectionConfig> getHomeSections({bool respectFeatureFlags = true}) {
+    final list = _homeSections.isEmpty ? getDefaultHomeSections() : _homeSections;
+    final flags = _remoteConfig.featureFlags;
+
+    return list.where((section) {
+      if (!section.enabled) return false;
+      if (respectFeatureFlags && !flags.isSectionEnabled(section.sectionType)) {
+        return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  /// Returns raw sections for admin configuration without feature-flag suppression
+  List<HomeSectionConfig> getRawHomeSections() {
+    final list = _homeSections.isEmpty ? getDefaultHomeSections() : _homeSections;
+    return List<HomeSectionConfig>.from(list)..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   }
 
   Future<void> saveHomeSections(List<HomeSectionConfig> list) async {

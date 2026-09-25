@@ -401,9 +401,17 @@ export interface BattleRegistration {
   status: 'REGISTERED' | 'LOBBY' | 'STARTED' | 'SUBMITTED';
   startedAt?: string;
   submittedAt?: string;
+  clientScore?: number;
+  clientAccuracy?: number;
   score?: number;
   accuracy?: number;
   timeTakenSeconds?: number;
+  answers?: Record<string, any>;
+  resultStatus: 'PENDING_VERIFICATION' | 'VERIFIED';
+  verifiedScore?: number;
+  verifiedAccuracy?: number;
+  rank?: number;
+  leaderboardTime?: number;
 }
 
 // --- 4. Question Reporting System ---

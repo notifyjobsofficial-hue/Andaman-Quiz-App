@@ -256,9 +256,81 @@ void main() {
       expect(sections.first.sectionType, 'qotd');
       expect(sections.any((s) => s.sectionType == 'practice' && s.enabled), isTrue);
       expect(sections.any((s) => s.sectionType == 'test_series' && s.enabled), isTrue);
-      // Battles default to disabled until Phase 2
-      final battleSection = sections.firstWhere((s) => s.sectionType == 'battles');
-      expect(battleSection.enabled, isFalse);
+      // Incomplete modules default to disabled in default home sections
+      expect(sections.firstWhere((s) => s.sectionType == 'battles').enabled, isFalse);
+      expect(sections.firstWhere((s) => s.sectionType == 'study_material').enabled, isFalse);
+      expect(sections.firstWhere((s) => s.sectionType == 'career_goals').enabled, isFalse);
+      expect(sections.firstWhere((s) => s.sectionType == 'current_affairs').enabled, isFalse);
+    });
+
+    test('FeatureFlags.isSectionEnabled maps section types accurately', () {
+      const flags = FeatureFlags(
+        practiceEnabled: true,
+        mockEnabled: true,
+        liveTestEnabled: true,
+        studyEnabled: false,
+        careerEnabled: false,
+        currentAffairsEnabled: false,
+        battleEnabled: false,
+      );
+
+      expect(flags.isSectionEnabled('practice'), isTrue);
+      expect(flags.isSectionEnabled('mock_tests'), isTrue);
+      expect(flags.isSectionEnabled('live_tests'), isTrue);
+      expect(flags.isSectionEnabled('test_series'), isTrue);
+      expect(flags.isSectionEnabled('study_material'), isFalse);
+      expect(flags.isSectionEnabled('career_goals'), isFalse);
+      expect(flags.isSectionEnabled('current_affairs'), isFalse);
+      expect(flags.isSectionEnabled('battles'), isFalse);
+
+      // Core sections are always enabled
+      expect(flags.isSectionEnabled('qotd'), isTrue);
+      expect(flags.isSectionEnabled('quick_actions'), isTrue);
+      expect(flags.isSectionEnabled('recent_attempts'), isTrue);
+      expect(flags.isSectionEnabled('daily_goal'), isTrue);
+    });
+
+    test('BattleRegistration separates client telemetry from authoritative server results', () {
+      final now = DateTime.now();
+
+      // Client submits unverified telemetry
+      final unverifiedReg = BattleRegistration(
+        id: 'reg_client_sub',
+        battleId: 'battle_01',
+        testId: 'mock_cgl_01',
+        studentName: 'Amit Verma',
+        installationId: 'inst_abc_123',
+        registeredAt: now,
+        status: 'SUBMITTED',
+        submittedAt: now,
+        clientScore: 88.5,
+        clientAccuracy: 92.0,
+        timeTakenSeconds: 3100,
+        answers: {'q1': 1, 'q2': 2},
+        resultStatus: 'PENDING_VERIFICATION',
+      );
+
+      expect(unverifiedReg.isVerified, isFalse);
+      expect(unverifiedReg.score, 88.5);
+      expect(unverifiedReg.accuracy, 92.0);
+      expect(unverifiedReg.rank, isNull);
+      expect(unverifiedReg.verifiedScore, isNull);
+
+      // Server / Admin verification computes authoritative results
+      final verifiedMap = unverifiedReg.toMap();
+      verifiedMap['resultStatus'] = 'VERIFIED';
+      verifiedMap['verifiedScore'] = 82.0; // Corrected after negative marking check
+      verifiedMap['verifiedAccuracy'] = 86.0;
+      verifiedMap['rank'] = 4;
+      verifiedMap['leaderboardTime'] = 3100;
+
+      final verifiedReg = BattleRegistration.fromMap(verifiedMap);
+      expect(verifiedReg.isVerified, isTrue);
+      // Authoritative score overrides client score
+      expect(verifiedReg.score, 82.0);
+      expect(verifiedReg.accuracy, 86.0);
+      expect(verifiedReg.rank, 4);
+      expect(verifiedReg.clientScore, 88.5);
     });
   });
 
@@ -394,6 +466,52 @@ void main() {
         unlockedAt: now,
       ));
       expect(LocalDatabase.instance.hasEntitlement('new_unlocked_series'), isTrue);
+    });
+
+    test('LocalDatabase.getHomeSections strictly suppresses disabled feature flags', () async {
+      await LocalDatabase.instance.init(force: true);
+
+      // By default RemoteAppConfig feature flags have:
+      // battleEnabled: false, studyEnabled: false, careerEnabled: false, currentAffairsEnabled: false
+      // Even if a section was enabled in home section config, it must be suppressed when respectFeatureFlags = true
+      final studentSections = LocalDatabase.instance.getHomeSections(respectFeatureFlags: true);
+      expect(studentSections.any((s) => s.sectionType == 'battles'), isFalse);
+      expect(studentSections.any((s) => s.sectionType == 'study_material'), isFalse);
+      expect(studentSections.any((s) => s.sectionType == 'career_goals'), isFalse);
+      expect(studentSections.any((s) => s.sectionType == 'current_affairs'), isFalse);
+
+      // Core sections remain visible
+      expect(studentSections.any((s) => s.sectionType == 'practice'), isTrue);
+      expect(studentSections.any((s) => s.sectionType == 'live_tests'), isTrue);
+      expect(studentSections.any((s) => s.sectionType == 'test_series'), isTrue);
+
+      // When feature flags are enabled via RemoteAppConfig
+      await LocalDatabase.instance.saveRemoteConfig(const RemoteAppConfig(
+        featureFlags: FeatureFlags(
+          practiceEnabled: true,
+          mockEnabled: true,
+          liveTestEnabled: true,
+          studyEnabled: true,
+          careerEnabled: false,
+          currentAffairsEnabled: false,
+          battleEnabled: true,
+        ),
+      ));
+
+      // Enable the battle section in Home config to test activation
+      final customSections = LocalDatabase.getDefaultHomeSections().map((s) {
+        if (s.sectionType == 'battles') {
+          return s.copyWith(enabled: true);
+        }
+        return s;
+      }).toList();
+      await LocalDatabase.instance.saveHomeSections(customSections);
+
+      final updatedStudentSections = LocalDatabase.instance.getHomeSections(respectFeatureFlags: true);
+      // Battles is now enabled in both home config and feature flags
+      expect(updatedStudentSections.any((s) => s.sectionType == 'battles'), isTrue);
+      // Career goals is still disabled in feature flags
+      expect(updatedStudentSections.any((s) => s.sectionType == 'career_goals'), isFalse);
     });
   });
 }

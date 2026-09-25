@@ -1458,6 +1458,40 @@ class FeatureFlags {
       currentAffairsEnabled: map['currentAffairsEnabled'] ?? false,
     );
   }
+
+  /// Evaluates whether a dynamic home section or LMS module is permitted to be visible
+  bool isSectionEnabled(String sectionType) {
+    switch (sectionType.toLowerCase()) {
+      case 'practice':
+        return practiceEnabled;
+      case 'live_tests':
+      case 'live_test':
+        return liveTestEnabled;
+      case 'mock_tests':
+      case 'mocks':
+      case 'test_series':
+        return mockEnabled;
+      case 'study_material':
+      case 'study_materials':
+      case 'study':
+        return studyEnabled;
+      case 'career_goals':
+      case 'career_goal':
+      case 'career':
+        return careerEnabled;
+      case 'current_affairs':
+        return currentAffairsEnabled;
+      case 'battles':
+      case 'battle':
+        return battleEnabled;
+      case 'qotd':
+      case 'banners':
+      case 'notices':
+        return true;
+      default:
+        return true;
+    }
+  }
 }
 
 class RemoteAppConfig {
@@ -2285,9 +2319,19 @@ class BattleRegistration {
   final String status; // 'REGISTERED', 'LOBBY', 'STARTED', 'SUBMITTED'
   final DateTime? startedAt;
   final DateTime? submittedAt;
-  final double? score;
-  final double? accuracy;
+
+  // Client telemetry & unverified submission
+  final double? clientScore;
+  final double? clientAccuracy;
   final int? timeTakenSeconds;
+  final Map<String, dynamic>? answers;
+
+  // Authoritative verified result (Server / Admin computed only)
+  final String resultStatus; // 'PENDING_VERIFICATION', 'VERIFIED'
+  final double? verifiedScore;
+  final double? verifiedAccuracy;
+  final int? rank;
+  final int? leaderboardTime;
 
   const BattleRegistration({
     required this.id,
@@ -2300,10 +2344,20 @@ class BattleRegistration {
     this.status = 'REGISTERED',
     this.startedAt,
     this.submittedAt,
-    this.score,
-    this.accuracy,
+    this.clientScore,
+    this.clientAccuracy,
     this.timeTakenSeconds,
+    this.answers,
+    this.resultStatus = 'PENDING_VERIFICATION',
+    this.verifiedScore,
+    this.verifiedAccuracy,
+    this.rank,
+    this.leaderboardTime,
   });
+
+  bool get isVerified => resultStatus == 'VERIFIED';
+  double? get score => isVerified ? (verifiedScore ?? clientScore) : clientScore;
+  double? get accuracy => isVerified ? (verifiedAccuracy ?? clientAccuracy) : clientAccuracy;
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -2316,9 +2370,15 @@ class BattleRegistration {
     'status': status,
     if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
     if (submittedAt != null) 'submittedAt': submittedAt!.toIso8601String(),
-    if (score != null) 'score': score,
-    if (accuracy != null) 'accuracy': accuracy,
+    if (clientScore != null) 'clientScore': clientScore,
+    if (clientAccuracy != null) 'clientAccuracy': clientAccuracy,
     if (timeTakenSeconds != null) 'timeTakenSeconds': timeTakenSeconds,
+    if (answers != null) 'answers': answers,
+    'resultStatus': resultStatus,
+    if (verifiedScore != null) 'verifiedScore': verifiedScore,
+    if (verifiedAccuracy != null) 'verifiedAccuracy': verifiedAccuracy,
+    if (rank != null) 'rank': rank,
+    if (leaderboardTime != null) 'leaderboardTime': leaderboardTime,
   };
 
   factory BattleRegistration.fromMap(Map<String, dynamic> map) => BattleRegistration(
@@ -2332,9 +2392,15 @@ class BattleRegistration {
     status: map['status'] ?? 'REGISTERED',
     startedAt: map['startedAt'] != null ? _parseLmsDate(map['startedAt']) : null,
     submittedAt: map['submittedAt'] != null ? _parseLmsDate(map['submittedAt']) : null,
-    score: (map['score'] as num?)?.toDouble(),
-    accuracy: (map['accuracy'] as num?)?.toDouble(),
+    clientScore: (map['clientScore'] ?? map['score'] as num?)?.toDouble(),
+    clientAccuracy: (map['clientAccuracy'] ?? map['accuracy'] as num?)?.toDouble(),
     timeTakenSeconds: (map['timeTakenSeconds'] as num?)?.toInt(),
+    answers: map['answers'] != null ? Map<String, dynamic>.from(map['answers']) : null,
+    resultStatus: map['resultStatus'] ?? 'PENDING_VERIFICATION',
+    verifiedScore: (map['verifiedScore'] as num?)?.toDouble(),
+    verifiedAccuracy: (map['verifiedAccuracy'] as num?)?.toDouble(),
+    rank: (map['rank'] as num?)?.toInt(),
+    leaderboardTime: (map['leaderboardTime'] as num?)?.toInt(),
   );
 }
 
@@ -2659,6 +2725,24 @@ class HomeSectionConfig {
     this.itemLimit,
     this.examFilter,
   });
+
+  HomeSectionConfig copyWith({
+    String? id,
+    String? sectionType,
+    String? titleOverride,
+    bool? enabled,
+    int? sortOrder,
+    int? itemLimit,
+    String? examFilter,
+  }) => HomeSectionConfig(
+    id: id ?? this.id,
+    sectionType: sectionType ?? this.sectionType,
+    titleOverride: titleOverride ?? this.titleOverride,
+    enabled: enabled ?? this.enabled,
+    sortOrder: sortOrder ?? this.sortOrder,
+    itemLimit: itemLimit ?? this.itemLimit,
+    examFilter: examFilter ?? this.examFilter,
+  );
 
   Map<String, dynamic> toMap() => {
     'id': id,

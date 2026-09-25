@@ -876,9 +876,14 @@ class FirestoreService {
   Future<List<TestSeries>> fetchTestSeries({String? examCode, bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore.collection(colTestSeries).get();
+      Query query = _firestore.collection(colTestSeries);
+      // Query filter must match Firestore Security Rules constraint for student queries
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
-          .map((d) => TestSeries.fromMap({...d.data(), 'id': d.id}))
+          .map((d) => TestSeries.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
           .where((s) {
             if (!allowDraft && !s.isPublished) return false;
             if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
@@ -897,13 +902,16 @@ class FirestoreService {
   Future<List<TestSeriesFolder>> fetchTestSeriesFolders(String seriesId, {bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore
+      Query query = _firestore
           .collection(colTestSeries)
           .doc(seriesId)
-          .collection('folders')
-          .get();
+          .collection('folders');
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
-          .map((d) => TestSeriesFolder.fromMap({...d.data(), 'id': d.id, 'seriesId': seriesId}))
+          .map((d) => TestSeriesFolder.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id, 'seriesId': seriesId}))
           .where((f) => allowDraft || f.isPublished)
           .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -916,16 +924,19 @@ class FirestoreService {
   Future<List<TestSeriesItem>> fetchTestSeriesItems(String seriesId, String folderId, {bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore
+      Query query = _firestore
           .collection(colTestSeries)
           .doc(seriesId)
           .collection('folders')
           .doc(folderId)
-          .collection('items')
-          .get();
+          .collection('items');
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
           .map((d) => TestSeriesItem.fromMap({
-                ...d.data(),
+                ...d.data() as Map<String, dynamic>,
                 'id': d.id,
                 'seriesId': seriesId,
                 'folderId': folderId,
@@ -943,9 +954,13 @@ class FirestoreService {
   Future<List<StudyFolder>> fetchStudyFolders({String? examCode, bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore.collection(colStudyFolders).get();
+      Query query = _firestore.collection(colStudyFolders);
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
-          .map((d) => StudyFolder.fromMap({...d.data(), 'id': d.id}))
+          .map((d) => StudyFolder.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
           .where((f) {
             if (!allowDraft && !f.isPublished) return false;
             if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
@@ -965,6 +980,9 @@ class FirestoreService {
     if (Firebase.apps.isEmpty) return [];
     try {
       Query query = _firestore.collection(colStudyMaterials);
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
       if (folderId != null && folderId.isNotEmpty) {
         query = query.where('folderId', isEqualTo: folderId);
       }
@@ -990,11 +1008,13 @@ class FirestoreService {
   Future<List<BattleItem>> fetchBattles({String? examCode}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore.collection(colBattles).get();
+      // Must match rule: isPublished == true
+      Query query = _firestore.collection(colBattles).where('isPublished', isEqualTo: true);
+      final snap = await query.get();
       return snap.docs
-          .map((d) => BattleItem.fromMap({...d.data(), 'id': d.id}))
+          .map((d) => BattleItem.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
           .where((b) {
-            if (!b.isPublished) return false;
+            if (!b.isPublished || b.status == 'CANCELLED') return false;
             if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
               if (b.examCode.toUpperCase() != examCode.toUpperCase()) return false;
             }
@@ -1017,8 +1037,17 @@ class FirestoreService {
           .collection('registrations')
           .doc(registration.id);
 
-      final map = registration.toMap();
-      map['registeredAt'] = FieldValue.serverTimestamp();
+      final map = <String, dynamic>{
+        'id': registration.id,
+        'battleId': registration.battleId,
+        'testId': registration.testId,
+        'studentName': registration.studentName,
+        if (registration.mobile != null && registration.mobile!.isNotEmpty)
+          'mobile': registration.mobile,
+        'installationId': registration.installationId,
+        'registeredAt': FieldValue.serverTimestamp(),
+        'status': 'REGISTERED',
+      };
 
       await ref.set(map);
       return true;
@@ -1028,13 +1057,20 @@ class FirestoreService {
     }
   }
 
+  /// Updates student battle registration status.
+  /// BATTLE SCORE & RANK SECURITY INVARIANT:
+  /// The client submits unverified telemetry and answers.
+  /// Result status is strictly set to 'PENDING_VERIFICATION'.
+  /// Authoritative 'verifiedScore', 'verifiedAccuracy', 'rank', and 'leaderboardTime'
+  /// are computed strictly by trusted server/admin verification logic and NEVER by the client.
   Future<bool> updateBattleRegistrationStatus(
     String battleId,
     String registrationId,
     String status, {
     int? timeTakenSeconds,
-    double? score,
-    double? accuracy,
+    double? clientScore,
+    double? clientAccuracy,
+    Map<String, dynamic>? answers,
   }) async {
     if (Firebase.apps.isEmpty) return false;
     try {
@@ -1049,9 +1085,11 @@ class FirestoreService {
         updateData['startedAt'] = FieldValue.serverTimestamp();
       } else if (status == 'SUBMITTED') {
         updateData['submittedAt'] = FieldValue.serverTimestamp();
-        if (score != null) updateData['score'] = score;
-        if (accuracy != null) updateData['accuracy'] = accuracy;
+        updateData['resultStatus'] = 'PENDING_VERIFICATION';
+        if (clientScore != null) updateData['clientScore'] = clientScore;
+        if (clientAccuracy != null) updateData['clientAccuracy'] = clientAccuracy;
         if (timeTakenSeconds != null) updateData['timeTakenSeconds'] = timeTakenSeconds;
+        if (answers != null) updateData['answers'] = answers;
       }
 
       await ref.update(updateData);
@@ -1063,6 +1101,11 @@ class FirestoreService {
   }
 
   // --- 4. Question Reporting System ---
+  /// Submits an issue report for a question.
+  /// NOTE ON SECURITY & RATE-LIMITING:
+  /// The 60-second client cooldown is a UX convenience and spam-reduction measure only.
+  /// Because students are unauthenticated, it does NOT provide cryptographic or server-enforced
+  /// rate limiting. True moderation is performed by administrators in the Web Admin dashboard.
   Future<bool> submitQuestionReport(QuestionReport report) async {
     if (Firebase.apps.isEmpty) return false;
 
@@ -1090,9 +1133,13 @@ class FirestoreService {
   Future<List<CareerGoal>> fetchCareerGoals({String? examCode, bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore.collection(colCareerGoals).get();
+      Query query = _firestore.collection(colCareerGoals);
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
-          .map((d) => CareerGoal.fromMap({...d.data(), 'id': d.id}))
+          .map((d) => CareerGoal.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
           .where((g) {
             if (!allowDraft && !g.isPublished) return false;
             if (examCode != null && examCode.isNotEmpty && examCode.toUpperCase() != 'ALL') {
@@ -1111,9 +1158,13 @@ class FirestoreService {
   Future<List<CurrentAffairsItem>> fetchCurrentAffairs({String? category, bool allowDraft = false}) async {
     if (Firebase.apps.isEmpty) return [];
     try {
-      final snap = await _firestore.collection(colCurrentAffairs).get();
+      Query query = _firestore.collection(colCurrentAffairs);
+      if (!allowDraft) {
+        query = query.where('status', isEqualTo: 'published');
+      }
+      final snap = await query.get();
       return snap.docs
-          .map((d) => CurrentAffairsItem.fromMap({...d.data(), 'id': d.id}))
+          .map((d) => CurrentAffairsItem.fromMap({...d.data() as Map<String, dynamic>, 'id': d.id}))
           .where((a) {
             if (!allowDraft && !a.isPublished) return false;
             if (category != null && category.isNotEmpty && category.toUpperCase() != 'ALL') {
