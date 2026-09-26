@@ -273,9 +273,13 @@ export interface AppConfig {
 // ==========================================
 
 // --- 1. Test Series & Folders ---
+export type SeriesValidityType = 'LIFETIME' | 'DAYS_FROM_ACTIVATION' | 'FIXED_EXPIRY';
+export type SeriesItemAccessMode = 'INCLUDED' | 'FREE_PREVIEW' | 'LOCKED_UNTIL_DATE';
+
 export interface TestSeries {
   id: string;
   title: string;
+  subtitle?: string;
   examCode: string;
   description: string;
   thumbnailUrl?: string;
@@ -285,10 +289,13 @@ export interface TestSeries {
   originalPrice?: number;
   offerPrice?: number;
   productId?: string;
-  validityDays: number;
+  validityType?: SeriesValidityType;
+  validityDays?: number;
+  expiryAt?: string;
   isFeatured: boolean;
   sortOrder: number;
   status: 'draft' | 'published' | 'archived';
+  publishAt?: string;
   totalTests: number;
   totalFolders: number;
   tags: string[];
@@ -300,9 +307,10 @@ export interface TestSeriesFolder {
   id: string;
   seriesId: string;
   title: string;
+  description?: string;
   iconName?: string;
   sortOrder: number;
-  isFree: boolean;
+  isFree?: boolean;
   itemCount: number;
   status: 'draft' | 'published';
   createdAt: string;
@@ -315,7 +323,7 @@ export interface TestSeriesItem {
   folderId: string;
   testId: string; // References canonical MockTest
   sortOrder: number;
-  accessMode: 'FREE' | 'PAID' | 'SERIES_ONLY';
+  accessMode: SeriesItemAccessMode | 'FREE' | 'PAID' | 'SERIES_ONLY';
   unlockAt?: string;
   status: 'draft' | 'published';
   createdAt: string;

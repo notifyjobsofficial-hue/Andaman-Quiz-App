@@ -12,7 +12,8 @@ import {
   X,
   Radio,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  Library
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -35,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'import', label: 'Bulk Question Import', icon: UploadCloud, badge: 'Core' },
     { id: 'ai-pdf-import', label: 'AI PDF Import', icon: Sparkles, badge: 'AI' },
     { id: 'tests', label: 'Mock Tests & Pricing', icon: FileCheck },
+    { id: 'test-series', label: 'Test Series / Bundles', icon: Library, badge: 'LMS' },
     { id: 'live-tests', label: 'Live Tests', icon: Radio },
     { id: 'test-builder', label: 'Test Question Builder', icon: Layers },
     { id: 'notices', label: 'Notice Board', icon: Bell },

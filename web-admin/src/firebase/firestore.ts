@@ -555,14 +555,72 @@ export async function fetchTestSeries(): Promise<TestSeries[]> {
   }
 }
 
+export async function fetchTestSeriesById(id: string): Promise<TestSeries | null> {
+  try {
+    const snap = await getDoc(doc(db, 'test_series', id));
+    if (snap.exists()) {
+      return { id: snap.id, ...snap.data() } as TestSeries;
+    }
+    return null;
+  } catch (err) {
+    console.warn(`Error fetching test series ${id}:`, err);
+    return null;
+  }
+}
+
 export async function saveTestSeries(series: TestSeries): Promise<void> {
   await safeSetDoc(doc(db, 'test_series', series.id), series, { merge: true });
   await logActivity('Save Test Series', `Test Series "${series.title}" (${series.id}) saved`);
 }
 
+export async function updateSeriesStats(seriesId: string): Promise<{ totalFolders: number; totalTests: number }> {
+  try {
+    const foldersSnap = await getDocs(collection(db, 'test_series', seriesId, 'folders'));
+    const totalFolders = foldersSnap.size;
+    let totalTests = 0;
+
+    const batch = writeBatch(db);
+    for (const fDoc of foldersSnap.docs) {
+      const itemsSnap = await getDocs(collection(db, 'test_series', seriesId, 'folders', fDoc.id, 'items'));
+      const itemCount = itemsSnap.size;
+      totalTests += itemCount;
+      batch.update(doc(db, 'test_series', seriesId, 'folders', fDoc.id), { itemCount });
+    }
+
+    batch.update(doc(db, 'test_series', seriesId), {
+      totalFolders,
+      totalTests,
+      updatedAt: new Date().toISOString(),
+    });
+
+    await batch.commit();
+    return { totalFolders, totalTests };
+  } catch (err) {
+    console.warn(`Error updating stats for series ${seriesId}:`, err);
+    return { totalFolders: 0, totalTests: 0 };
+  }
+}
+
 export async function deleteTestSeries(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'test_series', id));
-  await logActivity('Delete Test Series', `Deleted Test Series ID: ${id}`);
+  try {
+    // 1. Cascade delete all subcollection folders and items
+    const foldersSnap = await getDocs(collection(db, 'test_series', id, 'folders'));
+    for (const folderDoc of foldersSnap.docs) {
+      const itemsSnap = await getDocs(collection(db, 'test_series', id, 'folders', folderDoc.id, 'items'));
+      const batch = writeBatch(db);
+      for (const itemDoc of itemsSnap.docs) {
+        batch.delete(itemDoc.ref);
+      }
+      batch.delete(folderDoc.ref);
+      await batch.commit();
+    }
+    // 2. Delete the series document itself (canonical mock_tests remain 100% untouched)
+    await deleteDoc(doc(db, 'test_series', id));
+    await logActivity('Delete Test Series', `Deleted Test Series ID: ${id} and all contained items`);
+  } catch (err) {
+    console.error(`Error deleting test series ${id}:`, err);
+    throw err;
+  }
 }
 
 export async function fetchTestSeriesFolders(seriesId: string): Promise<TestSeriesFolder[]> {
@@ -581,12 +639,27 @@ export async function saveTestSeriesFolder(folder: TestSeriesFolder): Promise<vo
   await safeSetDoc(doc(db, 'test_series', folder.seriesId, 'folders', folder.id), folder, {
     merge: true,
   });
+  await updateSeriesStats(folder.seriesId);
   await logActivity('Save Test Series Folder', `Folder "${folder.title}" in series ${folder.seriesId} saved`);
 }
 
 export async function deleteTestSeriesFolder(seriesId: string, folderId: string): Promise<void> {
-  await deleteDoc(doc(db, 'test_series', seriesId, 'folders', folderId));
-  await logActivity('Delete Test Series Folder', `Deleted folder ${folderId} from series ${seriesId}`);
+  try {
+    // Cascade delete items in this folder
+    const itemsSnap = await getDocs(collection(db, 'test_series', seriesId, 'folders', folderId, 'items'));
+    const batch = writeBatch(db);
+    for (const itemDoc of itemsSnap.docs) {
+      batch.delete(itemDoc.ref);
+    }
+    batch.delete(doc(db, 'test_series', seriesId, 'folders', folderId));
+    await batch.commit();
+
+    await updateSeriesStats(seriesId);
+    await logActivity('Delete Test Series Folder', `Deleted folder ${folderId} and items from series ${seriesId}`);
+  } catch (err) {
+    console.error(`Error deleting test series folder ${folderId}:`, err);
+    throw err;
+  }
 }
 
 export async function fetchTestSeriesItems(
@@ -613,6 +686,7 @@ export async function saveTestSeriesItem(item: TestSeriesItem): Promise<void> {
     item,
     { merge: true }
   );
+  await updateSeriesStats(item.seriesId);
   await logActivity('Save Test Series Item', `Item test ${item.testId} saved in series ${item.seriesId}`);
 }
 
@@ -622,7 +696,138 @@ export async function deleteTestSeriesItem(
   itemId: string
 ): Promise<void> {
   await deleteDoc(doc(db, 'test_series', seriesId, 'folders', folderId, 'items', itemId));
+  await updateSeriesStats(seriesId);
   await logActivity('Delete Test Series Item', `Deleted item ${itemId} from folder ${folderId}`);
+}
+
+export async function reorderTestSeriesFolders(seriesId: string, orderedFolderIds: string[]): Promise<void> {
+  const batch = writeBatch(db);
+  orderedFolderIds.forEach((folderId, index) => {
+    batch.update(doc(db, 'test_series', seriesId, 'folders', folderId), {
+      sortOrder: index,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  await batch.commit();
+  await logActivity('Reorder Folders', `Reordered ${orderedFolderIds.length} folders in series ${seriesId}`);
+}
+
+export async function reorderTestSeriesItems(
+  seriesId: string,
+  folderId: string,
+  orderedItemIds: string[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  orderedItemIds.forEach((itemId, index) => {
+    batch.update(doc(db, 'test_series', seriesId, 'folders', folderId, 'items', itemId), {
+      sortOrder: index,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  await batch.commit();
+  await logActivity('Reorder Items', `Reordered ${orderedItemIds.length} items in folder ${folderId}`);
+}
+
+export async function moveTestSeriesItem(
+  seriesId: string,
+  sourceFolderId: string,
+  targetFolderId: string,
+  itemId: string
+): Promise<void> {
+  if (sourceFolderId === targetFolderId) return;
+
+  const itemRef = doc(db, 'test_series', seriesId, 'folders', sourceFolderId, 'items', itemId);
+  const snap = await getDoc(itemRef);
+  if (!snap.exists()) {
+    throw new Error(`Item ${itemId} not found in source folder ${sourceFolderId}`);
+  }
+
+  const itemData = snap.data() as TestSeriesItem;
+  // Get target folder items to place at the end
+  const targetItemsSnap = await getDocs(
+    collection(db, 'test_series', seriesId, 'folders', targetFolderId, 'items')
+  );
+  const newSortOrder = targetItemsSnap.size;
+
+  const newItemRef = doc(db, 'test_series', seriesId, 'folders', targetFolderId, 'items', itemId);
+
+  const batch = writeBatch(db);
+  batch.set(newItemRef, sanitizeForFirestore({
+    ...itemData,
+    folderId: targetFolderId,
+    sortOrder: newSortOrder,
+    updatedAt: new Date().toISOString(),
+  }));
+  batch.delete(itemRef);
+  await batch.commit();
+
+  await updateSeriesStats(seriesId);
+  await logActivity('Move Test Series Item', `Moved test ${itemData.testId} from folder ${sourceFolderId} to ${targetFolderId}`);
+}
+
+export async function duplicateTestSeries(sourceSeriesId: string, newTitle?: string): Promise<string> {
+  const sourceSnap = await getDoc(doc(db, 'test_series', sourceSeriesId));
+  if (!sourceSnap.exists()) {
+    throw new Error(`Source test series ${sourceSeriesId} not found`);
+  }
+
+  const sourceData = sourceSnap.data() as TestSeries;
+  const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const nowIso = new Date().toISOString();
+
+  // 1. Create Cloned Series (Draft)
+  const newSeries: TestSeries = {
+    ...sourceData,
+    id: newSeriesId,
+    title: newTitle || `${sourceData.title} (Copy)`,
+    status: 'draft',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+  await safeSetDoc(doc(db, 'test_series', newSeriesId), newSeries);
+
+  // 2. Fetch all folders and their items, deep clone them referencing canonical mock tests
+  const foldersSnap = await getDocs(
+    query(collection(db, 'test_series', sourceSeriesId, 'folders'), orderBy('sortOrder', 'asc'))
+  );
+
+  for (const fDoc of foldersSnap.docs) {
+    const fData = fDoc.data() as TestSeriesFolder;
+    const newFolderId = `folder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const newFolder: TestSeriesFolder = {
+      ...fData,
+      id: newFolderId,
+      seriesId: newSeriesId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    await safeSetDoc(doc(db, 'test_series', newSeriesId, 'folders', newFolderId), newFolder);
+
+    const itemsSnap = await getDocs(
+      query(collection(db, 'test_series', sourceSeriesId, 'folders', fDoc.id, 'items'), orderBy('sortOrder', 'asc'))
+    );
+
+    for (const iDoc of itemsSnap.docs) {
+      const iData = iDoc.data() as TestSeriesItem;
+      const newItemId = `item_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const newItem: TestSeriesItem = {
+        ...iData,
+        id: newItemId,
+        seriesId: newSeriesId,
+        folderId: newFolderId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      await safeSetDoc(
+        doc(db, 'test_series', newSeriesId, 'folders', newFolderId, 'items', newItemId),
+        newItem
+      );
+    }
+  }
+
+  await updateSeriesStats(newSeriesId);
+  await logActivity('Duplicate Test Series', `Duplicated series "${sourceData.title}" into new draft series "${newSeries.title}" (${newSeriesId})`);
+  return newSeriesId;
 }
 
 // --- 2. Study Library ---

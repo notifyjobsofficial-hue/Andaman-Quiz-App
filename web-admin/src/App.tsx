@@ -15,6 +15,8 @@ import { AppContent } from './pages/AppContent';
 import { NoticeBoard } from './pages/NoticeBoard';
 import { LiveTests } from './pages/LiveTests';
 import { Settings } from './pages/Settings';
+import { TestSeriesPage } from './pages/TestSeriesPage';
+import { TestSeriesContentBuilder } from './pages/TestSeriesContentBuilder';
 import { Loader2 } from 'lucide-react';
 
 export function App() {
@@ -28,6 +30,7 @@ export function App() {
 
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [builderTestId, setBuilderTestId] = useState<string>('');
+  const [builderSeriesId, setBuilderSeriesId] = useState<string>('');
 
   useEffect(() => {
     const unsubscribe = onAdminAuthChanged((user, isAuthorized) => {
@@ -73,6 +76,28 @@ export function App() {
       {currentTab === 'tests' && (
         <MockTests
           onNavigateToBuilder={(testId) => {
+            setBuilderTestId(testId);
+            setCurrentTab('test-builder');
+          }}
+        />
+      )}
+      {currentTab === 'test-series' && (
+        <TestSeriesPage
+          onNavigateToBuilder={(seriesId) => {
+            setBuilderSeriesId(seriesId);
+            setCurrentTab('test-series-builder');
+          }}
+          onNavigateToMockBuilder={(testId) => {
+            setBuilderTestId(testId);
+            setCurrentTab('test-builder');
+          }}
+        />
+      )}
+      {currentTab === 'test-series-builder' && (
+        <TestSeriesContentBuilder
+          seriesId={builderSeriesId}
+          onBack={() => setCurrentTab('test-series')}
+          onNavigateToMockBuilder={(testId) => {
             setBuilderTestId(testId);
             setCurrentTab('test-builder');
           }}

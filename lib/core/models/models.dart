@@ -1867,6 +1867,7 @@ DateTime _parseLmsDate(dynamic val) {
 class TestSeries {
   final String id;
   final String title;
+  final String? subtitle;
   final String examCode;
   final String description;
   final String? thumbnailUrl;
@@ -1875,11 +1876,14 @@ class TestSeries {
   final double? price;
   final double? originalPrice;
   final double? offerPrice;
-  final String? productId; // Google Play Product SKU
+  final String? productId;
+  final String validityType; // 'LIFETIME', 'DAYS_FROM_ACTIVATION', 'FIXED_EXPIRY'
   final int validityDays;
+  final DateTime? expiryAt;
   final bool isFeatured;
   final int sortOrder;
   final String status; // 'draft', 'published', 'archived'
+  final DateTime? publishAt;
   final int totalTests;
   final int totalFolders;
   final List<String> tags;
@@ -1889,6 +1893,7 @@ class TestSeries {
   const TestSeries({
     required this.id,
     required this.title,
+    this.subtitle,
     required this.examCode,
     this.description = '',
     this.thumbnailUrl,
@@ -1898,10 +1903,13 @@ class TestSeries {
     this.originalPrice,
     this.offerPrice,
     this.productId,
+    this.validityType = 'DAYS_FROM_ACTIVATION',
     this.validityDays = 365,
+    this.expiryAt,
     this.isFeatured = false,
     this.sortOrder = 0,
     this.status = 'published',
+    this.publishAt,
     this.totalTests = 0,
     this.totalFolders = 0,
     this.tags = const [],
@@ -1914,6 +1922,7 @@ class TestSeries {
   Map<String, dynamic> toMap() => {
     'id': id,
     'title': title,
+    if (subtitle != null && subtitle!.isNotEmpty) 'subtitle': subtitle,
     'examCode': examCode,
     'description': description,
     if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
@@ -1923,10 +1932,13 @@ class TestSeries {
     if (originalPrice != null) 'originalPrice': originalPrice,
     if (offerPrice != null) 'offerPrice': offerPrice,
     if (productId != null) 'productId': productId,
+    'validityType': validityType,
     'validityDays': validityDays,
+    if (expiryAt != null) 'expiryAt': expiryAt!.toIso8601String(),
     'isFeatured': isFeatured,
     'sortOrder': sortOrder,
     'status': status,
+    if (publishAt != null) 'publishAt': publishAt!.toIso8601String(),
     'totalTests': totalTests,
     'totalFolders': totalFolders,
     'tags': tags,
@@ -1937,6 +1949,7 @@ class TestSeries {
   factory TestSeries.fromMap(Map<String, dynamic> map) => TestSeries(
     id: map['id'] ?? '',
     title: map['title'] ?? '',
+    subtitle: map['subtitle'],
     examCode: map['examCode'] ?? '',
     description: map['description'] ?? '',
     thumbnailUrl: map['thumbnailUrl'],
@@ -1946,10 +1959,13 @@ class TestSeries {
     originalPrice: (map['originalPrice'] as num?)?.toDouble(),
     offerPrice: (map['offerPrice'] as num?)?.toDouble(),
     productId: map['productId'],
+    validityType: map['validityType'] ?? (map['expiryAt'] != null ? 'FIXED_EXPIRY' : 'DAYS_FROM_ACTIVATION'),
     validityDays: (map['validityDays'] as num?)?.toInt() ?? 365,
+    expiryAt: map['expiryAt'] != null ? _parseLmsDate(map['expiryAt']) : null,
     isFeatured: map['isFeatured'] ?? false,
     sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
     status: map['status'] ?? 'published',
+    publishAt: map['publishAt'] != null ? _parseLmsDate(map['publishAt']) : null,
     totalTests: (map['totalTests'] as num?)?.toInt() ?? 0,
     totalFolders: (map['totalFolders'] as num?)?.toInt() ?? 0,
     tags: List<String>.from(map['tags'] ?? []),
@@ -1962,6 +1978,7 @@ class TestSeriesFolder {
   final String id;
   final String seriesId;
   final String title;
+  final String? description;
   final String? iconName;
   final int sortOrder;
   final bool isFree;
@@ -1974,6 +1991,7 @@ class TestSeriesFolder {
     required this.id,
     required this.seriesId,
     required this.title,
+    this.description,
     this.iconName,
     this.sortOrder = 0,
     this.isFree = true,
@@ -1989,6 +2007,7 @@ class TestSeriesFolder {
     'id': id,
     'seriesId': seriesId,
     'title': title,
+    if (description != null && description!.isNotEmpty) 'description': description,
     if (iconName != null) 'iconName': iconName,
     'sortOrder': sortOrder,
     'isFree': isFree,
@@ -2002,6 +2021,7 @@ class TestSeriesFolder {
     id: map['id'] ?? '',
     seriesId: map['seriesId'] ?? '',
     title: map['title'] ?? '',
+    description: map['description'],
     iconName: map['iconName'],
     sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
     isFree: map['isFree'] ?? true,
@@ -2018,7 +2038,7 @@ class TestSeriesItem {
   final String folderId;
   final String testId; // Canonical MockTest reference
   final int sortOrder;
-  final String accessMode; // 'FREE', 'PAID', 'SERIES_ONLY'
+  final String accessMode; // 'INCLUDED', 'FREE_PREVIEW', 'LOCKED_UNTIL_DATE'
   final DateTime? unlockAt;
   final String status; // 'draft', 'published'
   final DateTime createdAt;
@@ -2030,7 +2050,7 @@ class TestSeriesItem {
     required this.folderId,
     required this.testId,
     this.sortOrder = 0,
-    this.accessMode = 'FREE',
+    this.accessMode = 'INCLUDED',
     this.unlockAt,
     this.status = 'published',
     required this.createdAt,
@@ -2058,7 +2078,7 @@ class TestSeriesItem {
     folderId: map['folderId'] ?? '',
     testId: map['testId'] ?? '',
     sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
-    accessMode: map['accessMode'] ?? 'FREE',
+    accessMode: map['accessMode'] ?? 'INCLUDED',
     unlockAt: map['unlockAt'] != null ? _parseLmsDate(map['unlockAt']) : null,
     status: map['status'] ?? 'published',
     createdAt: map['createdAt'] != null ? _parseLmsDate(map['createdAt']) : DateTime.now(),
