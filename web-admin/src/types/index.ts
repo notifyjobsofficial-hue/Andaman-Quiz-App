@@ -372,6 +372,11 @@ export interface StudyMaterial {
   isFeatured: boolean;
   status: 'draft' | 'published' | 'archived';
   publishDate: string;
+  fileName?: string;
+  fileSizeBytes?: number;
+  buttonLabel?: string;
+  sourceName?: string;
+  includedInSeriesIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/providers/auth_providers.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/widgets/app_card.dart';
 
@@ -16,6 +19,8 @@ class SettingsScreen extends ConsumerWidget {
     final currentTheme = ref.watch(themeModeProvider);
     final currentLang = ref.watch(selectedLanguageProvider);
     final soundHaptics = ref.watch(soundHapticsProvider);
+    final studentAsync = ref.watch(currentStudentProvider);
+    final student = studentAsync.value ?? LocalDatabase.instance.getCurrentStudent();
 
     return Scaffold(
       appBar: AppBar(
@@ -25,6 +30,118 @@ class SettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(AppDimens.space16),
           children: [
+            // Student Account Section
+            _SectionHeader(title: 'Student Account'),
+            AppCard(
+              padding: const EdgeInsets.all(AppDimens.space16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withAlpha(20),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            (student?.displayName.isNotEmpty ?? false)
+                                ? student!.displayName[0].toUpperCase()
+                                : 'A',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              student?.displayName ?? 'Andaman Aspirant',
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              student?.email ?? 'Logged In Student',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? AppColors.textMutedDark : AppColors.textMutedLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (student?.isPremium ?? false)
+                              ? const Color(0xFFD97706).withAlpha(25)
+                              : const Color(0xFF16A34A).withAlpha(25),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          student?.plan ?? 'FREE',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: (student?.isPremium ?? false)
+                                ? const Color(0xFFD97706)
+                                : const Color(0xFF16A34A),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Log Out'),
+                            content: const Text('Are you sure you want to log out of your student account?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Log Out'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await AuthService.instance.signOut();
+                          ref.invalidate(currentStudentProvider);
+                          if (context.mounted) {
+                            context.go('/login');
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.logout, size: 18, color: Color(0xFFDC2626)),
+                      label: const Text('Log Out', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFFCA5A5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // Appearance Section
             _SectionHeader(title: 'Appearance'),
             AppCard(

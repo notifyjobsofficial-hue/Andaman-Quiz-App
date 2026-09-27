@@ -29,13 +29,8 @@ export async function checkAdminAuthorization(user: User): Promise<boolean> {
 
   console.log(`[Admin Auth] Validating administrator credentials for UID: "${authUid}" (${userEmail || 'no email'})`);
 
-  // 1. Domain fast-path check
-  if (userEmail.endsWith('@andamanquiz.com')) {
-    console.log('[Admin Auth] Authorized via @andamanquiz.com domain.');
-    return true;
-  }
-
-  // 2. Exact Firebase Auth UID lookup: admins/{authUid}
+  // Authorization strictly requires an authoritative Firestore record: admins/{authUid}
+  // Email domains or client-side claims are NEVER treated as proof of administrator access.
   try {
     const adminDocRef = doc(db, 'admins', authUid);
     const snap = await getDoc(adminDocRef);

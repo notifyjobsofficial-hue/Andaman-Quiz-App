@@ -831,9 +831,13 @@ export async function duplicateTestSeries(sourceSeriesId: string, newTitle?: str
 }
 
 // --- 2. Study Library ---
-export async function fetchStudyFolders(): Promise<StudyFolder[]> {
+export async function fetchStudyFolders(examCode?: string): Promise<StudyFolder[]> {
   try {
-    const snap = await getDocs(query(collection(db, 'study_folders'), orderBy('sortOrder', 'asc')));
+    const coll = collection(db, 'study_folders');
+    const q = examCode && examCode !== 'ALL'
+      ? query(coll, where('examCode', '==', examCode), orderBy('sortOrder', 'asc'))
+      : query(coll, orderBy('sortOrder', 'asc'));
+    const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StudyFolder));
   } catch (err) {
     console.warn('Error fetching study_folders:', err);
@@ -846,19 +850,82 @@ export async function saveStudyFolder(folder: StudyFolder): Promise<void> {
   await logActivity('Save Study Folder', `Study folder "${folder.title}" saved`);
 }
 
-export async function deleteStudyFolder(id: string): Promise<void> {
+export async function updateStudyFolderItemCount(folderId: string): Promise<number> {
+  if (!folderId || folderId === 'ROOT') return 0;
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'study_materials'), where('folderId', '==', folderId))
+    );
+    const count = snap.size;
+    await safeSetDoc(doc(db, 'study_folders', folderId), { itemCount: count }, { merge: true });
+    return count;
+  } catch (err) {
+    console.warn(`Error updating count for study folder ${folderId}:`, err);
+    return 0;
+  }
+}
+
+export async function deleteStudyFolder(id: string, cascadeUnlink: boolean = false): Promise<void> {
+  // 1. Check if folder contains materials to prevent accidental data loss
+  const materialsSnap = await getDocs(
+    query(collection(db, 'study_materials'), where('folderId', '==', id))
+  );
+
+  if (materialsSnap.size > 0) {
+    if (!cascadeUnlink) {
+      throw new Error(
+        `Cannot delete folder "${id}": it contains ${materialsSnap.size} material(s). Move them to another folder or choose safe unlink.`
+      );
+    }
+    // If cascadeUnlink is explicitly requested, move all materials in this folder to Root ('')
+    const batch = writeBatch(db);
+    for (const mDoc of materialsSnap.docs) {
+      batch.update(mDoc.ref, {
+        folderId: '',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    batch.delete(doc(db, 'study_folders', id));
+    await batch.commit();
+    await logActivity('Delete Study Folder', `Deleted study folder ${id} and safely unlinked ${materialsSnap.size} materials to Root`);
+    return;
+  }
+
   await deleteDoc(doc(db, 'study_folders', id));
   await logActivity('Delete Study Folder', `Deleted study folder ID: ${id}`);
 }
 
-export async function fetchStudyMaterials(folderId?: string): Promise<StudyMaterial[]> {
+export async function reorderStudyFolders(orderedFolderIds: string[]): Promise<void> {
+  const batch = writeBatch(db);
+  orderedFolderIds.forEach((fId, index) => {
+    batch.update(doc(db, 'study_folders', fId), {
+      sortOrder: index,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  await batch.commit();
+  await logActivity('Reorder Study Folders', `Reordered ${orderedFolderIds.length} study folders`);
+}
+
+export async function fetchStudyMaterials(folderId?: string, examCode?: string): Promise<StudyMaterial[]> {
   try {
     const coll = collection(db, 'study_materials');
-    const q = folderId
-      ? query(coll, where('folderId', '==', folderId), orderBy('sortOrder', 'asc'))
-      : query(coll, orderBy('sortOrder', 'asc'));
+    let q;
+
+    if (folderId && folderId !== 'ALL') {
+      const targetFolder = folderId === 'ROOT' ? '' : folderId;
+      q = query(coll, where('folderId', '==', targetFolder), orderBy('sortOrder', 'asc'));
+    } else {
+      q = query(coll, orderBy('sortOrder', 'asc'));
+    }
+
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StudyMaterial));
+    let results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StudyMaterial));
+
+    if (examCode && examCode !== 'ALL') {
+      results = results.filter((m) => m.examCode === examCode);
+    }
+    return results;
   } catch (err) {
     console.warn('Error fetching study_materials:', err);
     return [];
@@ -867,12 +934,144 @@ export async function fetchStudyMaterials(folderId?: string): Promise<StudyMater
 
 export async function saveStudyMaterial(material: StudyMaterial): Promise<void> {
   await safeSetDoc(doc(db, 'study_materials', material.id), material, { merge: true });
-  await logActivity('Save Study Material', `Study material "${material.title}" saved`);
+  if (material.folderId && material.folderId !== 'ROOT') {
+    await updateStudyFolderItemCount(material.folderId);
+  }
+  await logActivity('Save Study Material', `Study material "${material.title}" (${material.materialType}) saved`);
 }
 
 export async function deleteStudyMaterial(id: string): Promise<void> {
-  await deleteDoc(doc(db, 'study_materials', id));
+  const ref = doc(db, 'study_materials', id);
+  const snap = await getDoc(ref);
+  const folderId = snap.exists() ? snap.data().folderId : null;
+
+  await deleteDoc(ref);
+  if (folderId && folderId !== 'ROOT') {
+    await updateStudyFolderItemCount(folderId);
+  }
   await logActivity('Delete Study Material', `Deleted study material ID: ${id}`);
+}
+
+export async function moveStudyMaterial(materialId: string, targetFolderId: string): Promise<void> {
+  const ref = doc(db, 'study_materials', materialId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error(`Study material ${materialId} not found`);
+  }
+
+  const oldFolderId = snap.data().folderId;
+  const cleanTargetFolder = targetFolderId === 'ROOT' ? '' : targetFolderId;
+
+  // Get items count in target folder for sortOrder
+  const targetItemsSnap = await getDocs(
+    query(collection(db, 'study_materials'), where('folderId', '==', cleanTargetFolder))
+  );
+
+  await safeSetDoc(ref, {
+    folderId: cleanTargetFolder,
+    sortOrder: targetItemsSnap.size,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+
+  if (oldFolderId && oldFolderId !== 'ROOT') {
+    await updateStudyFolderItemCount(oldFolderId);
+  }
+  if (cleanTargetFolder) {
+    await updateStudyFolderItemCount(cleanTargetFolder);
+  }
+  await logActivity('Move Study Material', `Moved material ${materialId} to folder ${cleanTargetFolder || 'ROOT'}`);
+}
+
+export async function duplicateStudyMaterial(sourceMaterialId: string, newTitle?: string): Promise<string> {
+  const snap = await getDoc(doc(db, 'study_materials', sourceMaterialId));
+  if (!snap.exists()) {
+    throw new Error(`Source material ${sourceMaterialId} not found`);
+  }
+
+  const data = snap.data() as StudyMaterial;
+  const newMaterialId = `mat_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const nowIso = new Date().toISOString();
+
+  const cloned: StudyMaterial = {
+    ...data,
+    id: newMaterialId,
+    title: newTitle || `${data.title} (Copy)`,
+    status: 'draft',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  await safeSetDoc(doc(db, 'study_materials', newMaterialId), cloned);
+  if (cloned.folderId) {
+    await updateStudyFolderItemCount(cloned.folderId);
+  }
+  await logActivity('Duplicate Study Material', `Duplicated "${data.title}" as draft "${cloned.title}"`);
+  return newMaterialId;
+}
+
+export async function reorderStudyMaterials(folderId: string, orderedMaterialIds: string[]): Promise<void> {
+  const batch = writeBatch(db);
+  orderedMaterialIds.forEach((mId, index) => {
+    batch.update(doc(db, 'study_materials', mId), {
+      sortOrder: index,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+  await batch.commit();
+  await logActivity('Reorder Study Materials', `Reordered ${orderedMaterialIds.length} materials in folder ${folderId || 'ROOT'}`);
+}
+
+export async function bulkUpdateStudyMaterials(
+  materialIds: string[],
+  updates: Partial<StudyMaterial>
+): Promise<void> {
+  const batch = writeBatch(db);
+  const nowIso = new Date().toISOString();
+  const affectedFolderIds = new Set<string>();
+
+  for (const id of materialIds) {
+    batch.update(doc(db, 'study_materials', id), sanitizeForFirestore({
+      ...updates,
+      updatedAt: nowIso,
+    }));
+  }
+  await batch.commit();
+
+  if (updates.folderId !== undefined) {
+    // If folder changed, refresh target folder
+    if (updates.folderId) affectedFolderIds.add(updates.folderId);
+    for (const fId of affectedFolderIds) {
+      await updateStudyFolderItemCount(fId);
+    }
+  }
+
+  await logActivity('Bulk Update Study Materials', `Bulk updated ${materialIds.length} materials`);
+}
+
+export async function bulkDeleteStudyMaterials(materialIds: string[]): Promise<void> {
+  const affectedFolders = new Set<string>();
+
+  // Collect folderIds first
+  for (const id of materialIds) {
+    try {
+      const snap = await getDoc(doc(db, 'study_materials', id));
+      if (snap.exists() && snap.data().folderId) {
+        affectedFolders.add(snap.data().folderId);
+      }
+    } catch (_) {}
+  }
+
+  const batch = writeBatch(db);
+  for (const id of materialIds) {
+    batch.delete(doc(db, 'study_materials', id));
+  }
+  await batch.commit();
+
+  for (const fId of affectedFolders) {
+    await updateStudyFolderItemCount(fId);
+  }
+
+  await logActivity('Bulk Delete Study Materials', `Bulk deleted ${materialIds.length} materials`);
 }
 
 // --- 3. Battles ---

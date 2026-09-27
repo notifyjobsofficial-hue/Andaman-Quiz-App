@@ -49,6 +49,7 @@ class LocalDatabase {
   final List<CurrentAffairsItem> _currentAffairs = [];
   final List<HomeSectionConfig> _homeSections = [];
   final List<EntitlementItem> _entitlements = [];
+  StudentUser? _currentStudent;
 
   bool _isInitialized = false;
 
@@ -566,6 +567,18 @@ class LocalDatabase {
       }
     } else {
       _entitlements.clear();
+    }
+
+    // 20. Cached Student User Profile
+    final studentRaw = prefs.getString('cached_student_user');
+    if (studentRaw != null && studentRaw.isNotEmpty) {
+      try {
+        _currentStudent = StudentUser.fromMap(jsonDecode(studentRaw) as Map<String, dynamic>);
+      } catch (_) {
+        _currentStudent = null;
+      }
+    } else {
+      _currentStudent = null;
     }
   }
 
@@ -1895,6 +1908,37 @@ class LocalDatabase {
     _entitlements.add(item);
     await unlockTest(item.id);
     await _prefs?.setString('saved_entitlements', jsonEncode(_entitlements.map((e) => e.toMap()).toList()));
+  }
+
+  // --- 8. Student User Profile Cache & Preferences ---
+  StudentUser? getCurrentStudent() => _currentStudent;
+
+  Future<void> saveCurrentStudent(StudentUser user) async {
+    _currentStudent = user;
+    await _prefs?.setString('cached_student_user', jsonEncode(user.toMap()));
+    if (user.displayName.isNotEmpty) {
+      await _prefs?.setString('user_display_name', user.displayName);
+    }
+    if (user.selectedExamId.isNotEmpty && user.selectedExamId != 'ALL') {
+      await setSelectedExam(user.selectedExamId);
+    }
+  }
+
+  Future<void> clearCurrentStudent() async {
+    _currentStudent = null;
+    await _prefs?.remove('cached_student_user');
+  }
+
+  String getStudentName() {
+    return _currentStudent?.displayName ?? _prefs?.getString('user_display_name') ?? 'Andaman Aspirant';
+  }
+
+  Future<void> setStudentName(String name) async {
+    await _prefs?.setString('user_display_name', name);
+    if (_currentStudent != null) {
+      final updated = _currentStudent!.copyWith(displayName: name);
+      await saveCurrentStudent(updated);
+    }
   }
 }
 

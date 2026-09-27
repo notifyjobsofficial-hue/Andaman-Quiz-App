@@ -31,6 +31,8 @@ class FirestoreService {
   static const String colCareerGoals = 'career_goals';
   static const String colCurrentAffairs = 'current_affairs';
   static const String colHomeSections = 'app_home_sections';
+  static const String colUsers = 'users';
+  static const String colReferralCodes = 'referral_codes';
 
   // Broadcast stream controllers for reactive UI updates
   final _categoriesController = StreamController<List<ExamCategory>>.broadcast();
@@ -1274,6 +1276,80 @@ class FirestoreService {
     } catch (e) {
       debugPrint('Error fetching home sections: $e');
       return LocalDatabase.getDefaultHomeSections();
+    }
+  }
+
+  // --- 8. Student User Profile Operations ---
+  Future<bool> createUserProfile(StudentUser user) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final batch = _firestore.batch();
+      final userRef = _firestore.collection(colUsers).doc(user.uid);
+      batch.set(userRef, user.toMap(useServerTimestamps: true));
+
+      // Register referral code if provided
+      if (user.referralCode.isNotEmpty) {
+        final codeRef = _firestore.collection(colReferralCodes).doc(user.referralCode);
+        batch.set(codeRef, {
+          'uid': user.uid,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+      return true;
+    } catch (e) {
+      debugPrint('Error creating student user profile: $e');
+      return false;
+    }
+  }
+
+  Future<StudentUser?> fetchUserProfile(String uid) async {
+    if (Firebase.apps.isEmpty) return null;
+    try {
+      final doc = await _firestore.collection(colUsers).doc(uid).get();
+      if (!doc.exists || doc.data() == null) return null;
+      return StudentUser.fromMap(doc.data()!, uid: uid);
+    } catch (e) {
+      debugPrint('Error fetching student user profile: $e');
+      return null;
+    }
+  }
+
+  Future<bool> updateUserProfile(String uid, Map<String, dynamic> data) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      final updateData = Map<String, dynamic>.from(data);
+      updateData['updatedAt'] = FieldValue.serverTimestamp();
+      await _firestore.collection(colUsers).doc(uid).update(updateData);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating student user profile: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateLastActive(String uid) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      await _firestore.collection(colUsers).doc(uid).update({
+        'lastActiveAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Error updating lastActiveAt: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteUserProfile(String uid) async {
+    if (Firebase.apps.isEmpty) return false;
+    try {
+      await _firestore.collection(colUsers).doc(uid).delete();
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting user profile: $e');
+      return false;
     }
   }
 

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/scaffold_with_nav_bar.dart';
 import '../../features/andaman_gk/presentation/andaman_gk_screen.dart';
+import '../../features/auth/presentation/forgot_password_screen.dart';
+import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/profile_setup_screen.dart';
+import '../../features/auth/presentation/signup_screen.dart';
+import '../../features/auth/presentation/suspended_screen.dart';
 import '../../features/exam/presentation/cbt_exam_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/notices/presentation/notices_screen.dart';
@@ -96,6 +101,50 @@ final GoRouter appRouter = GoRouter(
         context: context,
         state: state,
         child: const ChooseLanguageScreen(),
+      ),
+    ),
+
+    // Student Authentication Routes
+    GoRoute(
+      path: '/login',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const LoginScreen(),
+        isFadeOnly: true,
+      ),
+    ),
+    GoRoute(
+      path: '/signup',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const SignupScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const ForgotPasswordScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/onboarding/profile-setup',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const ProfileSetupScreen(),
+      ),
+    ),
+    GoRoute(
+      path: '/suspended',
+      pageBuilder: (context, state) => _buildSmoothPage(
+        context: context,
+        state: state,
+        child: const SuspendedScreen(),
+        isFadeOnly: true,
       ),
     ),
 

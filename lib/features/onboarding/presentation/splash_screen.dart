@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/services/auth_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -100,14 +102,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
       ),
     );
 
-    // Flow routing:
-    // First installation -> /onboarding/exam
-    // Returning user -> /home
-    final isOnboarded = LocalDatabase.instance.isOnboardingDone();
-    if (isOnboarded) {
-      context.go('/home');
+    // Authentication Check Flow:
+    // If logged in: -> /home (or /suspended if restricted)
+    // If not logged in: -> /login
+    final currentUser = AuthService.instance.currentUser;
+    final cachedStudent = LocalDatabase.instance.getCurrentStudent();
+    final isLoggedIn = currentUser != null || (Firebase.apps.isEmpty && cachedStudent != null);
+    if (isLoggedIn) {
+      if (cachedStudent?.isSuspended ?? false) {
+        context.go('/suspended');
+      } else {
+        context.go('/home');
+      }
     } else {
-      context.go('/onboarding/exam');
+      context.go('/login');
     }
   }
 

@@ -1,10 +1,26 @@
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { storage } from './config';
 
 export interface UploadProgress {
   bytesTransferred: number;
   totalBytes: number;
   percent: number;
+}
+
+/**
+ * Safely attempts to delete a file from Firebase Storage.
+ * Never throws an uncaught error if the file does not exist or deletion fails.
+ */
+export async function deleteStorageFile(urlOrPath: string): Promise<boolean> {
+  if (!urlOrPath || !urlOrPath.trim()) return false;
+  try {
+    const storageRef = ref(storage, urlOrPath);
+    await deleteObject(storageRef);
+    return true;
+  } catch (err: any) {
+    console.warn(`Failed to delete storage file "${urlOrPath}":`, err.message || err);
+    return false;
+  }
 }
 
 /**

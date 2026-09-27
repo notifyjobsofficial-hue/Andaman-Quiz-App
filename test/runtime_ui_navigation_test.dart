@@ -242,6 +242,17 @@ void main() {
         'user_onboarding_done': true,
       });
       await LocalDatabase.instance.init();
+      await LocalDatabase.instance.saveCurrentStudent(
+        StudentUser(
+          uid: 'test_student_nav',
+          displayName: 'Test Student',
+          email: 'student@example.com',
+          referralCode: 'TEST01',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+          lastActiveAt: DateTime(2026, 1, 1),
+        ),
+      );
 
       // Provide initial mock test and subjects so tabs have content
       await LocalDatabase.instance.syncMockTestsFromFirestore([

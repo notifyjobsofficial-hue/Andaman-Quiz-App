@@ -410,6 +410,48 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 23. Student User Profiles & Private Subcollections
+    // PRIVACY ENFORCEMENT: users/{uid} is NEVER publicly readable.
+    // Only the student owner and authorized administrators can read and write private user data.
+    match /users/{uid} {
+      allow get: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      // Create: Authenticated student can create their own profile with default ACTIVE status
+      allow create: if isAuthenticated() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.accountStatus == 'ACTIVE'
+        && !('role' in request.resource.data);
+
+      // Update: Student can update their own profile fields, but CANNOT self-promote or self-modify restricted fields
+      allow update: if isAdmin() || (
+        isAuthenticated() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['accountStatus', 'role', 'plan'])
+      );
+
+      // Delete: Owner or Admin
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
+
+      // Private user subcollections (attempts, bookmarks, practice_progress, daily_activity, entitlements, referrals)
+      match /{subcollection}/{docId} {
+        allow read, write: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      }
+    }
+
+    // 24. Public Leaderboard Safe Projection (Minimal public data only)
+    // NEVER exposes email, phone, UID, purchase history, or private telemetry.
+    match /leaderboard_entries/{entryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 25. Referral Codes Registry
+    match /referral_codes/{code} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;

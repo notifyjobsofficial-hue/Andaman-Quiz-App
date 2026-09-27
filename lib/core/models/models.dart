@@ -1,4 +1,5 @@
 import 'dart:convert';
+export 'student_user.dart';
 
 enum CbtQuestionState {
   notVisited,
@@ -2158,6 +2159,11 @@ class StudyMaterial {
   final String? fileUrl;
   final String? articleContent;
   final String? externalUrl;
+  final String? fileName;
+  final int? fileSizeBytes;
+  final String? buttonLabel;
+  final String? sourceName;
+  final List<String> includedInSeriesIds;
   final bool isFree;
   final bool downloadAllowed;
   final int sortOrder;
@@ -2180,6 +2186,11 @@ class StudyMaterial {
     this.fileUrl,
     this.articleContent,
     this.externalUrl,
+    this.fileName,
+    this.fileSizeBytes,
+    this.buttonLabel,
+    this.sourceName,
+    this.includedInSeriesIds = const [],
     this.isFree = true,
     this.downloadAllowed = false,
     this.sortOrder = 0,
@@ -2205,6 +2216,11 @@ class StudyMaterial {
     if (fileUrl != null) 'fileUrl': fileUrl,
     if (articleContent != null) 'articleContent': articleContent,
     if (externalUrl != null) 'externalUrl': externalUrl,
+    if (fileName != null) 'fileName': fileName,
+    if (fileSizeBytes != null) 'fileSizeBytes': fileSizeBytes,
+    if (buttonLabel != null) 'buttonLabel': buttonLabel,
+    if (sourceName != null) 'sourceName': sourceName,
+    if (includedInSeriesIds.isNotEmpty) 'includedInSeriesIds': includedInSeriesIds,
     'isFree': isFree,
     'downloadAllowed': downloadAllowed,
     'sortOrder': sortOrder,
@@ -2228,6 +2244,11 @@ class StudyMaterial {
     fileUrl: map['fileUrl'],
     articleContent: map['articleContent'],
     externalUrl: map['externalUrl'],
+    fileName: map['fileName'],
+    fileSizeBytes: (map['fileSizeBytes'] as num?)?.toInt(),
+    buttonLabel: map['buttonLabel'],
+    sourceName: map['sourceName'],
+    includedInSeriesIds: List<String>.from(map['includedInSeriesIds'] ?? []),
     isFree: map['isFree'] ?? true,
     downloadAllowed: map['downloadAllowed'] ?? false,
     sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
