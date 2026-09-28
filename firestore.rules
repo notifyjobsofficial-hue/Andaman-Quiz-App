@@ -423,17 +423,46 @@ service cloud.firestore {
         && request.resource.data.accountStatus == 'ACTIVE'
         && !('role' in request.resource.data);
 
-      // Update: Student can update their own profile fields, but CANNOT self-promote or self-modify restricted fields
+      // Update: Student can update ONLY safe profile fields via strict whitelist.
+      // Economy, entitlement, rank, and status fields (xp, coins, rank, plan, role, accountStatus, etc.) CANNOT be modified by students.
       allow update: if isAdmin() || (
         isAuthenticated() && request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['accountStatus', 'role', 'plan'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName',
+          'photoUrl',
+          'selectedExamId',
+          'dailyGoal',
+          'language',
+          'preferences',
+          'updatedAt',
+          'lastActiveAt'
+        ])
       );
 
       // Delete: Owner or Admin
       allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
 
-      // Private user subcollections (attempts, bookmarks, practice_progress, daily_activity, entitlements, referrals)
-      match /{subcollection}/{docId} {
+      // Sensitive user subcollections: entitlements, purchases (Read-only for student, write strictly for Admin)
+      match /entitlements/{docId} {
+        allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+      match /purchases/{docId} {
+        allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+        allow write: if isAdmin();
+      }
+
+      // Safe telemetry subcollections: student can record attempts, bookmarks, practice progress, daily activity
+      match /attempts/{docId} {
+        allow read, write: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      }
+      match /bookmarks/{docId} {
+        allow read, write: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      }
+      match /practice_progress/{docId} {
+        allow read, write: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      }
+      match /daily_activity/{docId} {
         allow read, write: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
       }
     }
@@ -448,7 +477,8 @@ service cloud.firestore {
     // 25. Referral Codes Registry
     match /referral_codes/{code} {
       allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/referral_codes/$(code));
       allow update, delete: if isAdmin();
     }
 

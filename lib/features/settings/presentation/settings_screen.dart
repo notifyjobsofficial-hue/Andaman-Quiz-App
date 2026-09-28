@@ -99,6 +99,51 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (!AuthService.instance.isEmailVerified && (student?.email.isNotEmpty ?? false)) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.mark_email_unread_outlined, size: 18, color: Color(0xFFD97706)),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Email not verified',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () async {
+                              try {
+                                await AuthService.instance.sendEmailVerification();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Verification email sent! Check your inbox.')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Could not send: $e')),
+                                  );
+                                }
+                              }
+                            },
+                            child: const Text(
+                              'Resend',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
@@ -134,6 +179,49 @@ class SettingsScreen extends ConsumerWidget {
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Color(0xFFFCA5A5)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: TextButton(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Delete Account'),
+                            content: const Text(
+                              'Are you sure you want to delete your account? All local and cloud student progress will be permanently erased. This action cannot be undone.',
+                            ),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB91C1C), foregroundColor: Colors.white),
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Delete Permanently'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          try {
+                            await AuthService.instance.deleteAccount();
+                            ref.invalidate(currentStudentProvider);
+                            if (context.mounted) {
+                              context.go('/login');
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed to delete account: $e')),
+                              );
+                            }
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'Delete Account',
+                        style: TextStyle(fontSize: 12, color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),

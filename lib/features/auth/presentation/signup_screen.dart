@@ -18,15 +18,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  String _selectedExam = 'AN MTS';
-  final List<String> _examOptions = [
-    'AN MTS',
-    'AN CHSL',
-    'AN CGL',
-    'Police',
-    'Other A&N Exams',
-  ];
-
   bool _agreedToTerms = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -63,7 +54,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         email: _emailController.text,
         password: _passwordController.text,
         displayName: _nameController.text,
-        selectedExamId: _selectedExam,
+        selectedExamId: 'ALL',
       );
 
       if (!mounted) return;
@@ -419,37 +410,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Target Exam Selector
-                          Text(
-                            'Target Examination',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedExam,
-                            items: _examOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedExam = val);
-                            },
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.school_outlined, size: 20),
-                              filled: true,
-                              fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: borderColor),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: borderColor),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            ),
-                          ),
                           const SizedBox(height: 18),
 
                           // Agreement Checkbox

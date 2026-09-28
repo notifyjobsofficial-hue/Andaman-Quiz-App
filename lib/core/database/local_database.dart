@@ -1929,6 +1929,23 @@ class LocalDatabase {
     await _prefs?.remove('cached_student_user');
   }
 
+  /// Complete local data wipe when account is deleted
+  Future<void> purgeAllUserData() async {
+    _currentStudent = null;
+    _attempts.clear();
+    _bookmarkedIds.clear();
+    _wrongQuestionIds.clear();
+    _pendingPracticeSessions.clear();
+    _syncedSessionIds.clear();
+    await _prefs?.remove('cached_student_user');
+    await _prefs?.remove('user_attempts');
+    await _prefs?.remove('saved_bookmarks');
+    await _prefs?.remove('saved_wrong_questions');
+    await _prefs?.remove('pending_practice_sessions');
+    await _prefs?.remove('synced_practice_session_ids');
+    await _prefs?.remove('user_display_name');
+  }
+
   String getStudentName() {
     return _currentStudent?.displayName ?? _prefs?.getString('user_display_name') ?? 'Andaman Aspirant';
   }

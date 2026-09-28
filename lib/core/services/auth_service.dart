@@ -22,6 +22,15 @@ class AuthService {
   User? get currentUser => _auth?.currentUser;
   bool get isAuthenticated => currentUser != null;
 
+  bool get isEmailVerified {
+    final user = currentUser;
+    if (user == null) return false;
+    for (final info in user.providerData) {
+      if (info.providerId == 'google.com') return true;
+    }
+    return user.emailVerified;
+  }
+
   String _generateReferralCode(String uid) {
     if (uid.length >= 6) {
       return uid.substring(0, 6).toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '7');
@@ -324,20 +333,44 @@ class AuthService {
     final user = currentUser;
     if (user == null) return;
 
-    // 1. Re-authenticate if password provided
-    if (password != null && password.isNotEmpty && user.email != null) {
-      final cred = EmailAuthProvider.credential(email: user.email!, password: password);
-      await user.reauthenticateWithCredential(cred);
+    // 1. Re-authenticate prior to sensitive account deletion
+    try {
+      bool isPasswordUser = false;
+      bool isGoogleUser = false;
+      for (final info in user.providerData) {
+        if (info.providerId == 'password') isPasswordUser = true;
+        if (info.providerId == 'google.com') isGoogleUser = true;
+      }
+
+      if (isPasswordUser && password != null && password.isNotEmpty && user.email != null) {
+        final cred = EmailAuthProvider.credential(email: user.email!, password: password);
+        await user.reauthenticateWithCredential(cred);
+      } else if (isGoogleUser) {
+        final googleUser = await _googleSignIn.signIn();
+        final googleAuth = await googleUser?.authentication;
+        if (googleAuth != null) {
+          final cred = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          await user.reauthenticateWithCredential(cred);
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthService] Reauthentication warning: $e');
     }
 
     // 2. Mark profile as deleted and wipe user document
-    await FirestoreService.instance.updateUserProfile(user.uid, {
-      'accountStatus': 'DELETED',
-    });
-    await FirestoreService.instance.deleteUserProfile(user.uid);
+    try {
+      await FirestoreService.instance.updateUserProfile(user.uid, {
+        'accountStatus': 'DELETED',
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+      await FirestoreService.instance.deleteUserProfile(user.uid);
+    } catch (_) {}
 
-    // 3. Clear local state
-    await LocalDatabase.instance.clearCurrentStudent();
+    // 3. Purge device local cache, attempts, bookmarks, and user session
+    await LocalDatabase.instance.purgeAllUserData();
 
     // 4. Delete Firebase Auth user
     await user.delete();

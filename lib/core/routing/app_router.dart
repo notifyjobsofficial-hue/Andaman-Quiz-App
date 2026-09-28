@@ -1,5 +1,8 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../database/local_database.dart';
+import '../services/auth_service.dart';
 import '../../app/scaffold_with_nav_bar.dart';
 import '../../features/andaman_gk/presentation/andaman_gk_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
@@ -73,6 +76,43 @@ Page<dynamic> _buildSmoothPage({
 final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/splash',
+  redirect: (BuildContext context, GoRouterState state) {
+    final loc = state.matchedLocation;
+
+    // Splash handles cold boot and animation
+    if (loc == '/splash') return null;
+
+    final currentUser = AuthService.instance.currentUser;
+    final cachedStudent = LocalDatabase.instance.getCurrentStudent();
+    final isLoggedIn = currentUser != null || (Firebase.apps.isEmpty && cachedStudent != null);
+
+    final isAuthRoute = loc == '/login' || loc == '/signup' || loc == '/forgot-password';
+    final isSuspendedRoute = loc == '/suspended';
+
+    // 1. Unauthenticated users trying to access protected screens
+    if (!isLoggedIn) {
+      if (!isAuthRoute && loc != '/onboarding/lang') {
+        return '/login';
+      }
+      return null;
+    }
+
+    // 2. Authenticated but SUSPENDED users
+    final isSuspended = cachedStudent?.isSuspended ?? false;
+    if (isSuspended) {
+      if (!isSuspendedRoute) {
+        return '/suspended';
+      }
+      return null;
+    }
+
+    // 3. Authenticated ACTIVE users trying to access login/signup or suspended screens
+    if (isAuthRoute || isSuspendedRoute) {
+      return '/home';
+    }
+
+    return null;
+  },
   routes: [
     // Splash Route (Always displays on cold start with brand animation)
     GoRoute(

@@ -148,5 +148,63 @@ void main() {
       expect(LocalDatabase.instance.getStudentName(), 'Updated Name');
       expect(LocalDatabase.instance.getCurrentStudent()?.displayName, 'Updated Name');
     });
+
+    test('purgeAllUserData completely clears attempts, bookmarks, streak and student session', () async {
+      final now = DateTime.now();
+      final student = StudentUser(
+        uid: 'u_purge',
+        displayName: 'Purge User',
+        email: 'purge@example.com',
+        referralCode: 'PURGE1',
+        createdAt: now,
+        updatedAt: now,
+        lastActiveAt: now,
+      );
+      await LocalDatabase.instance.saveCurrentStudent(student);
+      await LocalDatabase.instance.toggleBookmark('q1');
+      expect(LocalDatabase.instance.isBookmarked('q1'), isTrue);
+
+      await LocalDatabase.instance.purgeAllUserData();
+      expect(LocalDatabase.instance.getCurrentStudent(), isNull);
+      expect(LocalDatabase.instance.isBookmarked('q1'), isFalse);
+      expect(LocalDatabase.instance.getStreakDays(), 0);
+    });
+  });
+
+  group('Firestore Rules User-Writable Fields Whitelist Invariants', () {
+    test('Strict whitelist prevents client privilege escalation and economy tampering', () {
+      const allowedSelfEditFields = {
+        'displayName',
+        'photoUrl',
+        'selectedExamId',
+        'dailyGoal',
+        'language',
+        'preferences',
+        'updatedAt',
+        'lastActiveAt',
+      };
+
+      const forbiddenFields = [
+        'accountStatus',
+        'role',
+        'plan',
+        'isPremium',
+        'premium',
+        'xp',
+        'coins',
+        'rank',
+        'entitlements',
+        'purchases',
+        'referralRewards',
+      ];
+
+      for (final field in forbiddenFields) {
+        expect(
+          allowedSelfEditFields.contains(field),
+          isFalse,
+          reason: 'Security violation: $field must NOT be in student self-edit whitelist!',
+        );
+      }
+    });
   });
 }
